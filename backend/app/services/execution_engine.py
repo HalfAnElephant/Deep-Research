@@ -5,12 +5,15 @@ from dataclasses import dataclass, field
 
 from app.core.utils import now_iso
 from app.models.schemas import NodeStatus, TaskStatus
+from app.repositories.conflict_repository import ConflictRepository
 from app.repositories.evidence_repository import EvidenceRepository
 from app.repositories.task_repository import TaskRepository
+from app.services.analyst import AnalystService
 from app.services.planner import MasterPlanner
 from app.services.progress_hub import ProgressHub
 from app.services.retrieval import RetrievalService
 from app.services.state_machine import InvalidStateTransition, transition_or_raise
+from app.services.writer import WriterService
 
 
 @dataclass
@@ -29,12 +32,18 @@ class ExecutionEngine:
         hub: ProgressHub,
         evidence_repository: EvidenceRepository,
         retrieval_service: RetrievalService,
+        conflict_repository: ConflictRepository,
+        analyst_service: AnalystService,
+        writer_service: WriterService,
     ) -> None:
         self.repository = repository
         self.planner = planner
         self.hub = hub
         self.evidence_repository = evidence_repository
         self.retrieval_service = retrieval_service
+        self.conflict_repository = conflict_repository
+        self.analyst_service = analyst_service
+        self.writer_service = writer_service
         self._control: dict[str, TaskControlState] = {}
 
     async def start(self, task_id: str) -> None:
@@ -130,12 +139,45 @@ class ExecutionEngine:
                     },
                 )
 
-            self.repository.update_status(task_id, transition_or_raise(TaskStatus.EXECUTING, TaskStatus.SYNTHESIZING))
+            evidences = self.evidence_repository.list(task_id=task_id, limit=1000).items
+            for ev in evidences:
+                ev.score = self.analyst_service.score(ev)
+            conflicts = self.analyst_service.detect_conflicts(task_id=task_id, evidences=evidences, threshold=0.15)
+            if conflicts:
+                self.repository.update_status(task_id, transition_or_raise(TaskStatus.EXECUTING, TaskStatus.REVIEWING))
+                self.conflict_repository.save_many(conflicts)
+                await self.hub.emit(
+                    task_id,
+                    "TASK_PROGRESS",
+                    {"taskId": task_id, "progress": 85, "state": "REVIEWING", "conflictCount": len(conflicts)},
+                )
+                # Single-user default: continue with unresolved conflicts recorded for later voting.
+                self.repository.update_status(task_id, transition_or_raise(TaskStatus.REVIEWING, TaskStatus.SYNTHESIZING))
+            else:
+                self.repository.update_status(task_id, transition_or_raise(TaskStatus.EXECUTING, TaskStatus.SYNTHESIZING))
             await self.hub.emit(task_id, "TASK_PROGRESS", {"taskId": task_id, "progress": 90, "state": "SYNTHESIZING"})
             await asyncio.sleep(0.1)
+            dag = self.repository.get_dag(task_id)
+            sections = [
+                (node.taskId, f"{node.title}\n\n{node.description}")
+                for node in dag.nodes
+                if node.taskId != task_id and node.status != NodeStatus.PRUNED
+            ]
+            md_path, bib_path, _ = self.writer_service.write_report(
+                task_id=task_id,
+                task_title=task.title,
+                sections=sections,
+                evidences=evidences,
+                locked_sections=set(),
+            )
             self.repository.update_status(task_id, transition_or_raise(TaskStatus.SYNTHESIZING, TaskStatus.FINALIZING))
+            self.repository.set_report_path(task_id, md_path)
             self.repository.update_status(task_id, transition_or_raise(TaskStatus.FINALIZING, TaskStatus.COMPLETED))
-            await self.hub.emit(task_id, "TASK_COMPLETED", {"taskId": task_id, "progress": 100})
+            await self.hub.emit(
+                task_id,
+                "TASK_COMPLETED",
+                {"taskId": task_id, "progress": 100, "reportPath": md_path, "bibPath": bib_path},
+            )
         except InvalidStateTransition as exc:
             self.repository.update_status(task_id, TaskStatus.FAILED, last_error=str(exc))
             await self.hub.emit(task_id, "ERROR", {"taskId": task_id, "error": str(exc)})
