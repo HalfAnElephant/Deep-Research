@@ -103,12 +103,30 @@ textarea {
   gap: 8px;
 }
 
+.control-block {
+  margin-top: 10px;
+}
+
+.secondary-actions {
+  margin-top: 10px;
+}
+
 button {
   border: 0;
   border-radius: 10px;
   padding: 8px 12px;
   cursor: pointer;
   background: var(--accent-soft);
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 button.primary {
@@ -119,6 +137,11 @@ button.primary {
 button.warn {
   background: #ffe5d1;
   color: var(--warn);
+}
+
+.action-main {
+  min-width: 190px;
+  font-weight: 700;
 }
 
 .list {
@@ -151,6 +174,101 @@ button.warn {
   height: 100%;
   width: var(--value, 0%);
   background: linear-gradient(90deg, #0a7784, #2fb4b0);
+}
+
+.flow-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.flow-step {
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #6e6a62;
+  background: #fff;
+}
+
+.flow-step.active {
+  border-style: solid;
+  border-color: #83c5cb;
+  background: #e8f4f6;
+  color: #134b52;
+}
+
+.status-board {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.status-pill.idle {
+  background: #ebf1f2;
+  color: #2c4e53;
+}
+
+.status-pill.running {
+  background: #d9eef0;
+  color: #0f525d;
+}
+
+.status-pill.paused {
+  background: #f9efcf;
+  color: #7a5a00;
+}
+
+.status-pill.success {
+  background: #dff3e2;
+  color: #1f6334;
+}
+
+.status-pill.danger {
+  background: #fce7e2;
+  color: #8d3018;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.75;
+}
+
+.status-dot.running {
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.status-hint {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #3e464a;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 1;
+  }
 }
 
 pre {
