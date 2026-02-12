@@ -94,7 +94,78 @@ class RetrievalService:
         ]
 
     async def _real_retrieve(self, *, task_id: str, node_id: str, query: str, sources: list[str]) -> list[Evidence]:
-        # Minimal real-mode fallback. Full provider integration is intentionally kept lightweight for single-user use.
+        normalized_sources = [s.lower() for s in sources] if sources else ["tavily"]
+        if "tavily" in normalized_sources and settings.tavily_api_key:
+            tavily_results = await self._retrieve_from_tavily(task_id=task_id, node_id=node_id, query=query)
+            if tavily_results:
+                return tavily_results
+        return await self._fallback_web_retrieve(task_id=task_id, node_id=node_id, query=query, sources=sources)
+
+    async def _retrieve_from_tavily(self, *, task_id: str, node_id: str, query: str) -> list[Evidence]:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await retry_async(
+                lambda: client.post(
+                    "https://api.tavily.com/search",
+                    json={
+                        "api_key": settings.tavily_api_key,
+                        "query": query,
+                        "search_depth": "advanced",
+                        "max_results": 5,
+                        "include_answer": False,
+                        "include_raw_content": False,
+                    },
+                ),
+                max_attempts=3,
+                base_delay_seconds=0.8,
+            )
+            assert isinstance(resp, httpx.Response)
+            resp.raise_for_status()
+            payload = resp.json()
+
+        results = payload.get("results", [])
+        evidences: list[Evidence] = []
+        for item in results:
+            content = str(item.get("content", "")).strip()
+            if not content:
+                continue
+            score = float(item.get("score", 0.6))
+            url = str(item.get("url", ""))
+            title = str(item.get("title", "Untitled Web Result"))
+            evidences.append(
+                Evidence(
+                    id=new_id(),
+                    taskId=task_id,
+                    nodeId=node_id,
+                    sourceType=SourceType.WEB,
+                    url=url,
+                    content=content,
+                    metadata=EvidenceMetadata(
+                        authors=[],
+                        publishDate=str(item.get("published_date") or "2026-01-01T00:00:00Z"),
+                        title=title,
+                        abstract=content[:500],
+                        impactFactor=0,
+                        isPeerReviewed=False,
+                        relevanceScore=max(0.0, min(score, 1.0)),
+                        citationCount=0,
+                    ),
+                    score=max(0.0, min(score, 1.0)),
+                    extractedData=ExtractedData(
+                        numericalValues=[
+                            {
+                                "value": round(max(0.0, min(score, 1.0)), 4),
+                                "unit": "score",
+                                "context": "relevance",
+                            }
+                        ]
+                    ),
+                )
+            )
+        return evidences
+
+    async def _fallback_web_retrieve(
+        self, *, task_id: str, node_id: str, query: str, sources: list[str]
+    ) -> list[Evidence]:
         if not sources:
             sources = ["web"]
         results: list[Evidence] = []

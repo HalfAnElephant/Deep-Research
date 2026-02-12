@@ -6,6 +6,20 @@
 ./scripts/run_backend.sh
 ```
 
+## Configure API keys (`.env`)
+
+Project root now includes a `.env` file template.
+Fill only the providers you plan to use:
+
+- LLM: `DR_OPENROUTER_API_KEY`, `DR_DEEPSEEK_API_KEY`, `DR_OPENAI_API_KEY`, `DR_ANTHROPIC_API_KEY`
+- Search: `DR_SERPER_API_KEY`, `DR_SERPAPI_API_KEY`, `DR_TAVILY_API_KEY`, `DR_BRAVE_API_KEY`, `DR_BING_SUBSCRIPTION_KEY`, `DR_GOOGLE_CSE_API_KEY`, `DR_GOOGLE_CSE_CX`
+
+Also configurable:
+
+- `DR_DEFAULT_LLM_PROVIDER` (for example `openrouter` or `deepseek`)
+- `DR_DEFAULT_LLM_MODEL`
+- `DR_USE_MOCK_SOURCES` (`true` for mock mode, `false` for real API calls)
+
 ## Run frontend
 
 ```bash
