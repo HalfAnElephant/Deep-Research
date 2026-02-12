@@ -57,6 +57,19 @@ CREATE TABLE IF NOT EXISTS evidences (
   extracted_data_json TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS conflicts (
+  conflict_id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  parameter TEXT NOT NULL,
+  disputed_values_json TEXT NOT NULL,
+  variance REAL NOT NULL,
+  context TEXT NOT NULL,
+  resolution_status TEXT NOT NULL,
+  resolution_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 """
 
 

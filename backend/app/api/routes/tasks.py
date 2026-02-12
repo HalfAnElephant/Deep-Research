@@ -3,8 +3,16 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from app.core.utils import new_id
-from app.deps import execution_engine, progress_hub, task_repository
-from app.models.schemas import CreateTaskRequest, DeleteResponse, StateResponse, TaskResponse, TaskStatus, UpdateTaskRequest
+from app.deps import conflict_repository, execution_engine, progress_hub, task_repository
+from app.models.schemas import (
+    ConflictRecord,
+    CreateTaskRequest,
+    DeleteResponse,
+    StateResponse,
+    TaskResponse,
+    TaskStatus,
+    UpdateTaskRequest,
+)
 
 router = APIRouter(prefix="/api/v1")
 
@@ -57,6 +65,15 @@ def get_task_dag(task_id: str) -> dict:
         return task_repository.get_dag(task_id, allow_empty=True).model_dump(by_alias=True)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+
+
+@router.get("/tasks/{task_id}/conflicts", response_model=list[ConflictRecord])
+def get_task_conflicts(task_id: str) -> list[ConflictRecord]:
+    try:
+        task_repository.get_task(task_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+    return conflict_repository.list_by_task(task_id)
 
 
 @router.post("/tasks/{task_id}/start", response_model=StateResponse)

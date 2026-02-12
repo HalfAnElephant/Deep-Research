@@ -35,6 +35,7 @@ class TaskRepository:
             createdAt=row["created_at"],
             updatedAt=row["updated_at"],
             config=TaskConfig.model_validate_json(row["config_json"]),
+            reportPath=row["report_path"],
             dag=self.get_dag(task_id, allow_empty=True),
         )
 
@@ -76,6 +77,18 @@ class TaskRepository:
                 WHERE task_id = ?
                 """,
                 (status.value, last_error, now_iso(), task_id),
+            )
+            conn.commit()
+
+    def set_report_path(self, task_id: str, report_path: str) -> None:
+        with get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE tasks
+                SET report_path = ?, updated_at = ?
+                WHERE task_id = ?
+                """,
+                (report_path, now_iso(), task_id),
             )
             conn.commit()
 

@@ -64,6 +64,7 @@ class RetrievalService:
     async def _mock_retrieve(self, *, task_id: str, node_id: str, query: str, sources: list[str]) -> list[Evidence]:
         await asyncio.sleep(0.05)
         source = sources[0] if sources else "MockSource"
+        synthetic_metric = round(((sum(ord(c) for c in node_id) % 60) / 100) + 0.2, 2)
         return [
             Evidence(
                 id=new_id(),
@@ -79,14 +80,14 @@ class RetrievalService:
                     abstract="This is a mock abstract.",
                     impactFactor=5.2,
                     isPeerReviewed=True,
-                    relevanceScore=0.82,
+                    relevanceScore=synthetic_metric,
                     citationCount=42,
                 ),
-                score=0.82,
+                score=synthetic_metric,
                 extractedData=ExtractedData(
                     tables=[{"caption": "Sample table", "data": {"rows": 3}}],
                     images=[{"caption": "Sample figure", "url": "https://example.org/img/1.png"}],
-                    numericalValues=[{"value": 0.82, "unit": "score", "context": "relevance"}],
+                    numericalValues=[{"value": synthetic_metric, "unit": "score", "context": "relevance"}],
                 ),
             )
         ]

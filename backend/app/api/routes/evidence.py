@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.deps import evidence_repository
-from app.models.schemas import Evidence, EvidenceListResponse
+from app.deps import conflict_repository, evidence_repository
+from app.models.schemas import Evidence, EvidenceListResponse, VoteRequest, VoteResponse
 
 router = APIRouter(prefix="/api/v1")
 
@@ -23,3 +23,20 @@ def get_evidence(evidence_id: str) -> Evidence:
         return evidence_repository.get(evidence_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Evidence not found: {evidence_id}") from exc
+
+
+@router.post("/evidence/{evidence_id}/vote", response_model=VoteResponse)
+def vote_conflict(evidence_id: str, payload: VoteRequest) -> VoteResponse:
+    try:
+        evidence_repository.get(evidence_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Evidence not found: {evidence_id}") from exc
+    try:
+        resolved = conflict_repository.resolve(payload.conflictId, payload.selectedEvidenceId, payload.reason)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Conflict not found: {payload.conflictId}") from exc
+    return VoteResponse(
+        conflictId=resolved.conflictId,
+        resolutionStatus=resolved.resolutionStatus,
+        selectedEvidenceId=payload.selectedEvidenceId,
+    )

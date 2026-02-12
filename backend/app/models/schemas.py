@@ -87,6 +87,7 @@ class TaskResponse(BaseModel):
     createdAt: str
     updatedAt: str
     config: TaskConfig
+    reportPath: str | None = None
     dag: DAGGraph | None = None
 
 
@@ -146,3 +147,68 @@ class Evidence(BaseModel):
 class EvidenceListResponse(BaseModel):
     items: list[Evidence]
     total: int
+
+
+class ResolutionStatus(StrEnum):
+    OPEN = "OPEN"
+    RESOLVED = "RESOLVED"
+    IGNORED = "IGNORED"
+
+
+class ConflictResolution(BaseModel):
+    selectedEvidenceId: str
+    reason: str
+    resolvedAt: str
+
+
+class DisputedValue(BaseModel):
+    value: float
+    unit: str
+    evidenceId: str
+    source: str
+
+
+class ConflictRecord(BaseModel):
+    conflictId: str
+    taskId: str
+    parameter: str
+    disputedValues: list[DisputedValue]
+    variance: float
+    context: str
+    resolutionStatus: ResolutionStatus
+    resolution: ConflictResolution | None = None
+
+
+class VoteRequest(BaseModel):
+    conflictId: str
+    selectedEvidenceId: str
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class VoteResponse(BaseModel):
+    conflictId: str
+    resolutionStatus: ResolutionStatus
+    selectedEvidenceId: str
+
+
+class Citation(BaseModel):
+    id: str
+    authors: list[str]
+    title: str
+    year: int
+    source: str
+    url: str
+
+
+class MCPExecutionRequest(BaseModel):
+    toolName: str
+    method: str
+    params: dict[str, Any] = Field(default_factory=dict)
+    mode: str = Field(default="read", pattern="^(read|write|execute)$")
+
+
+class MCPExecutionResult(BaseModel):
+    status: str
+    result: dict[str, Any] | None = None
+    jobId: str | None = None
+    error: str | None = None
