@@ -71,6 +71,14 @@ class ExecutionEngine:
         control.aborted = True
         self.repository.update_status(task_id, TaskStatus.ABORTED)
 
+    async def recover(self, task_id: str) -> None:
+        snapshot = self.repository.load_snapshot(task_id)
+        control = self._control.setdefault(task_id, TaskControlState())
+        if snapshot:
+            control.completed_nodes = snapshot.get("completed_nodes", [])
+        control.paused = False
+        await self.start(task_id)
+
     async def _run_task(self, task_id: str, current_status: TaskStatus) -> None:
         try:
             await self.hub.emit(task_id, "TASK_STARTED", {"taskId": task_id, "status": current_status.value})
@@ -90,9 +98,15 @@ class ExecutionEngine:
 
             dag = self.repository.get_dag(task_id)
             executable_nodes = [n for n in dag.nodes if n.taskId != task_id and n.status != NodeStatus.PRUNED]
+            snapshot = self.repository.load_snapshot(task_id)
+            if snapshot:
+                control = self._control.setdefault(task_id, TaskControlState())
+                control.completed_nodes = snapshot.get("completed_nodes", control.completed_nodes)
             total = max(1, len(executable_nodes))
             for idx, node in enumerate(executable_nodes, start=1):
                 control = self._control.setdefault(task_id, TaskControlState())
+                if node.taskId in control.completed_nodes:
+                    continue
                 while control.paused and not control.aborted:
                     await asyncio.sleep(0.2)
                 if control.aborted:
