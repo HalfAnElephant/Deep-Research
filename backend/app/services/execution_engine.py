@@ -185,6 +185,7 @@ class ExecutionEngine:
             md_path, bib_path, _ = self.report_agent.generate_report(
                 task_id=task_id,
                 task_title=task.title,
+                task_description=task.description,
                 sections=sections,
                 evidences=evidences,
                 locked_sections=set(),
