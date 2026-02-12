@@ -18,7 +18,7 @@ Also configurable:
 
 - `DR_DEFAULT_LLM_PROVIDER` (for example `openrouter` or `deepseek`)
 - `DR_DEFAULT_LLM_MODEL`
-- `DR_USE_MOCK_SOURCES` (`true` for mock mode, `false` for real API calls)
+- `DR_USE_MOCK_SOURCES` (`false` by default for real API calls, set `true` only for deterministic mock/testing mode)
 
 ## Run frontend
 
@@ -44,6 +44,7 @@ Local alpha workflow is complete:
 - Retrieval + evidence management
 - Analyst conflict detection + vote resolution
 - Writer report generation (`.md` + `.bib`)
+- Built-in `ResearchAgent` / `ReportAgent` orchestration layer (ready for MCP expansion)
 - MCP minimal execution API
 - Frontend six-state workflow console
 

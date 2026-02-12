@@ -27,11 +27,14 @@ def test_writer_generates_md_and_bib(tmp_path) -> None:
     md_path, bib_path, citations = writer.write_report(
         task_id="t1",
         task_title="Demo",
-        sections=[("s1", "section content")],
+        sections=[("n1", "section content")],
         evidences=[evidence],
     )
+    report = (tmp_path / "t1.md").read_text(encoding="utf-8")
     assert (tmp_path / "t1.md").exists()
     assert (tmp_path / "t1.bib").exists()
     assert md_path.endswith(".md")
     assert bib_path.endswith(".bib")
     assert "e1" in citations
+    assert "证据：Paper A" in report
+    assert "https://example.org/e1" in report

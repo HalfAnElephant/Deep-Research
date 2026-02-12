@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     db_path: str = "backend/.data/deep_research.db"
     log_level: str = "INFO"
-    use_mock_sources: bool = True
+    use_mock_sources: bool = False
     default_llm_provider: str = "openrouter"
     default_llm_model: str = "deepseek/deepseek-chat-v3-0324"
 

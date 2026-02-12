@@ -8,6 +8,7 @@ from app.models.schemas import NodeStatus, TaskStatus
 from app.repositories.conflict_repository import ConflictRepository
 from app.repositories.evidence_repository import EvidenceRepository
 from app.repositories.task_repository import TaskRepository
+from app.services.agents import ReportAgent, ResearchAgent
 from app.services.analyst import AnalystService
 from app.services.planner import MasterPlanner
 from app.services.progress_hub import ProgressHub
@@ -35,6 +36,8 @@ class ExecutionEngine:
         conflict_repository: ConflictRepository,
         analyst_service: AnalystService,
         writer_service: WriterService,
+        research_agent: ResearchAgent | None = None,
+        report_agent: ReportAgent | None = None,
     ) -> None:
         self.repository = repository
         self.planner = planner
@@ -44,6 +47,8 @@ class ExecutionEngine:
         self.conflict_repository = conflict_repository
         self.analyst_service = analyst_service
         self.writer_service = writer_service
+        self.research_agent = research_agent or ResearchAgent(retrieval_service=retrieval_service)
+        self.report_agent = report_agent or ReportAgent(writer_service=writer_service)
         self._control: dict[str, TaskControlState] = {}
 
     async def start(self, task_id: str) -> None:
@@ -114,10 +119,10 @@ class ExecutionEngine:
                     return
                 self.repository.update_node_status(task_id, node.taskId, NodeStatus.RUNNING, node.metadata.infoGainScore)
                 await asyncio.sleep(0.2)
-                evidences = await self.retrieval_service.retrieve(
+                evidences = await self.research_agent.collect_evidence(
                     task_id=task_id,
                     node_id=node.taskId,
-                    query=node.title,
+                    query=f"{task.title} {node.title}",
                     sources=task.config.searchSources,
                 )
                 self.evidence_repository.save_many(evidences)
@@ -177,7 +182,7 @@ class ExecutionEngine:
                 for node in dag.nodes
                 if node.taskId != task_id and node.status != NodeStatus.PRUNED
             ]
-            md_path, bib_path, _ = self.writer_service.write_report(
+            md_path, bib_path, _ = self.report_agent.generate_report(
                 task_id=task_id,
                 task_title=task.title,
                 sections=sections,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from pathlib import Path
 
 import httpx
@@ -66,11 +67,21 @@ class WriterService:
         return str(md_path), str(bib_path), citation_map
 
     def _generate_body(self, *, task_title: str, sections: list[tuple[str, str]], evidences: list[Evidence]) -> str:
-        if not settings.use_mock_sources:
-            llm_text = self._generate_with_llm(task_title=task_title, sections=sections, evidences=evidences)
-            if llm_text:
-                return llm_text
-        return self._generate_template(task_title=task_title, sections=sections, evidences=evidences)
+        evidence_rich_template = self._generate_template(task_title=task_title, sections=sections, evidences=evidences)
+        if settings.use_mock_sources:
+            return evidence_rich_template
+
+        llm_text = self._generate_with_llm(task_title=task_title, sections=sections, evidences=evidences)
+        if not llm_text:
+            return evidence_rich_template
+        return "\n".join(
+            [
+                "## AI 综合解读",
+                llm_text.strip(),
+                "",
+                evidence_rich_template,
+            ]
+        )
 
     def _generate_with_llm(self, *, task_title: str, sections: list[tuple[str, str]], evidences: list[Evidence]) -> str:
         base_url, api_key, model = self._resolve_provider()
@@ -78,13 +89,14 @@ class WriterService:
             return ""
 
         evidence_snippets = "\n".join(
-            f"- {ev.metadata.title}: {ev.content[:300]} (url={ev.url})" for ev in evidences[:12]
+            f"- [{ev.id}] {ev.metadata.title}: {ev.content[:300]} (url={ev.url})" for ev in evidences[:12]
         )
         section_snippets = "\n".join(f"- {content[:180]}" for _, content in sections[:8])
         prompt = (
             f"研究题目：{task_title}\n"
             "请生成中文研究报告，包含：摘要、背景、关键发现、方法与证据、局限性、结论与后续建议。\n"
-            "保持结构化、客观、可读性强。不要编造不存在的数据。\n\n"
+            "保持结构化、客观、可读性强。禁止编造不存在的数据、论文、链接。\n"
+            "每个关键结论必须引用至少一个证据ID（例如 [evidence:xxxx]）。\n\n"
             f"任务分段信息：\n{section_snippets}\n\n"
             f"证据片段：\n{evidence_snippets}\n"
         )
@@ -128,23 +140,59 @@ class WriterService:
 
     @staticmethod
     def _generate_template(*, task_title: str, sections: list[tuple[str, str]], evidences: list[Evidence]) -> str:
-        top = evidences[:5]
+        ranked = sorted(evidences, key=lambda item: item.score, reverse=True)
+        top = ranked[:8]
+        source_types = sorted({ev.sourceType.value for ev in ranked})
         lines = [
             "## 摘要",
-            f"本文围绕“{task_title}”进行快速研究，总结了当前公开资料中的关键观点与证据。",
+            f"本文围绕“{task_title}”进行研究，共纳入 {len(ranked)} 条证据，来源类型：{', '.join(source_types) or '无'}。",
             "",
             "## 关键发现",
         ]
+        if not top:
+            lines.append("当前没有检索到可用证据，请检查数据源配置与网络连通性后重试。")
         for idx, ev in enumerate(top, start=1):
-            lines.append(f"{idx}. {ev.metadata.title}（score={ev.score:.2f}）")
-        lines.extend(["", "## 分析说明"])
-        for _, section_content in sections[:4]:
-            lines.append(f"- {section_content[:220]}")
+            lines.append(f"{idx}. {ev.metadata.title}（score={ev.score:.2f}, evidenceId={ev.id}）")
+
+        lines.extend(["", "## 证据化分析"])
+        section_to_evidence: dict[str, list[Evidence]] = defaultdict(list)
+        for ev in ranked:
+            section_to_evidence[ev.nodeId].append(ev)
+
+        used_ids: set[str] = set()
+        for section_id, section_content in sections[:8]:
+            section_lines = [line.strip() for line in section_content.splitlines() if line.strip()]
+            section_title = section_lines[0] if section_lines else section_id
+            section_desc = section_lines[1] if len(section_lines) > 1 else section_content.strip()
+            lines.append(f"### {section_title}")
+            lines.append(f"分析范围：{section_desc[:220]}")
+            matched = section_to_evidence.get(section_id, [])[:3]
+            for ev in matched:
+                used_ids.add(ev.id)
+                lines.append(f"- 证据：{ev.metadata.title}")
+                lines.append(
+                    f"  来源：{ev.sourceType.value} | 时间：{ev.metadata.publishDate or '未知'} | 相关性：{ev.score:.2f}"
+                )
+                lines.append(f"  摘要：{ev.content[:260]}")
+                lines.append(f"  链接：{ev.url} | evidenceId={ev.id}")
+            if not matched:
+                lines.append("- 该主题暂未命中专属证据，建议扩展关键词后补检索。")
+            lines.append("")
+
+        leftovers = [ev for ev in ranked if ev.id not in used_ids][:5]
+        if leftovers:
+            lines.append("## 补充证据")
+            for ev in leftovers:
+                lines.append(f"- {ev.metadata.title} | {ev.url} | evidenceId={ev.id}")
+            lines.append("")
+
         lines.extend(
             [
+                "## 局限性",
+                "当前结果依赖公开可访问来源，未覆盖付费数据库与私有实验记录；部分来源可能缺少标准化元数据。",
                 "",
-                "## 结论",
-                "当前证据已覆盖主要趋势，但仍需针对高争议结论补充更高质量、可复现实验的数据。",
+                "## 结论与建议",
+                "建议优先围绕高相关性证据开展二次核验，并为关键结论补充可复现实验或行业数据。",
             ]
         )
         return "\n".join(lines)
