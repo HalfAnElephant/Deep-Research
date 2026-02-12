@@ -13,3 +13,4 @@ htmlcov/
 *.db
 backend/.data/
 frontend/.vite/
+.worktrees/
