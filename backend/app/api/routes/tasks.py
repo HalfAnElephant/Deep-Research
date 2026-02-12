@@ -122,6 +122,16 @@ def abort_task(task_id: str) -> StateResponse:
     return StateResponse(taskId=task_id, status=TaskStatus.ABORTED, message="Task aborted")
 
 
+@router.post("/tasks/{task_id}/recover", response_model=StateResponse)
+async def recover_task(task_id: str) -> StateResponse:
+    try:
+        task_repository.get_task(task_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+    await execution_engine.recover(task_id)
+    return StateResponse(taskId=task_id, status=TaskStatus.EXECUTING, message="Task recovered from snapshot")
+
+
 @router.websocket("/ws/task/{task_id}/progress")
 async def task_progress(task_id: str, websocket: WebSocket) -> None:
     await progress_hub.connect(task_id, websocket)
@@ -144,3 +154,15 @@ def get_report(task_id: str) -> dict[str, str]:
     if not path.exists():
         raise HTTPException(status_code=404, detail="Report file does not exist")
     return {"taskId": task_id, "content": path.read_text(encoding="utf-8")}
+
+
+@router.get("/tasks/{task_id}/snapshot")
+def get_snapshot(task_id: str) -> dict:
+    try:
+        task_repository.get_task(task_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+    snapshot = task_repository.load_snapshot(task_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return snapshot

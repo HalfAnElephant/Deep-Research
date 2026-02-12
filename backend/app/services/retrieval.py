@@ -10,6 +10,7 @@ import httpx
 from app.core.config import settings
 from app.core.utils import new_id
 from app.models.schemas import Evidence, EvidenceMetadata, ExtractedData, SourceType
+from app.services.retry import retry_async
 
 
 class L1EvidenceCache:
@@ -100,7 +101,12 @@ class RetrievalService:
         async with httpx.AsyncClient(timeout=10) as client:
             for source in sources[:2]:
                 url = f"https://httpbin.org/anything/{source}"
-                resp = await client.get(url, params={"q": query})
+                resp = await retry_async(
+                    lambda: client.get(url, params={"q": query}),
+                    max_attempts=3,
+                    base_delay_seconds=0.5,
+                )
+                assert isinstance(resp, httpx.Response)
                 resp.raise_for_status()
                 payload = resp.json()
                 results.append(

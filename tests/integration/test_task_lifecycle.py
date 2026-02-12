@@ -80,3 +80,24 @@ def test_task_create_get_dag_and_start() -> None:
         )
         assert mcp_write.status_code == 200
         assert mcp_write.json()["status"] == "USER_CONFIRMATION_REQUIRED"
+
+
+def test_snapshot_and_recover_flow() -> None:
+    with TestClient(app) as client:
+        payload = {
+            "title": "Recovery demo",
+            "description": "Test pause and recover",
+            "config": {"maxDepth": 2, "maxNodes": 8, "searchSources": ["arXiv"], "priority": 3},
+        }
+        task_id = client.post("/api/v1/tasks", json=payload).json()["taskId"]
+        client.post(f"/api/v1/tasks/{task_id}/start")
+        time.sleep(0.8)
+        pause = client.post(f"/api/v1/tasks/{task_id}/pause")
+        assert pause.status_code == 200
+
+        snapshot = client.get(f"/api/v1/tasks/{task_id}/snapshot")
+        assert snapshot.status_code == 200
+        assert "completed_nodes" in snapshot.json()
+
+        recover = client.post(f"/api/v1/tasks/{task_id}/recover")
+        assert recover.status_code == 200
