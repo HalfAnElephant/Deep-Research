@@ -14,3 +14,4 @@ htmlcov/
 backend/.data/
 frontend/.vite/
 .worktrees/
+*.egg-info/
