@@ -44,6 +44,19 @@ CREATE TABLE IF NOT EXISTS snapshots (
   snapshot_json TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS evidences (
+  evidence_id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  node_id TEXT NOT NULL,
+  source_type TEXT NOT NULL,
+  url TEXT NOT NULL,
+  content TEXT NOT NULL,
+  metadata_json TEXT NOT NULL,
+  score REAL NOT NULL,
+  extracted_data_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
 """
 
 
