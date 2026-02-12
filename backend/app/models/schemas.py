@@ -105,3 +105,44 @@ class ProgressEvent(BaseModel):
     event: str
     timestamp: str
     data: dict[str, Any]
+
+
+class SourceType(StrEnum):
+    PAPER = "PAPER"
+    WEB = "WEB"
+    PATENT = "PATENT"
+    MCP = "MCP"
+
+
+class EvidenceMetadata(BaseModel):
+    authors: list[str] = Field(default_factory=list)
+    publishDate: str = ""
+    title: str
+    abstract: str = ""
+    impactFactor: float = 0.0
+    isPeerReviewed: bool = False
+    relevanceScore: float = Field(default=0.0, ge=0, le=1)
+    citationCount: int = 0
+
+
+class ExtractedData(BaseModel):
+    tables: list[dict[str, Any]] = Field(default_factory=list)
+    images: list[dict[str, Any]] = Field(default_factory=list)
+    numericalValues: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class Evidence(BaseModel):
+    id: str
+    taskId: str
+    nodeId: str
+    sourceType: SourceType
+    url: str
+    content: str
+    metadata: EvidenceMetadata
+    score: float = Field(ge=0, le=1)
+    extractedData: ExtractedData = Field(default_factory=ExtractedData)
+
+
+class EvidenceListResponse(BaseModel):
+    items: list[Evidence]
+    total: int

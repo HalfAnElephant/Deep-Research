@@ -5,9 +5,11 @@ from dataclasses import dataclass, field
 
 from app.core.utils import now_iso
 from app.models.schemas import NodeStatus, TaskStatus
+from app.repositories.evidence_repository import EvidenceRepository
 from app.repositories.task_repository import TaskRepository
 from app.services.planner import MasterPlanner
 from app.services.progress_hub import ProgressHub
+from app.services.retrieval import RetrievalService
 from app.services.state_machine import InvalidStateTransition, transition_or_raise
 
 
@@ -20,10 +22,19 @@ class TaskControlState:
 
 
 class ExecutionEngine:
-    def __init__(self, repository: TaskRepository, planner: MasterPlanner, hub: ProgressHub) -> None:
+    def __init__(
+        self,
+        repository: TaskRepository,
+        planner: MasterPlanner,
+        hub: ProgressHub,
+        evidence_repository: EvidenceRepository,
+        retrieval_service: RetrievalService,
+    ) -> None:
         self.repository = repository
         self.planner = planner
         self.hub = hub
+        self.evidence_repository = evidence_repository
+        self.retrieval_service = retrieval_service
         self._control: dict[str, TaskControlState] = {}
 
     async def start(self, task_id: str) -> None:
@@ -80,6 +91,19 @@ class ExecutionEngine:
                     return
                 self.repository.update_node_status(task_id, node.taskId, NodeStatus.RUNNING, node.metadata.infoGainScore)
                 await asyncio.sleep(0.2)
+                evidences = await self.retrieval_service.retrieve(
+                    task_id=task_id,
+                    node_id=node.taskId,
+                    query=node.title,
+                    sources=task.config.searchSources,
+                )
+                self.evidence_repository.save_many(evidences)
+                for ev in evidences:
+                    await self.hub.emit(
+                        task_id,
+                        "EVIDENCE_FOUND",
+                        {"taskId": task_id, "nodeId": node.taskId, "evidence": ev.model_dump()},
+                    )
                 self.repository.update_node_status(task_id, node.taskId, NodeStatus.COMPLETED, node.metadata.infoGainScore)
                 control.completed_nodes.append(node.taskId)
                 progress = 20 + int((idx / total) * 60)
@@ -101,7 +125,7 @@ class ExecutionEngine:
                         "fsm_state": TaskStatus.EXECUTING.value,
                         "completed_nodes": control.completed_nodes,
                         "pending_nodes": [n.taskId for n in executable_nodes if n.taskId not in control.completed_nodes],
-                        "evidence_cache": {},
+                        "evidence_cache": {ev.id: ev.url for ev in evidences},
                         "conflict_records": [],
                     },
                 )
