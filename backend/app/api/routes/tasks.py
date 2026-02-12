@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from app.core.utils import new_id
@@ -128,3 +130,17 @@ async def task_progress(task_id: str, websocket: WebSocket) -> None:
             await websocket.receive_text()
     except WebSocketDisconnect:
         await progress_hub.disconnect(task_id, websocket)
+
+
+@router.get("/tasks/{task_id}/report")
+def get_report(task_id: str) -> dict[str, str]:
+    try:
+        task = task_repository.get_task(task_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+    if not task.reportPath:
+        raise HTTPException(status_code=404, detail="Report not generated yet")
+    path = Path(task.reportPath)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Report file does not exist")
+    return {"taskId": task_id, "content": path.read_text(encoding="utf-8")}
