@@ -19,6 +19,14 @@ class TaskStatus(StrEnum):
     ABORTED = "ABORTED"
 
 
+class ConversationStatus(StrEnum):
+    DRAFTING_PLAN = "DRAFTING_PLAN"
+    PLAN_READY = "PLAN_READY"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
 class NodeStatus(StrEnum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"
@@ -106,6 +114,83 @@ class ProgressEvent(BaseModel):
     event: str
     timestamp: str
     data: dict[str, Any]
+
+
+class MessageRole(StrEnum):
+    USER = "user"
+    ASSISTANT = "assistant"
+    SYSTEM = "system"
+
+
+class MessageKind(StrEnum):
+    USER_TEXT = "USER_TEXT"
+    PLAN_DRAFT = "PLAN_DRAFT"
+    PLAN_EDITED = "PLAN_EDITED"
+    PLAN_REVISION = "PLAN_REVISION"
+    PROGRESS_GROUP = "PROGRESS_GROUP"
+    FINAL_REPORT = "FINAL_REPORT"
+    ERROR = "ERROR"
+
+
+class PlanRevision(BaseModel):
+    conversationId: str
+    version: int
+    author: MessageRole
+    markdown: str
+    createdAt: str
+
+
+class ConversationMessage(BaseModel):
+    messageId: str
+    conversationId: str
+    role: MessageRole
+    kind: MessageKind
+    content: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    collapsed: bool = False
+    createdAt: str
+
+
+class ConversationSummary(BaseModel):
+    conversationId: str
+    topic: str
+    status: ConversationStatus
+    taskId: str | None = None
+    createdAt: str
+    updatedAt: str
+
+
+class ConversationDetail(ConversationSummary):
+    currentPlan: PlanRevision | None = None
+    messages: list[ConversationMessage] = Field(default_factory=list)
+
+
+class CreateConversationRequest(BaseModel):
+    topic: str = Field(min_length=2, max_length=500)
+    config: TaskConfig | None = None
+
+
+class RevisePlanRequest(BaseModel):
+    instruction: str = Field(min_length=2, max_length=4000)
+
+
+class UpdatePlanRequest(BaseModel):
+    markdown: str = Field(min_length=10, max_length=60000)
+
+
+class RunConversationRequest(BaseModel):
+    pass
+
+
+class RevisePlanResponse(BaseModel):
+    plan: PlanRevision
+    message: ConversationMessage
+
+
+class RunConversationResponse(BaseModel):
+    conversationId: str
+    taskId: str
+    status: ConversationStatus
 
 
 class SourceType(StrEnum):

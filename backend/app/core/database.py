@@ -70,6 +70,40 @@ CREATE TABLE IF NOT EXISTS conflicts (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS conversations (
+  conversation_id TEXT PRIMARY KEY,
+  topic TEXT NOT NULL,
+  status TEXT NOT NULL,
+  config_json TEXT NOT NULL,
+  task_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS plan_revisions (
+  conversation_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  author TEXT NOT NULL,
+  markdown TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (conversation_id, version)
+);
+
+CREATE TABLE IF NOT EXISTS conversation_messages (
+  message_id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  content TEXT NOT NULL,
+  metadata_json TEXT NOT NULL,
+  collapsed INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_conversations_task_id ON conversations(task_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_created_at
+  ON conversation_messages(conversation_id, created_at ASC);
 """
 
 
