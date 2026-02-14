@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 
 from app.core.utils import new_id
 from app.deps import conflict_repository, execution_engine, progress_hub, task_repository
@@ -154,6 +155,20 @@ def get_report(task_id: str) -> dict[str, str]:
     if not path.exists():
         raise HTTPException(status_code=404, detail="Report file does not exist")
     return {"taskId": task_id, "content": path.read_text(encoding="utf-8")}
+
+
+@router.get("/tasks/{task_id}/report/download")
+def download_report(task_id: str) -> FileResponse:
+    try:
+        task = task_repository.get_task(task_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+    if not task.reportPath:
+        raise HTTPException(status_code=404, detail="Report not generated yet")
+    path = Path(task.reportPath)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Report file does not exist")
+    return FileResponse(path, media_type="text/markdown", filename=f"{task_id}.md")
 
 
 @router.get("/tasks/{task_id}/snapshot")

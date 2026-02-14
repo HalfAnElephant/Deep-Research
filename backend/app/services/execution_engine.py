@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
+import logging
+from typing import Awaitable, Callable
 
 from app.core.utils import now_iso
 from app.models.schemas import NodeStatus, TaskStatus
@@ -15,6 +17,8 @@ from app.services.progress_hub import ProgressHub
 from app.services.retrieval import RetrievalService
 from app.services.state_machine import InvalidStateTransition, transition_or_raise
 from app.services.writer import WriterService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -38,6 +42,7 @@ class ExecutionEngine:
         writer_service: WriterService,
         research_agent: ResearchAgent | None = None,
         report_agent: ReportAgent | None = None,
+        event_listener: Callable[[str, str, dict], Awaitable[None]] | None = None,
     ) -> None:
         self.repository = repository
         self.planner = planner
@@ -49,7 +54,19 @@ class ExecutionEngine:
         self.writer_service = writer_service
         self.research_agent = research_agent or ResearchAgent(retrieval_service=retrieval_service)
         self.report_agent = report_agent or ReportAgent(writer_service=writer_service)
+        self.event_listener = event_listener
         self._control: dict[str, TaskControlState] = {}
+
+    def set_event_listener(self, listener: Callable[[str, str, dict], Awaitable[None]] | None) -> None:
+        self.event_listener = listener
+
+    async def _emit_event(self, task_id: str, event: str, payload: dict) -> None:
+        await self.hub.emit(task_id, event, payload)
+        if self.event_listener is not None:
+            try:
+                await self.event_listener(task_id, event, payload)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Event listener failed for task=%s event=%s: %s", task_id, event, exc)
 
     async def start(self, task_id: str) -> None:
         task = self.repository.get_task(task_id)
@@ -86,14 +103,14 @@ class ExecutionEngine:
 
     async def _run_task(self, task_id: str, current_status: TaskStatus) -> None:
         try:
-            await self.hub.emit(task_id, "TASK_STARTED", {"taskId": task_id, "status": current_status.value})
+            await self._emit_event(task_id, "TASK_STARTED", {"taskId": task_id, "status": current_status.value})
             task = self.repository.get_task(task_id)
             config = task.config
             if not task.dag or not task.dag.nodes:
                 self.repository.update_status(task_id, transition_or_raise(task.status, TaskStatus.PLANNING))
                 dag = self.planner.build_dag(task_id, task.title, task.description, config)
                 self.repository.save_dag(task_id, dag)
-                await self.hub.emit(
+                await self._emit_event(
                     task_id,
                     "TASK_PROGRESS",
                     {
@@ -124,13 +141,13 @@ class ExecutionEngine:
                 while control.paused and not control.aborted:
                     await asyncio.sleep(0.2)
                 if control.aborted:
-                    await self.hub.emit(task_id, "ERROR", {"taskId": task_id, "error": "Task aborted by user"})
+                    await self._emit_event(task_id, "ERROR", {"taskId": task_id, "error": "Task aborted by user"})
                     return
                 self.repository.update_node_status(task_id, node.taskId, NodeStatus.RUNNING, node.metadata.infoGainScore)
                 await asyncio.sleep(0.2)
                 query = f"{task.title} {node.title}"
                 searching_progress = 20 + int(((idx - 1) / total) * 60)
-                await self.hub.emit(
+                await self._emit_event(
                     task_id,
                     "TASK_PROGRESS",
                     {
@@ -151,7 +168,7 @@ class ExecutionEngine:
                 )
                 self.evidence_repository.save_many(evidences)
                 for ev in evidences:
-                    await self.hub.emit(
+                    await self._emit_event(
                         task_id,
                         "EVIDENCE_FOUND",
                         {"taskId": task_id, "nodeId": node.taskId, "evidence": ev.model_dump()},
@@ -159,7 +176,7 @@ class ExecutionEngine:
                 self.repository.update_node_status(task_id, node.taskId, NodeStatus.COMPLETED, node.metadata.infoGainScore)
                 control.completed_nodes.append(node.taskId)
                 progress = 20 + int((idx / total) * 60)
-                await self.hub.emit(
+                await self._emit_event(
                     task_id,
                     "TASK_PROGRESS",
                     {
@@ -193,7 +210,7 @@ class ExecutionEngine:
             if conflicts:
                 self.repository.update_status(task_id, transition_or_raise(TaskStatus.EXECUTING, TaskStatus.REVIEWING))
                 self.conflict_repository.save_many(conflicts)
-                await self.hub.emit(
+                await self._emit_event(
                     task_id,
                     "TASK_PROGRESS",
                     {
@@ -208,7 +225,7 @@ class ExecutionEngine:
                 self.repository.update_status(task_id, transition_or_raise(TaskStatus.REVIEWING, TaskStatus.SYNTHESIZING))
             else:
                 self.repository.update_status(task_id, transition_or_raise(TaskStatus.EXECUTING, TaskStatus.SYNTHESIZING))
-            await self.hub.emit(
+            await self._emit_event(
                 task_id,
                 "TASK_PROGRESS",
                 {"taskId": task_id, "progress": 90, "state": "SYNTHESIZING", "phase": "OUTLINING"},
@@ -224,7 +241,7 @@ class ExecutionEngine:
             for section_idx, (_, section_text) in enumerate(sections, start=1):
                 section_title = section_text.splitlines()[0].strip() if section_text else ""
                 write_progress = 90 + int((section_idx / total_sections) * 6)
-                await self.hub.emit(
+                await self._emit_event(
                     task_id,
                     "TASK_PROGRESS",
                     {
@@ -245,21 +262,21 @@ class ExecutionEngine:
                 locked_sections=set(),
             )
             self.repository.update_status(task_id, transition_or_raise(TaskStatus.SYNTHESIZING, TaskStatus.FINALIZING))
-            await self.hub.emit(
+            await self._emit_event(
                 task_id,
                 "TASK_PROGRESS",
                 {"taskId": task_id, "progress": 98, "state": "FINALIZING", "phase": "PERSISTING_REPORT"},
             )
             self.repository.set_report_path(task_id, md_path)
             self.repository.update_status(task_id, transition_or_raise(TaskStatus.FINALIZING, TaskStatus.COMPLETED))
-            await self.hub.emit(
+            await self._emit_event(
                 task_id,
                 "TASK_COMPLETED",
                 {"taskId": task_id, "progress": 100, "reportPath": md_path, "bibPath": bib_path},
             )
         except InvalidStateTransition as exc:
             self.repository.update_status(task_id, TaskStatus.FAILED, last_error=str(exc))
-            await self.hub.emit(task_id, "ERROR", {"taskId": task_id, "error": str(exc)})
+            await self._emit_event(task_id, "ERROR", {"taskId": task_id, "error": str(exc)})
         except Exception as exc:  # noqa: BLE001
             self.repository.update_status(task_id, TaskStatus.FAILED, last_error=str(exc))
-            await self.hub.emit(task_id, "ERROR", {"taskId": task_id, "error": f"Unhandled error: {exc}"})
+            await self._emit_event(task_id, "ERROR", {"taskId": task_id, "error": f"Unhandled error: {exc}"})
