@@ -448,6 +448,7 @@ button.ghost:hover:not(:disabled) {
 
 .message-system {
   background: linear-gradient(180deg, #f6fbff, #edf6ff);
+  max-width: min(92%, 856px);
 }
 
 .message-hint {
@@ -827,6 +828,10 @@ textarea:focus {
   }
 
   .message {
+    max-width: 100%;
+  }
+
+  .message-system {
     max-width: 100%;
   }
 
