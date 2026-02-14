@@ -6,6 +6,13 @@
 ./scripts/run_backend.sh
 ```
 
+If you see warnings like `No supported WebSocket library detected`, run:
+
+```bash
+source .venv/bin/activate
+uv pip install -e 'backend[dev]'
+```
+
 ## Configure API keys (`.env`)
 
 Project root now includes a `.env` file template.

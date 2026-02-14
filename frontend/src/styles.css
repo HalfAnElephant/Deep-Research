@@ -158,6 +158,12 @@ button.warn {
   background: #fff;
 }
 
+.evidence-content {
+  margin-top: 8px;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
 .mono {
   font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
   font-size: 12px;
@@ -257,6 +263,13 @@ button.warn {
   margin-top: 8px;
   font-size: 13px;
   color: #3e464a;
+}
+
+.status-detail {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #12545f;
+  font-weight: 600;
 }
 
 @keyframes pulse {

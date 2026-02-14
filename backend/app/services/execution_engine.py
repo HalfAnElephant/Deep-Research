@@ -93,7 +93,16 @@ class ExecutionEngine:
                 self.repository.update_status(task_id, transition_or_raise(task.status, TaskStatus.PLANNING))
                 dag = self.planner.build_dag(task_id, task.title, task.description, config)
                 self.repository.save_dag(task_id, dag)
-                await self.hub.emit(task_id, "TASK_PROGRESS", {"taskId": task_id, "progress": 20, "state": "PLANNING"})
+                await self.hub.emit(
+                    task_id,
+                    "TASK_PROGRESS",
+                    {
+                        "taskId": task_id,
+                        "progress": 20,
+                        "state": "PLANNING",
+                        "phase": "BUILDING_PLAN",
+                    },
+                )
 
             current = self.repository.get_task(task_id)
             if current.status == TaskStatus.SUSPENDED:
@@ -119,10 +128,25 @@ class ExecutionEngine:
                     return
                 self.repository.update_node_status(task_id, node.taskId, NodeStatus.RUNNING, node.metadata.infoGainScore)
                 await asyncio.sleep(0.2)
+                query = f"{task.title} {node.title}"
+                searching_progress = 20 + int(((idx - 1) / total) * 60)
+                await self.hub.emit(
+                    task_id,
+                    "TASK_PROGRESS",
+                    {
+                        "taskId": task_id,
+                        "progress": searching_progress,
+                        "currentNode": node.taskId,
+                        "currentNodeTitle": node.title,
+                        "searchQuery": query,
+                        "state": "EXECUTING",
+                        "phase": "SEARCHING",
+                    },
+                )
                 evidences = await self.research_agent.collect_evidence(
                     task_id=task_id,
                     node_id=node.taskId,
-                    query=f"{task.title} {node.title}",
+                    query=query,
                     sources=task.config.searchSources,
                 )
                 self.evidence_repository.save_many(evidences)
@@ -142,7 +166,11 @@ class ExecutionEngine:
                         "taskId": task_id,
                         "progress": progress,
                         "currentNode": node.taskId,
+                        "currentNodeTitle": node.title,
+                        "searchQuery": query,
+                        "evidenceCount": len(evidences),
                         "state": "EXECUTING",
+                        "phase": "NODE_COMPLETED",
                     },
                 )
                 self.repository.save_snapshot(
@@ -168,13 +196,23 @@ class ExecutionEngine:
                 await self.hub.emit(
                     task_id,
                     "TASK_PROGRESS",
-                    {"taskId": task_id, "progress": 85, "state": "REVIEWING", "conflictCount": len(conflicts)},
+                    {
+                        "taskId": task_id,
+                        "progress": 85,
+                        "state": "REVIEWING",
+                        "phase": "REVIEWING_CONFLICTS",
+                        "conflictCount": len(conflicts),
+                    },
                 )
                 # Single-user default: continue with unresolved conflicts recorded for later voting.
                 self.repository.update_status(task_id, transition_or_raise(TaskStatus.REVIEWING, TaskStatus.SYNTHESIZING))
             else:
                 self.repository.update_status(task_id, transition_or_raise(TaskStatus.EXECUTING, TaskStatus.SYNTHESIZING))
-            await self.hub.emit(task_id, "TASK_PROGRESS", {"taskId": task_id, "progress": 90, "state": "SYNTHESIZING"})
+            await self.hub.emit(
+                task_id,
+                "TASK_PROGRESS",
+                {"taskId": task_id, "progress": 90, "state": "SYNTHESIZING", "phase": "OUTLINING"},
+            )
             await asyncio.sleep(0.1)
             dag = self.repository.get_dag(task_id)
             sections = [
@@ -182,7 +220,23 @@ class ExecutionEngine:
                 for node in dag.nodes
                 if node.taskId != task_id and node.status != NodeStatus.PRUNED
             ]
-            md_path, bib_path, _ = self.report_agent.generate_report(
+            total_sections = max(1, len(sections))
+            for section_idx, (_, section_text) in enumerate(sections, start=1):
+                section_title = section_text.splitlines()[0].strip() if section_text else ""
+                write_progress = 90 + int((section_idx / total_sections) * 6)
+                await self.hub.emit(
+                    task_id,
+                    "TASK_PROGRESS",
+                    {
+                        "taskId": task_id,
+                        "progress": write_progress,
+                        "state": "SYNTHESIZING",
+                        "phase": "WRITING_SECTION",
+                        "currentSectionTitle": section_title or f"Section {section_idx}",
+                    },
+                )
+            md_path, bib_path, _ = await asyncio.to_thread(
+                self.report_agent.generate_report,
                 task_id=task_id,
                 task_title=task.title,
                 task_description=task.description,
@@ -191,6 +245,11 @@ class ExecutionEngine:
                 locked_sections=set(),
             )
             self.repository.update_status(task_id, transition_or_raise(TaskStatus.SYNTHESIZING, TaskStatus.FINALIZING))
+            await self.hub.emit(
+                task_id,
+                "TASK_PROGRESS",
+                {"taskId": task_id, "progress": 98, "state": "FINALIZING", "phase": "PERSISTING_REPORT"},
+            )
             self.repository.set_report_path(task_id, md_path)
             self.repository.update_status(task_id, transition_or_raise(TaskStatus.FINALIZING, TaskStatus.COMPLETED))
             await self.hub.emit(

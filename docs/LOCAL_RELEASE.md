@@ -12,6 +12,13 @@
 ./scripts/run_backend.sh
 ```
 
+If startup shows `No supported WebSocket library detected`, reinstall backend deps:
+
+```bash
+source .venv/bin/activate
+uv pip install -e 'backend[dev]'
+```
+
 Backend URL: `http://127.0.0.1:8000`
 OpenAPI: `http://127.0.0.1:8000/docs`
 
