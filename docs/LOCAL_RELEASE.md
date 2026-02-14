@@ -45,3 +45,7 @@ cd frontend && npm run build
 
 - This release is single-user local mode only.
 - Queue services, Docker deployment, and multi-user access are intentionally deferred.
+- Frontend is now a chat-driven workspace (conversation sidebar + timeline + Markdown plan editor).
+- Research report downloads are available at:
+  - `GET /api/v1/conversations/{conversation_id}/report/download`
+  - `GET /api/v1/tasks/{task_id}/report/download`

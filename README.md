@@ -53,6 +53,21 @@ Local alpha workflow is complete:
 - Writer report generation (`.md` + `.bib`)
 - Built-in `ResearchAgent` / `ReportAgent` orchestration layer (ready for MCP expansion)
 - MCP minimal execution API
-- Frontend six-state workflow console
+- Chat-driven multi-session workspace:
+  - Sidebar conversation list
+  - Chat timeline for plan drafting/revision
+  - Right-side Markdown plan editor
+  - Collapsible research progress groups
+  - Final report preview + Markdown download
 
 See `docs/LOCAL_RELEASE.md` for release details.
+
+## New conversation APIs
+
+- `POST /api/v1/conversations`
+- `GET /api/v1/conversations`
+- `GET /api/v1/conversations/{conversation_id}`
+- `POST /api/v1/conversations/{conversation_id}/plan/revise`
+- `PUT /api/v1/conversations/{conversation_id}/plan`
+- `POST /api/v1/conversations/{conversation_id}/run`
+- `GET /api/v1/conversations/{conversation_id}/report/download`
