@@ -1,19 +1,19 @@
 @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
 
 :root {
-  --bg: #edf1f8;
-  --bg-soft: #f7f9ff;
+  --bg: #e8eefc;
+  --bg-soft: #f6fbff;
   --card: #ffffff;
-  --ink: #121a2b;
-  --muted: #5f6f8d;
-  --line: #d4dded;
-  --line-strong: #aab9d8;
-  --primary: #2358da;
-  --primary-soft: #e6edff;
+  --ink: #13203a;
+  --muted: #5b6f95;
+  --line: #c9d6ec;
+  --line-strong: #90a7d3;
+  --primary: #2e62ea;
+  --primary-soft: #e4ecff;
   --danger: #b42318;
   --success: #067647;
   --warning: #b54708;
-  --shadow: 0 14px 44px rgba(15, 23, 42, 0.08);
+  --shadow: 0 14px 44px rgba(18, 42, 86, 0.11);
 }
 
 * {
@@ -30,9 +30,10 @@ body {
   margin: 0;
   color: var(--ink);
   background:
-    radial-gradient(circle at 0% 0%, #dae6ff 0%, transparent 45%),
-    radial-gradient(circle at 100% 100%, #dbf7ef 0%, transparent 42%),
-    linear-gradient(155deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0)),
+    radial-gradient(circle at 0% 0%, #cadcff 0%, transparent 43%),
+    radial-gradient(circle at 96% 8%, #ffe3c8 0%, transparent 34%),
+    radial-gradient(circle at 88% 96%, #c9f2e8 0%, transparent 36%),
+    linear-gradient(150deg, rgba(255, 255, 255, 0.54), rgba(255, 255, 255, 0)),
     var(--bg);
   font-family: "Manrope", "Segoe UI", sans-serif;
 }
@@ -56,22 +57,23 @@ button:disabled {
 }
 
 button.primary {
-  background: var(--primary);
+  background: linear-gradient(135deg, #2f67f2, #2183e0);
+  border-color: #275ce0;
   color: #fff;
 }
 
 button.primary.subtle {
-  background: #245fd9;
+  background: linear-gradient(135deg, #2b61df, #1f73ce);
 }
 
 button.primary:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 10px 28px rgba(26, 86, 219, 0.22);
+  box-shadow: 0 12px 30px rgba(33, 102, 224, 0.32);
 }
 
 button.ghost {
   border-color: var(--line);
-  background: #fff;
+  background: linear-gradient(180deg, #ffffff, #f4f8ff);
   color: #2f3a50;
 }
 
@@ -115,7 +117,10 @@ button.ghost:hover:not(:disabled) {
 .sidebar,
 .chat-pane,
 .editor-pane {
-  background: color-mix(in srgb, var(--card) 94%, #f2f6ff 6%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(245, 250, 255, 0.93)),
+    radial-gradient(circle at 120% -10%, rgba(104, 139, 230, 0.15), transparent 45%),
+    radial-gradient(circle at -20% 115%, rgba(54, 177, 144, 0.12), transparent 44%);
   border: 1px solid var(--line);
   border-radius: 20px;
   box-shadow: var(--shadow);
@@ -375,12 +380,13 @@ button.ghost:hover:not(:disabled) {
   flex-direction: column;
   gap: 12px;
   background:
-    linear-gradient(180deg, rgba(246, 250, 255, 0.76), rgba(255, 255, 255, 0.92)),
+    linear-gradient(180deg, rgba(239, 246, 255, 0.8), rgba(255, 255, 255, 0.94)),
+    radial-gradient(circle at 100% 0%, rgba(255, 230, 197, 0.35), transparent 42%),
     repeating-linear-gradient(
       0deg,
       transparent 0,
       transparent 23px,
-      rgba(131, 154, 201, 0.05) 24px,
+      rgba(110, 143, 210, 0.06) 24px,
       transparent 25px
     );
 }
@@ -414,6 +420,11 @@ button.ghost:hover:not(:disabled) {
   max-width: min(86%, 760px);
 }
 
+.message > .progress-group {
+  width: 856px;
+  max-width: 100%;
+}
+
 .message header {
   display: flex;
   justify-content: space-between;
@@ -427,16 +438,16 @@ button.ghost:hover:not(:disabled) {
 }
 
 .message-user {
-  background: #eaf1ff;
-  border-color: #bfd2fb;
+  background: linear-gradient(180deg, #e7f0ff, #dae8ff);
+  border-color: #b5caf5;
 }
 
 .message-assistant {
-  background: linear-gradient(180deg, #ffffff, #f9fbff);
+  background: linear-gradient(180deg, #ffffff, #f4faff);
 }
 
 .message-system {
-  background: #f5f8fe;
+  background: linear-gradient(180deg, #f6fbff, #edf6ff);
 }
 
 .message-hint {
@@ -484,7 +495,9 @@ button.ghost:hover:not(:disabled) {
 .progress-toggle {
   width: 100%;
   border: 1px solid var(--line);
-  background: #f8fafc;
+  background:
+    linear-gradient(180deg, #f7fbff, #eef5ff),
+    radial-gradient(circle at 100% 0%, rgba(181, 209, 255, 0.32), transparent 45%);
   border-radius: 10px;
   padding: 8px 10px;
   text-align: left;
@@ -501,15 +514,20 @@ button.ghost:hover:not(:disabled) {
 
 .progress-toggle strong {
   font-size: 13px;
+  color: #184179;
 }
 
 .progress-percent {
-  color: #1d4ed8;
+  color: #184fcf;
+  background: rgba(225, 236, 255, 0.86);
+  border: 1px solid #bdd0f6;
+  border-radius: 999px;
+  padding: 1px 8px;
   font-weight: 700;
 }
 
 .progress-current {
-  color: #51607a;
+  color: #3c5d86;
 }
 
 .progress-entries {
@@ -518,9 +536,9 @@ button.ghost:hover:not(:disabled) {
 }
 
 .progress-entry {
-  border: 1px solid #d8e2f2;
+  border: 1px solid #c9d9f4;
   border-radius: 10px;
-  background: #f8fbff;
+  background: linear-gradient(180deg, #f8fbff, #eff5ff);
   padding: 8px;
   font-size: 13px;
   line-height: 1.45;
@@ -810,6 +828,10 @@ textarea:focus {
 
   .message {
     max-width: 100%;
+  }
+
+  .message > .progress-group {
+    width: 100%;
   }
 
   .sidebar,
