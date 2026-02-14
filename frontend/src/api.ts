@@ -1,4 +1,12 @@
-import type { ConflictRecord, Evidence, TaskResponse } from "./types";
+import type {
+  ConflictRecord,
+  ConversationDetail,
+  ConversationSummary,
+  Evidence,
+  RevisePlanResponse,
+  RunConversationResponse,
+  TaskResponse
+} from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:8000";
 const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS ?? "30000");
@@ -94,6 +102,91 @@ export async function voteConflict(payload: {
 export async function getReport(taskId: string, options?: RequestOptions): Promise<string> {
   const result = await json<{ content: string }>(`${API_BASE}/api/v1/tasks/${taskId}/report`, undefined, options);
   return result.content;
+}
+
+export async function listConversations(options?: RequestOptions): Promise<ConversationSummary[]> {
+  return json<ConversationSummary[]>(`${API_BASE}/api/v1/conversations`, undefined, options);
+}
+
+export async function createConversation(payload: {
+  topic: string;
+  config: { maxDepth: number; maxNodes: number; searchSources: string[]; priority: number };
+}): Promise<ConversationDetail> {
+  return json<ConversationDetail>(`${API_BASE}/api/v1/conversations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getConversation(conversationId: string, options?: RequestOptions): Promise<ConversationDetail> {
+  return json<ConversationDetail>(`${API_BASE}/api/v1/conversations/${conversationId}`, undefined, options);
+}
+
+export async function reviseConversationPlan(
+  conversationId: string,
+  instruction: string
+): Promise<RevisePlanResponse> {
+  return json<RevisePlanResponse>(`${API_BASE}/api/v1/conversations/${conversationId}/plan/revise`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ instruction })
+  });
+}
+
+export async function updateConversationPlan(
+  conversationId: string,
+  markdown: string
+): Promise<ConversationDetail["currentPlan"]> {
+  return json<ConversationDetail["currentPlan"]>(`${API_BASE}/api/v1/conversations/${conversationId}/plan`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ markdown })
+  });
+}
+
+export async function runConversation(conversationId: string): Promise<RunConversationResponse> {
+  return json<RunConversationResponse>(`${API_BASE}/api/v1/conversations/${conversationId}/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+}
+
+async function download(url: string, fileName: string): Promise<void> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `Request failed: ${response.status}`);
+    }
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(objectUrl);
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(`请求超时（${Math.floor(API_TIMEOUT_MS / 1000)}s），请重试`);
+    }
+    throw err instanceof Error ? err : new Error(String(err));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function downloadConversationReport(conversationId: string): Promise<void> {
+  await download(`${API_BASE}/api/v1/conversations/${conversationId}/report/download`, `${conversationId}.md`);
+}
+
+export async function downloadTaskReport(taskId: string): Promise<void> {
+  await download(`${API_BASE}/api/v1/tasks/${taskId}/report/download`, `${taskId}.md`);
 }
 
 export function connectProgressWs(taskId: string, onMessage: (event: MessageEvent<string>) => void): WebSocket {
