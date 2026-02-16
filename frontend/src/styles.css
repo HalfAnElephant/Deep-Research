@@ -410,6 +410,10 @@ button.ghost:hover:not(:disabled) {
   justify-content: flex-start;
 }
 
+.message-row.row-report-wide {
+  justify-content: stretch;
+}
+
 .message {
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -420,9 +424,15 @@ button.ghost:hover:not(:disabled) {
   max-width: min(86%, 760px);
 }
 
-.message > .progress-group {
-  width: 856px;
+.message.message-report-wide {
+  width: 100%;
   max-width: 100%;
+}
+
+.message > .progress-group {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .message header {
@@ -455,6 +465,41 @@ button.ghost:hover:not(:disabled) {
   border-style: dashed;
   border-color: #b9caee;
   background: #f5f9ff;
+}
+
+.message-pending {
+  border-style: dashed;
+  border-color: #8fb1ef;
+  background:
+    linear-gradient(180deg, #f7fbff, #edf4ff),
+    radial-gradient(circle at 0% 0%, rgba(160, 195, 255, 0.32), transparent 55%);
+}
+
+.pending-text {
+  color: #21467f;
+}
+
+.typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.typing-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #3d6ecc;
+  opacity: 0.38;
+  animation: typing-bounce 1s ease-in-out infinite;
+}
+
+.typing-dots span:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.typing-dots span:nth-child(3) {
+  animation-delay: 240ms;
 }
 
 .plain-text {
@@ -560,6 +605,13 @@ button.ghost:hover:not(:disabled) {
   gap: 8px;
 }
 
+.report-viewer-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .report-viewer pre {
   margin: 0;
   background: #0f172a;
@@ -569,6 +621,15 @@ button.ghost:hover:not(:disabled) {
   max-height: 350px;
   overflow: auto;
   white-space: pre-wrap;
+}
+
+.report-viewer-closed {
+  border: 1px dashed #c8d7f5;
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 13px;
+  color: #4b6186;
+  background: linear-gradient(180deg, #f8fbff, #eef5ff);
 }
 
 .composer {
@@ -734,6 +795,19 @@ textarea:focus {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes typing-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.38;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
   }
 }
 

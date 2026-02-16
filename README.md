@@ -71,3 +71,8 @@ See `docs/LOCAL_RELEASE.md` for release details.
 - `PUT /api/v1/conversations/{conversation_id}/plan`
 - `POST /api/v1/conversations/{conversation_id}/run`
 - `GET /api/v1/conversations/{conversation_id}/report/download`
+
+Conversation lifecycle notes:
+- `COMPLETED` / `FAILED` conversations can still revise plans and start a new run.
+- Multi-run history is preserved; UI defaults to the latest run and allows expanding older rounds.
+- Progress groups are isolated by `taskId` to avoid mixing entries across runs.

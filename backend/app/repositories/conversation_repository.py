@@ -123,6 +123,48 @@ class ConversationRepository:
             return None
         return self.get_summary(row["conversation_id"])
 
+    def update_topic(self, conversation_id: str, topic: str) -> ConversationSummary:
+        with get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE conversations
+                SET topic = ?, updated_at = ?
+                WHERE conversation_id = ?
+                """,
+                (topic, now_iso(), conversation_id),
+            )
+            conn.commit()
+            if conn.total_changes == 0:
+                raise KeyError(conversation_id)
+        return self.get_summary(conversation_id)
+
+    def delete_conversation(self, conversation_id: str) -> None:
+        self.get_summary(conversation_id)
+        with get_connection() as conn:
+            conn.execute(
+                "DELETE FROM conversation_messages WHERE conversation_id = ?",
+                (conversation_id,),
+            )
+            conn.execute(
+                "DELETE FROM plan_revisions WHERE conversation_id = ?",
+                (conversation_id,),
+            )
+            conn.execute(
+                "DELETE FROM conversations WHERE conversation_id = ?",
+                (conversation_id,),
+            )
+            conn.commit()
+
+    def delete_all_conversations(self) -> int:
+        with get_connection() as conn:
+            row = conn.execute("SELECT COUNT(*) AS count FROM conversations").fetchone()
+            deleted_count = int(row["count"]) if row else 0
+            conn.execute("DELETE FROM conversation_messages")
+            conn.execute("DELETE FROM plan_revisions")
+            conn.execute("DELETE FROM conversations")
+            conn.commit()
+        return deleted_count
+
     def add_plan_revision(self, conversation_id: str, *, author: MessageRole, markdown: str) -> PlanRevision:
         self.get_summary(conversation_id)
         ts = now_iso()
@@ -286,6 +328,7 @@ class ConversationRepository:
         self,
         conversation_id: str,
         *,
+        task_id: str,
         message_id: str,
         phase: str,
         state: str,
@@ -306,6 +349,22 @@ class ConversationRepository:
 
             for row in rows:
                 metadata = json.loads(row["metadata_json"])
+                metadata_task_id = str(metadata.get("taskId", "")).strip()
+                if not metadata_task_id:
+                    raw_entries = metadata.get("entries")
+                    if isinstance(raw_entries, list):
+                        for entry in reversed(raw_entries):
+                            if not isinstance(entry, dict):
+                                continue
+                            raw = entry.get("raw")
+                            if not isinstance(raw, dict):
+                                continue
+                            raw_task_id = raw.get("taskId")
+                            if isinstance(raw_task_id, str) and raw_task_id.strip():
+                                metadata_task_id = raw_task_id.strip()
+                                break
+                if metadata_task_id != task_id:
+                    continue
                 if str(metadata.get("phase", "")).strip() != phase:
                     continue
                 entries = metadata.get("entries")
@@ -325,6 +384,7 @@ class ConversationRepository:
                 metadata["state"] = state
                 metadata["latestProgress"] = progress
                 metadata["latestSummary"] = summary
+                metadata["taskId"] = task_id
                 conn.execute(
                     """
                     UPDATE conversation_messages
@@ -351,6 +411,7 @@ class ConversationRepository:
             kind=MessageKind.PROGRESS_GROUP,
             content=summary,
             metadata={
+                "taskId": task_id,
                 "phase": phase,
                 "state": state,
                 "latestProgress": progress,

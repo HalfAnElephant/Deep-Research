@@ -1,5 +1,7 @@
 import type {
   ConflictRecord,
+  ConversationBulkDeleteResponse,
+  ConversationDeleteResponse,
   ConversationDetail,
   ConversationSummary,
   Evidence,
@@ -10,9 +12,27 @@ import type {
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:8000";
 const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS ?? "30000");
+const PLAN_API_TIMEOUT_MS = Number(import.meta.env.VITE_PLAN_API_TIMEOUT_MS ?? "120000");
 
 interface RequestOptions {
   timeoutMs?: number;
+}
+
+function parseErrorMessage(rawText: string, statusCode: number): string {
+  const text = rawText.trim();
+  if (!text) return `Request failed: ${statusCode}`;
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (parsed && typeof parsed === "object") {
+      const detail = (parsed as Record<string, unknown>).detail;
+      if (typeof detail === "string" && detail.trim()) {
+        return detail;
+      }
+    }
+  } catch {
+    // Fall back to the raw server text when response is not JSON.
+  }
+  return text;
 }
 
 async function json<T>(input: RequestInfo | URL, init?: RequestInit, options?: RequestOptions): Promise<T> {
@@ -24,7 +44,7 @@ async function json<T>(input: RequestInfo | URL, init?: RequestInit, options?: R
     const response = await fetch(input, { ...init, signal: controller.signal });
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(text || `Request failed: ${response.status}`);
+      throw new Error(parseErrorMessage(text, response.status));
     }
     return (await response.json()) as T;
   } catch (err) {
@@ -116,11 +136,37 @@ export async function createConversation(payload: {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
-  });
+  }, { timeoutMs: PLAN_API_TIMEOUT_MS });
 }
 
 export async function getConversation(conversationId: string, options?: RequestOptions): Promise<ConversationDetail> {
   return json<ConversationDetail>(`${API_BASE}/api/v1/conversations/${conversationId}`, undefined, options);
+}
+
+export async function deleteConversation(conversationId: string): Promise<ConversationDeleteResponse> {
+  return json<ConversationDeleteResponse>(`${API_BASE}/api/v1/conversations/${conversationId}`, {
+    method: "DELETE"
+  });
+}
+
+export async function deleteAllConversations(): Promise<ConversationBulkDeleteResponse> {
+  return json<ConversationBulkDeleteResponse>(`${API_BASE}/api/v1/conversations`, {
+    method: "DELETE"
+  });
+}
+
+export async function renameConversation(
+  conversationId: string,
+  payload: { topic: string; syncCurrentPlan?: boolean }
+): Promise<ConversationDetail> {
+  return json<ConversationDetail>(`${API_BASE}/api/v1/conversations/${conversationId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      topic: payload.topic,
+      syncCurrentPlan: payload.syncCurrentPlan ?? true
+    })
+  });
 }
 
 export async function reviseConversationPlan(
@@ -131,7 +177,7 @@ export async function reviseConversationPlan(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ instruction })
-  });
+  }, { timeoutMs: PLAN_API_TIMEOUT_MS });
 }
 
 export async function updateConversationPlan(
@@ -160,7 +206,7 @@ async function download(url: string, fileName: string): Promise<void> {
     const response = await fetch(url, { signal: controller.signal });
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(text || `Request failed: ${response.status}`);
+      throw new Error(parseErrorMessage(text, response.status));
     }
     const blob = await response.blob();
     const objectUrl = URL.createObjectURL(blob);

@@ -123,3 +123,13 @@ export interface RunConversationResponse {
   taskId: string;
   status: ConversationStatus;
 }
+
+export interface ConversationDeleteResponse {
+  conversationId: string;
+  deleted: boolean;
+}
+
+export interface ConversationBulkDeleteResponse {
+  deleted: boolean;
+  deletedCount: number;
+}

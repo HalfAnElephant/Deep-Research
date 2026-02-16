@@ -16,7 +16,7 @@ interface PlanEditorPaneProps {
 }
 
 function canStart(status: ConversationStatus | null): boolean {
-  return status === "PLAN_READY";
+  return status === "PLAN_READY" || status === "COMPLETED" || status === "FAILED";
 }
 
 export function PlanEditorPane(props: PlanEditorPaneProps) {
@@ -43,7 +43,7 @@ export function PlanEditorPane(props: PlanEditorPaneProps) {
       <header className="editor-head">
         <div>
           <h3>研究方案草稿</h3>
-          <p>可直接编辑 Markdown，或通过聊天让 Agent 自动修订。</p>
+          <p>可直接编辑 Markdown，或在聊天中让 Agent 改报告/补检索/修订方案。</p>
         </div>
         <div className="mode-switch">
           <button className={mode === "edit" ? "active" : ""} onClick={() => onModeChange("edit")}>

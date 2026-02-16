@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import type { ConversationStatus, ConversationSummary } from "../types";
 
 const STATUS_LABEL: Record<ConversationStatus, string> = {
@@ -11,25 +13,36 @@ const STATUS_LABEL: Record<ConversationStatus, string> = {
 interface ConversationSidebarProps {
   summaries: ConversationSummary[];
   activeConversationId: string | null;
-  topicInput: string;
-  creating: boolean;
+  creatingDraft: boolean;
   refreshing: boolean;
-  onTopicInputChange: (value: string) => void;
-  onCreate: () => void;
+  deletingConversationId: string | null;
+  renamingConversationId: string | null;
+  deletingAll: boolean;
+  onCreateDraft: () => void;
   onSelect: (conversationId: string) => void;
+  onDelete: (conversationId: string) => void;
+  onRename: (conversationId: string) => void;
+  onDeleteAll: () => void;
 }
 
 export function ConversationSidebar(props: ConversationSidebarProps) {
   const {
     summaries,
     activeConversationId,
-    topicInput,
-    creating,
+    creatingDraft,
     refreshing,
-    onTopicInputChange,
-    onCreate,
-    onSelect
+    deletingConversationId,
+    renamingConversationId,
+    deletingAll,
+    onCreateDraft,
+    onSelect,
+    onDelete,
+    onRename,
+    onDeleteAll
   } = props;
+
+  const [globalMenuOpen, setGlobalMenuOpen] = useState(false);
+  const [activeItemMenuId, setActiveItemMenuId] = useState<string | null>(null);
 
   return (
     <aside className="sidebar">
@@ -38,16 +51,43 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
         <p>多会话研究空间</p>
       </div>
 
-      <div className="new-chat-card">
-        <label className="field-label">新研究主题</label>
-        <textarea
-          value={topicInput}
-          onChange={(event) => onTopicInputChange(event.target.value)}
-          placeholder="输入一个研究主题，例如：AI Coding Agent 在中型团队的落地策略"
-        />
-        <button className="primary" onClick={onCreate} disabled={creating || !topicInput.trim()}>
-          {creating ? "创建中..." : "新建研究"}
+      <div className="sidebar-toolbar">
+        <button
+          className="primary"
+          onClick={() => {
+            setGlobalMenuOpen(false);
+            setActiveItemMenuId(null);
+            onCreateDraft();
+          }}
+        >
+          {creatingDraft ? "等待首条输入" : "新建研究"}
         </button>
+        <div className="menu-wrap">
+          <button
+            className={`icon-button ${globalMenuOpen ? "active" : ""}`}
+            onClick={() => {
+              setActiveItemMenuId(null);
+              setGlobalMenuOpen((open) => !open);
+            }}
+            title="更多操作"
+          >
+            ⋯
+          </button>
+          {globalMenuOpen && (
+            <div className="menu-popover">
+              <button
+                className="menu-item danger"
+                onClick={() => {
+                  setGlobalMenuOpen(false);
+                  onDeleteAll();
+                }}
+                disabled={deletingAll || summaries.length === 0}
+              >
+                {deletingAll ? "删除中..." : "全部删除"}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="sidebar-list">
@@ -55,25 +95,80 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
           <span>会话列表</span>
           <span className="mono">{refreshing ? "刷新中" : `${summaries.length} 个`}</span>
         </div>
-        {summaries.length === 0 ? (
-          <div className="empty-item">暂无会话</div>
-        ) : (
-          summaries.map((conversation) => (
-            <button
-              key={conversation.conversationId}
-              className={`conversation-item ${activeConversationId === conversation.conversationId ? "active" : ""}`}
-              onClick={() => onSelect(conversation.conversationId)}
-            >
-              <div className="conversation-topic">{conversation.topic}</div>
-              <div className="conversation-meta">
-                <span className={`status-chip ${conversation.status.toLowerCase()}`}>
-                  {STATUS_LABEL[conversation.status]}
-                </span>
-                <span className="mono">{conversation.updatedAt.slice(11, 19)}</span>
-              </div>
-            </button>
-          ))
-        )}
+        <div className="sidebar-list-body">
+          {summaries.length === 0 ? (
+            <div className="empty-item">暂无会话，点击“新建研究”开始。</div>
+          ) : (
+            summaries.map((conversation) => {
+              const isMenuOpen = activeItemMenuId === conversation.conversationId;
+              const deleting = deletingConversationId === conversation.conversationId;
+              const renaming = renamingConversationId === conversation.conversationId;
+
+              return (
+                <div
+                  key={conversation.conversationId}
+                  className={`conversation-item ${activeConversationId === conversation.conversationId ? "active" : ""}`}
+                >
+                  <button
+                    className="conversation-select"
+                    onClick={() => {
+                      setGlobalMenuOpen(false);
+                      setActiveItemMenuId(null);
+                      onSelect(conversation.conversationId);
+                    }}
+                  >
+                    <div className="conversation-topic">{conversation.topic}</div>
+                    <div className="conversation-meta">
+                      <span className={`status-chip ${conversation.status.toLowerCase()}`}>
+                        {STATUS_LABEL[conversation.status]}
+                      </span>
+                      <span className="mono">{conversation.updatedAt.slice(11, 19)}</span>
+                    </div>
+                  </button>
+
+                  <div className="menu-wrap item-menu-wrap">
+                    <button
+                      className={`icon-button small ${isMenuOpen ? "active" : ""}`}
+                      onClick={() => {
+                        setGlobalMenuOpen(false);
+                        setActiveItemMenuId((current) =>
+                          current === conversation.conversationId ? null : conversation.conversationId
+                        );
+                      }}
+                      title="会话操作"
+                    >
+                      ⋯
+                    </button>
+                    {isMenuOpen && (
+                      <div className="menu-popover item-menu">
+                        <button
+                          className="menu-item"
+                          onClick={() => {
+                            setActiveItemMenuId(null);
+                            onRename(conversation.conversationId);
+                          }}
+                          disabled={renaming || deleting}
+                        >
+                          {renaming ? "重命名中..." : "重命名"}
+                        </button>
+                        <button
+                          className="menu-item danger"
+                          onClick={() => {
+                            setActiveItemMenuId(null);
+                            onDelete(conversation.conversationId);
+                          }}
+                          disabled={deleting || renaming}
+                        >
+                          {deleting ? "删除中..." : "删除"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
     </aside>
   );

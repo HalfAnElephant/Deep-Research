@@ -7,6 +7,8 @@ from fastapi.responses import FileResponse
 
 from app.deps import conversation_agent, conversation_repository, task_repository
 from app.models.schemas import (
+    ConversationBulkDeleteResponse,
+    ConversationDeleteResponse,
     ConversationDetail,
     ConversationSummary,
     CreateConversationRequest,
@@ -15,6 +17,7 @@ from app.models.schemas import (
     RevisePlanResponse,
     RunConversationRequest,
     RunConversationResponse,
+    UpdateConversationRequest,
     UpdatePlanRequest,
 )
 
@@ -37,6 +40,35 @@ def get_conversation(conversation_id: str) -> ConversationDetail:
         return conversation_repository.get_detail(conversation_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Conversation not found: {conversation_id}") from exc
+
+
+@router.delete("/conversations/{conversation_id}", response_model=ConversationDeleteResponse)
+def delete_conversation(conversation_id: str) -> ConversationDeleteResponse:
+    try:
+        conversation_agent.delete_conversation(conversation_id=conversation_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Conversation not found: {conversation_id}") from exc
+    return ConversationDeleteResponse(conversationId=conversation_id, deleted=True)
+
+
+@router.delete("/conversations", response_model=ConversationBulkDeleteResponse)
+def delete_all_conversations() -> ConversationBulkDeleteResponse:
+    deleted_count = conversation_agent.delete_all_conversations()
+    return ConversationBulkDeleteResponse(deleted=True, deletedCount=deleted_count)
+
+
+@router.patch("/conversations/{conversation_id}", response_model=ConversationDetail)
+def rename_conversation(conversation_id: str, payload: UpdateConversationRequest) -> ConversationDetail:
+    try:
+        return conversation_agent.rename_conversation(
+            conversation_id=conversation_id,
+            topic=payload.topic,
+            sync_current_plan=payload.syncCurrentPlan,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Conversation not found: {conversation_id}") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/conversations/{conversation_id}/plan/revise", response_model=RevisePlanResponse)

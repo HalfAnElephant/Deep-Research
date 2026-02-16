@@ -170,6 +170,11 @@ class CreateConversationRequest(BaseModel):
     config: TaskConfig | None = None
 
 
+class UpdateConversationRequest(BaseModel):
+    topic: str = Field(min_length=2, max_length=500)
+    syncCurrentPlan: bool = True
+
+
 class RevisePlanRequest(BaseModel):
     instruction: str = Field(min_length=2, max_length=4000)
 
@@ -191,6 +196,16 @@ class RunConversationResponse(BaseModel):
     conversationId: str
     taskId: str
     status: ConversationStatus
+
+
+class ConversationDeleteResponse(BaseModel):
+    conversationId: str
+    deleted: bool
+
+
+class ConversationBulkDeleteResponse(BaseModel):
+    deleted: bool
+    deletedCount: int
 
 
 class SourceType(StrEnum):
