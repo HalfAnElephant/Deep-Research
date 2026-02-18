@@ -516,8 +516,11 @@ export function App() {
       <div className="edge-hotspot left">
         <button
           className="edge-toggle"
+          type="button"
           onClick={() => setLeftSidebarVisible((visible) => !visible)}
           title={leftSidebarVisible ? "隐藏会话栏" : "显示会话栏"}
+          aria-label={leftSidebarVisible ? "隐藏会话栏" : "显示会话栏"}
+          aria-pressed={leftSidebarVisible}
         >
           {leftSidebarVisible ? "◀" : "▶"}
         </button>
@@ -525,8 +528,11 @@ export function App() {
       <div className="edge-hotspot right">
         <button
           className="edge-toggle"
+          type="button"
           onClick={() => setRightSidebarVisible((visible) => !visible)}
           title={rightSidebarVisible ? "隐藏草稿栏" : "显示草稿栏"}
+          aria-label={rightSidebarVisible ? "隐藏草稿栏" : "显示草稿栏"}
+          aria-pressed={rightSidebarVisible}
         >
           {rightSidebarVisible ? "▶" : "◀"}
         </button>
@@ -535,6 +541,8 @@ export function App() {
       {(mobileSidebarOpen || mobileEditorOpen) && (
         <button
           className="mobile-backdrop"
+          type="button"
+          aria-label="关闭移动端抽屉"
           onClick={() => {
             setMobileSidebarOpen(false);
             setMobileEditorOpen(false);
@@ -567,10 +575,10 @@ export function App() {
       <section className="chat-pane">
         <header className="chat-head">
           <div className="chat-head-actions">
-            <button className="ghost mobile-only" onClick={() => setMobileSidebarOpen(true)}>
+            <button className="ghost mobile-only" type="button" onClick={() => setMobileSidebarOpen(true)}>
               会话
             </button>
-            <button className="ghost mobile-only" onClick={() => setMobileEditorOpen(true)}>
+            <button className="ghost mobile-only" type="button" onClick={() => setMobileEditorOpen(true)}>
               草稿
             </button>
           </div>

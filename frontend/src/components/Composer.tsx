@@ -16,6 +16,7 @@ interface ComposerProps {
 
 export function Composer(props: ComposerProps) {
   const { value, status, sending, disabled, placeholder, sendLabel, textareaRef, onChange, onSend } = props;
+  const canSend = !disabled && !sending && Boolean(value.trim());
 
   return (
     <footer className="composer">
@@ -26,8 +27,14 @@ export function Composer(props: ComposerProps) {
           onChange={(event) => onChange(event.target.value)}
           disabled={disabled}
           placeholder={placeholder}
+          aria-label="输入研究需求"
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || event.shiftKey) return;
+            event.preventDefault();
+            if (canSend) onSend();
+          }}
         />
-        <button className="primary" onClick={onSend} disabled={disabled || sending || !value.trim()}>
+        <button className="primary" type="button" onClick={onSend} disabled={!canSend}>
           {sending ? "发送中..." : status === "RUNNING" ? "执行中" : sendLabel}
         </button>
       </div>

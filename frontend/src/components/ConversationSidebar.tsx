@@ -54,6 +54,7 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
       <div className="sidebar-toolbar">
         <button
           className="primary"
+          type="button"
           onClick={() => {
             setGlobalMenuOpen(false);
             setActiveItemMenuId(null);
@@ -65,18 +66,25 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
         <div className="menu-wrap">
           <button
             className={`icon-button ${globalMenuOpen ? "active" : ""}`}
+            type="button"
             onClick={() => {
               setActiveItemMenuId(null);
               setGlobalMenuOpen((open) => !open);
             }}
             title="更多操作"
+            aria-label="打开更多会话操作"
+            aria-haspopup="menu"
+            aria-expanded={globalMenuOpen}
+            aria-controls="sidebar-global-menu"
           >
             ⋯
           </button>
           {globalMenuOpen && (
-            <div className="menu-popover">
+            <div className="menu-popover" id="sidebar-global-menu" role="menu" aria-label="更多会话操作">
               <button
                 className="menu-item danger"
+                type="button"
+                role="menuitem"
                 onClick={() => {
                   setGlobalMenuOpen(false);
                   onDeleteAll();
@@ -111,6 +119,7 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
                 >
                   <button
                     className="conversation-select"
+                    type="button"
                     onClick={() => {
                       setGlobalMenuOpen(false);
                       setActiveItemMenuId(null);
@@ -129,6 +138,7 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
                   <div className="menu-wrap item-menu-wrap">
                     <button
                       className={`icon-button small ${isMenuOpen ? "active" : ""}`}
+                      type="button"
                       onClick={() => {
                         setGlobalMenuOpen(false);
                         setActiveItemMenuId((current) =>
@@ -136,13 +146,24 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
                         );
                       }}
                       title="会话操作"
+                      aria-label={`打开会话“${conversation.topic}”操作`}
+                      aria-haspopup="menu"
+                      aria-expanded={isMenuOpen}
+                      aria-controls={`conversation-menu-${conversation.conversationId}`}
                     >
                       ⋯
                     </button>
                     {isMenuOpen && (
-                      <div className="menu-popover item-menu">
+                      <div
+                        className="menu-popover item-menu"
+                        id={`conversation-menu-${conversation.conversationId}`}
+                        role="menu"
+                        aria-label={`会话“${conversation.topic}”操作`}
+                      >
                         <button
                           className="menu-item"
+                          type="button"
+                          role="menuitem"
                           onClick={() => {
                             setActiveItemMenuId(null);
                             onRename(conversation.conversationId);
@@ -153,6 +174,8 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
                         </button>
                         <button
                           className="menu-item danger"
+                          type="button"
+                          role="menuitem"
                           onClick={() => {
                             setActiveItemMenuId(null);
                             onDelete(conversation.conversationId);

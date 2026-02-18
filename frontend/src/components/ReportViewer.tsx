@@ -15,13 +15,13 @@ export function ReportViewer(props: ReportViewerProps) {
       <div className="report-viewer-head">
         <strong>当前报告（可继续修改）</strong>
         <div className="report-viewer-actions">
-          <button className="ghost" onClick={onToggleExpand}>
+          <button className="ghost" type="button" onClick={onToggleExpand}>
             {expanded ? "恢复宽度" : "全宽展示"}
           </button>
-          <button className="ghost" onClick={onToggleClose}>
+          <button className="ghost" type="button" onClick={onToggleClose}>
             {closed ? "打开预览" : "关闭预览"}
           </button>
-          <button className="ghost" onClick={onDownload} disabled={downloading}>
+          <button className="ghost" type="button" onClick={onDownload} disabled={downloading}>
             {downloading ? "下载中..." : "下载 Markdown"}
           </button>
         </div>

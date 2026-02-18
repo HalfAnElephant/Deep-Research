@@ -46,22 +46,32 @@ export function PlanEditorPane(props: PlanEditorPaneProps) {
           <p>可直接编辑 Markdown，或在聊天中让 Agent 改报告/补检索/修订方案。</p>
         </div>
         <div className="mode-switch">
-          <button className={mode === "edit" ? "active" : ""} onClick={() => onModeChange("edit")}>
+          <button
+            className={mode === "edit" ? "active" : ""}
+            type="button"
+            aria-pressed={mode === "edit"}
+            onClick={() => onModeChange("edit")}
+          >
             编辑
           </button>
-          <button className={mode === "preview" ? "active" : ""} onClick={() => onModeChange("preview")}>
+          <button
+            className={mode === "preview" ? "active" : ""}
+            type="button"
+            aria-pressed={mode === "preview"}
+            onClick={() => onModeChange("preview")}
+          >
             预览
           </button>
         </div>
       </header>
       <div className="editor-actions">
-        <button className="primary" onClick={onSave} disabled={saving || !dirty || !markdown.trim()}>
+        <button className="primary" type="button" onClick={onSave} disabled={saving || !dirty || !markdown.trim()}>
           {saving ? "保存中..." : dirty ? "保存草稿" : "已保存"}
         </button>
-        <button className="primary subtle" onClick={onStart} disabled={startDisabled}>
+        <button className="primary subtle" type="button" onClick={onStart} disabled={startDisabled}>
           {starting ? "启动中..." : "开始研究"}
         </button>
-        <button className="ghost" onClick={onDownload} disabled={!downloadEnabled || downloading}>
+        <button className="ghost" type="button" onClick={onDownload} disabled={!downloadEnabled || downloading}>
           {downloading ? "下载中..." : "下载报告"}
         </button>
       </div>

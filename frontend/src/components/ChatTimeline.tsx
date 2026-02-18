@@ -252,7 +252,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
                   </header>
 
                   <div className="progress-group">
-                    <button className="progress-toggle" onClick={toggle}>
+                    <button className="progress-toggle" type="button" onClick={toggle}>
                       <div className="progress-toggle-head">
                         <span>{isExpanded ? "收起研究进度" : "展开研究进度"}</span>
                         {!isExpanded && (
@@ -308,6 +308,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
                     <pre>{message.content}</pre>
                     <button
                       className="ghost"
+                      type="button"
                       onClick={() => {
                         onApplyPlan(message.content);
                         onOpenPlanDrawer();
@@ -317,10 +318,15 @@ export function ChatTimeline(props: ChatTimelineProps) {
                     </button>
                     {isLatestPlan && (
                       <div className="plan-actions">
-                        <button className="primary subtle" onClick={onStartResearch} disabled={!canStartResearch || startingResearch}>
+                        <button
+                          className="primary subtle"
+                          type="button"
+                          onClick={onStartResearch}
+                          disabled={!canStartResearch || startingResearch}
+                        >
                           {startingResearch ? "启动中..." : "继续执行"}
                         </button>
-                        <button className="ghost" onClick={onFocusComposer}>
+                        <button className="ghost" type="button" onClick={onFocusComposer}>
                           我来修改
                         </button>
                       </div>
@@ -356,7 +362,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
       {historyTaskIds.length > 0 && (
         <article className="message-row row-agent">
           <div className="message message-system">
-            <button className="ghost" onClick={() => setShowHistoryRounds((show) => !show)}>
+            <button className="ghost" type="button" onClick={() => setShowHistoryRounds((show) => !show)}>
               {showHistoryRounds ? "隐藏历史轮次" : `展开历史轮次（${historyTaskIds.length} 轮）`}
             </button>
           </div>
@@ -365,7 +371,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
 
       {pendingAssistantText && (
         <article className="message-row row-agent">
-          <div className="message message-assistant message-pending">
+          <div className="message message-assistant message-pending" role="status" aria-live="polite">
             <header>
               <span className="message-role">Agent</span>
             </header>

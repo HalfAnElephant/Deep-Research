@@ -47,6 +47,7 @@ button {
   border: 1px solid transparent;
   border-radius: 12px;
   padding: 9px 14px;
+  min-height: 40px;
   cursor: pointer;
   transition: all 140ms ease;
 }
@@ -54,6 +55,17 @@ button {
 button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+button:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(33, 102, 224, 0.38);
+  outline-offset: 2px;
+}
+
+button:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible) {
+  outline: none;
 }
 
 button.primary {
@@ -108,8 +120,8 @@ button.ghost:hover:not(:disabled) {
   border: 1px solid var(--line);
   background: color-mix(in srgb, #ffffff 88%, #dae6ff 12%);
   color: #27406e;
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   box-shadow: 0 8px 20px rgba(26, 56, 112, 0.16);
 }
@@ -163,8 +175,8 @@ button.ghost:hover:not(:disabled) {
 }
 
 .icon-button {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   border-radius: 10px;
   border: 1px solid var(--line);
@@ -175,8 +187,8 @@ button.ghost:hover:not(:disabled) {
 }
 
 .icon-button.small {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   font-size: 18px;
 }
 
@@ -666,7 +678,7 @@ textarea {
   color: var(--ink);
 }
 
-textarea:focus {
+textarea:focus-visible {
   outline: 2px solid rgba(26, 86, 219, 0.22);
   border-color: rgba(26, 86, 219, 0.55);
 }
