@@ -583,7 +583,7 @@ export function App() {
             </button>
           </div>
           <div className="chat-title">
-            <h1>{activeSummary?.topic ?? (draftMode ? "新研究" : "Chat-Driven Deep Research")}</h1>
+            <h1>{activeSummary?.topic ?? (draftMode ? "新研究" : "深度研究工作台")}</h1>
             <p>{statusLabel}</p>
           </div>
         </header>

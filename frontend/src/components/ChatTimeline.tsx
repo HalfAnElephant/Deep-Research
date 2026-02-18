@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import type { ConversationMessage, ConversationStatus } from "../types";
+import { formatLocalTime } from "../utils/formatTime";
 import { ReportViewer } from "./ReportViewer";
 
 interface ChatTimelineProps {
@@ -248,7 +249,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
                 <div className={`message message-${progressBundle.role}`}>
                   <header>
                     <span className="message-role">{roleLabel(progressBundle.role)}</span>
-                    <span className="mono">{progressBundle.createdAt.slice(11, 19)}</span>
+                    <span className="mono">{formatLocalTime(progressBundle.createdAt)}</span>
                   </header>
 
                   <div className="progress-group">
@@ -300,7 +301,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
               <div className={`message message-${message.role} ${isReportExpanded ? "message-report-wide" : ""}`}>
                 <header>
                   <span className="message-role">{roleLabel(message.role)}</span>
-                  <span className="mono">{message.createdAt.slice(11, 19)}</span>
+                  <span className="mono">{formatLocalTime(message.createdAt)}</span>
                 </header>
 
                 {isPlanMessage(message.kind) && (

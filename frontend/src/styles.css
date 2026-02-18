@@ -220,7 +220,7 @@ button.ghost:hover:not(:disabled) {
   background: transparent;
   color: #25334a;
   padding: 8px 10px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .menu-item:hover:not(:disabled) {
@@ -320,7 +320,7 @@ button.ghost:hover:not(:disabled) {
 .status-chip {
   border-radius: 999px;
   padding: 4px 9px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -454,7 +454,7 @@ button.ghost:hover:not(:disabled) {
 }
 
 .message-role {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--muted);
 }
@@ -598,7 +598,7 @@ button.ghost:hover:not(:disabled) {
   border-radius: 10px;
   background: linear-gradient(180deg, #f8fbff, #eff5ff);
   padding: 8px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.45;
 }
 
@@ -639,7 +639,7 @@ button.ghost:hover:not(:disabled) {
   border: 1px dashed #c8d7f5;
   border-radius: 10px;
   padding: 10px;
-  font-size: 13px;
+  font-size: 14px;
   color: #4b6186;
   background: linear-gradient(180deg, #f8fbff, #eef5ff);
 }
@@ -782,7 +782,7 @@ textarea:focus-visible {
 
 .mono {
   font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .mobile-only {

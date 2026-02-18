@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import type { ConversationStatus, ConversationSummary } from "../types";
+import { formatLocalTime } from "../utils/formatTime";
 
 const STATUS_LABEL: Record<ConversationStatus, string> = {
   DRAFTING_PLAN: "草稿中",
@@ -131,7 +132,7 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
                       <span className={`status-chip ${conversation.status.toLowerCase()}`}>
                         {STATUS_LABEL[conversation.status]}
                       </span>
-                      <span className="mono">{conversation.updatedAt.slice(11, 19)}</span>
+                      <span className="mono">{formatLocalTime(conversation.updatedAt)}</span>
                     </div>
                   </button>
 
