@@ -4,11 +4,13 @@ interface PlanEditorPaneProps {
   markdown: string;
   mode: "edit" | "preview";
   dirty: boolean;
+  showMobileClose: boolean;
   saving: boolean;
   starting: boolean;
   downloading: boolean;
   status: ConversationStatus | null;
   onModeChange: (mode: "edit" | "preview") => void;
+  onRequestCloseMobile: () => void;
   onChange: (value: string) => void;
   onSave: () => void;
   onStart: () => void;
@@ -24,11 +26,13 @@ export function PlanEditorPane(props: PlanEditorPaneProps) {
     markdown,
     mode,
     dirty,
+    showMobileClose,
     saving,
     starting,
     downloading,
     status,
     onModeChange,
+    onRequestCloseMobile,
     onChange,
     onSave,
     onStart,
@@ -45,23 +49,30 @@ export function PlanEditorPane(props: PlanEditorPaneProps) {
           <h3>研究方案草稿</h3>
           <p>可直接编辑 Markdown，或在聊天中让 Agent 改报告/补检索/修订方案。</p>
         </div>
-        <div className="mode-switch">
-          <button
-            className={mode === "edit" ? "active" : ""}
-            type="button"
-            aria-pressed={mode === "edit"}
-            onClick={() => onModeChange("edit")}
-          >
-            编辑
-          </button>
-          <button
-            className={mode === "preview" ? "active" : ""}
-            type="button"
-            aria-pressed={mode === "preview"}
-            onClick={() => onModeChange("preview")}
-          >
-            预览
-          </button>
+        <div className="editor-head-actions">
+          <div className="mode-switch">
+            <button
+              className={mode === "edit" ? "active" : ""}
+              type="button"
+              aria-pressed={mode === "edit"}
+              onClick={() => onModeChange("edit")}
+            >
+              编辑
+            </button>
+            <button
+              className={mode === "preview" ? "active" : ""}
+              type="button"
+              aria-pressed={mode === "preview"}
+              onClick={() => onModeChange("preview")}
+            >
+              预览
+            </button>
+          </div>
+          {showMobileClose && (
+            <button className="ghost pane-close mobile-only" type="button" onClick={onRequestCloseMobile}>
+              关闭
+            </button>
+          )}
         </div>
       </header>
       <div className="editor-actions">

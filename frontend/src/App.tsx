@@ -20,6 +20,8 @@ import type { ConversationDetail, ConversationMessage, ConversationStatus, Conve
 
 const FIRST_MESSAGE_LIMIT = 500;
 const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_CONVERSATION_REFRESH_MS ?? "2500");
+const LEFT_SIDEBAR_KEY = "dr:left-sidebar-visible";
+const RIGHT_SIDEBAR_KEY = "dr:right-sidebar-visible";
 
 const DEFAULT_CONFIG = {
   maxDepth: 2,
@@ -39,6 +41,14 @@ const STATUS_LABEL: Record<ConversationStatus, string> = {
 function toErrorText(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
+}
+
+function readStoredFlag(key: string, fallback: boolean): boolean {
+  if (typeof window === "undefined") return fallback;
+  const raw = window.localStorage.getItem(key);
+  if (raw === "1") return true;
+  if (raw === "0") return false;
+  return fallback;
 }
 
 interface PendingAssistantBubble {
@@ -72,8 +82,8 @@ export function App() {
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [mobileEditorOpen, setMobileEditorOpen] = useState(false);
-  const [leftSidebarVisible, setLeftSidebarVisible] = useState(true);
-  const [rightSidebarVisible, setRightSidebarVisible] = useState(false);
+  const [leftSidebarVisible, setLeftSidebarVisible] = useState(() => readStoredFlag(LEFT_SIDEBAR_KEY, true));
+  const [rightSidebarVisible, setRightSidebarVisible] = useState(() => readStoredFlag(RIGHT_SIDEBAR_KEY, false));
 
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -115,6 +125,24 @@ export function App() {
     }, REFRESH_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [activeConversationId, activeStatus]);
+
+  useEffect(() => {
+    window.localStorage.setItem(LEFT_SIDEBAR_KEY, leftSidebarVisible ? "1" : "0");
+  }, [leftSidebarVisible]);
+
+  useEffect(() => {
+    window.localStorage.setItem(RIGHT_SIDEBAR_KEY, rightSidebarVisible ? "1" : "0");
+  }, [rightSidebarVisible]);
+
+  useEffect(() => {
+    const drawerOpen = mobileSidebarOpen || mobileEditorOpen;
+    if (!drawerOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileSidebarOpen, mobileEditorOpen]);
 
   async function refreshConversations(options?: { autoSelectFirst?: boolean }) {
     setRefreshingList(true);
@@ -554,11 +582,13 @@ export function App() {
         summaries={summaries}
         activeConversationId={activeConversationId}
         creatingDraft={draftMode && !activeConversationId}
+        showMobileClose={mobileSidebarOpen}
         refreshing={refreshingList}
         deletingConversationId={deletingConversationId}
         renamingConversationId={renamingConversationId}
         deletingAll={deletingAll}
         onCreateDraft={onCreateDraftConversation}
+        onRequestCloseMobile={() => setMobileSidebarOpen(false)}
         onSelect={(conversationId) => {
           setDraftMode(false);
           setActiveConversationId(conversationId);
@@ -575,10 +605,24 @@ export function App() {
       <section className="chat-pane">
         <header className="chat-head">
           <div className="chat-head-actions">
-            <button className="ghost mobile-only" type="button" onClick={() => setMobileSidebarOpen(true)}>
+            <button
+              className="ghost mobile-only"
+              type="button"
+              onClick={() => {
+                setMobileSidebarOpen(true);
+                setMobileEditorOpen(false);
+              }}
+            >
               会话
             </button>
-            <button className="ghost mobile-only" type="button" onClick={() => setMobileEditorOpen(true)}>
+            <button
+              className="ghost mobile-only"
+              type="button"
+              onClick={() => {
+                setMobileEditorOpen(true);
+                setMobileSidebarOpen(false);
+              }}
+            >
               草稿
             </button>
           </div>
@@ -620,11 +664,13 @@ export function App() {
         markdown={planDraft}
         mode={editorMode}
         dirty={draftDirty}
+        showMobileClose={mobileEditorOpen}
         saving={saving}
         starting={starting}
         downloading={downloading}
         status={activeStatus}
         onModeChange={setEditorMode}
+        onRequestCloseMobile={() => setMobileEditorOpen(false)}
         onChange={(value) => {
           setPlanDraft(value);
           setDraftDirty(true);

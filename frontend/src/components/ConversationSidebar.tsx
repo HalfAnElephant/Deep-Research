@@ -15,11 +15,13 @@ interface ConversationSidebarProps {
   summaries: ConversationSummary[];
   activeConversationId: string | null;
   creatingDraft: boolean;
+  showMobileClose: boolean;
   refreshing: boolean;
   deletingConversationId: string | null;
   renamingConversationId: string | null;
   deletingAll: boolean;
   onCreateDraft: () => void;
+  onRequestCloseMobile: () => void;
   onSelect: (conversationId: string) => void;
   onDelete: (conversationId: string) => void;
   onRename: (conversationId: string) => void;
@@ -31,11 +33,13 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
     summaries,
     activeConversationId,
     creatingDraft,
+    showMobileClose,
     refreshing,
     deletingConversationId,
     renamingConversationId,
     deletingAll,
     onCreateDraft,
+    onRequestCloseMobile,
     onSelect,
     onDelete,
     onRename,
@@ -48,8 +52,15 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
   return (
     <aside className="sidebar">
       <div className="sidebar-head">
-        <h2>Deep Research</h2>
-        <p>多会话研究空间</p>
+        <div className="sidebar-head-main">
+          <h2>Deep Research</h2>
+          <p>多会话研究空间</p>
+        </div>
+        {showMobileClose && (
+          <button className="ghost pane-close mobile-only" type="button" onClick={onRequestCloseMobile}>
+            关闭
+          </button>
+        )}
       </div>
 
       <div className="sidebar-toolbar">
