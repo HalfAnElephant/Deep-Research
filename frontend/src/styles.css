@@ -408,15 +408,9 @@ button.ghost:hover:not(:disabled) {
   flex-direction: column;
   gap: 12px;
   background:
-    linear-gradient(180deg, rgba(239, 246, 255, 0.8), rgba(255, 255, 255, 0.94)),
-    radial-gradient(circle at 100% 0%, rgba(255, 230, 197, 0.35), transparent 42%),
-    repeating-linear-gradient(
-      0deg,
-      transparent 0,
-      transparent 23px,
-      rgba(110, 143, 210, 0.06) 24px,
-      transparent 25px
-    );
+    linear-gradient(180deg, rgba(243, 248, 255, 0.78), rgba(255, 255, 255, 0.95)),
+    radial-gradient(circle at 100% 0%, rgba(255, 230, 197, 0.22), transparent 45%),
+    radial-gradient(circle at 0% 100%, rgba(144, 184, 255, 0.08), transparent 42%);
 }
 
 .timeline-empty {
@@ -546,13 +540,17 @@ button.ghost:hover:not(:disabled) {
 
 .plan-card pre {
   margin: 0;
-  background: #111827;
-  color: #dbe8ff;
+  background: linear-gradient(180deg, #13213a, #0f1a2e);
+  color: #e8f0ff;
   border-radius: 12px;
-  padding: 10px;
-  max-height: 300px;
+  border: 1px solid rgba(173, 201, 255, 0.2);
+  padding: 12px;
+  max-height: min(42vh, 380px);
   overflow: auto;
   white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.65;
+  font-size: 13px;
 }
 
 .plan-actions {
@@ -642,13 +640,18 @@ button.ghost:hover:not(:disabled) {
 
 .report-viewer pre {
   margin: 0;
-  background: #0f172a;
-  color: #d7ecff;
+  background: linear-gradient(180deg, #122139, #0f1b31);
+  color: #e2efff;
+  border: 1px solid rgba(176, 206, 255, 0.22);
   border-radius: 10px;
-  padding: 10px;
-  max-height: 350px;
+  padding: 12px;
+  width: min(100%, 96ch);
+  line-height: 1.72;
+  font-size: 13.5px;
+  max-height: min(55vh, 520px);
   overflow: auto;
   white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .report-viewer-closed {
@@ -692,6 +695,7 @@ textarea {
   padding: 10px;
   background: #fff;
   color: var(--ink);
+  line-height: 1.55;
 }
 
 textarea:focus-visible {
@@ -768,23 +772,28 @@ textarea:focus-visible {
   min-height: 0;
   flex: 1;
   display: flex;
+  overflow: auto;
 }
 
 .editor-body textarea,
 .editor-body pre {
-  width: 100%;
+  width: min(100%, 104ch);
   height: 100%;
-  min-height: 420px;
+  min-height: clamp(280px, 52vh, 640px);
+  margin: 0 auto;
 }
 
 .editor-body pre {
   margin: 0;
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 10px;
+  padding: 14px;
   overflow: auto;
   white-space: pre-wrap;
-  background: #f9fbff;
+  background: #f8fbff;
+  line-height: 1.72;
+  font-size: 14px;
+  word-break: break-word;
 }
 
 .error-banner {
