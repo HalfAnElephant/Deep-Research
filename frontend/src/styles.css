@@ -39,7 +39,8 @@ body {
 }
 
 button,
-textarea {
+textarea,
+input {
   font: inherit;
 }
 
@@ -58,13 +59,15 @@ button:disabled {
 }
 
 button:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+input:focus-visible {
   outline: 3px solid rgba(33, 102, 224, 0.38);
   outline-offset: 2px;
 }
 
 button:focus:not(:focus-visible),
-textarea:focus:not(:focus-visible) {
+textarea:focus:not(:focus-visible),
+input:focus:not(:focus-visible) {
   outline: none;
 }
 
@@ -809,6 +812,72 @@ textarea:focus-visible {
   color: var(--danger);
   font-size: 13px;
   z-index: 80;
+}
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 110;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.dialog-panel {
+  width: min(520px, calc(100vw - 24px));
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 24px 56px rgba(15, 23, 42, 0.28);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dialog-head h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.dialog-description {
+  margin: 0;
+  color: #324766;
+  line-height: 1.5;
+}
+
+.dialog-body {
+  display: grid;
+  gap: 8px;
+}
+
+.dialog-helper {
+  margin: 0;
+  font-size: 13px;
+  color: #4b6186;
+}
+
+.dialog-input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  color: var(--ink);
+  background: #fff;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .mono {

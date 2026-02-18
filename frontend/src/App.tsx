@@ -15,6 +15,7 @@ import {
 import { ChatTimeline } from "./components/ChatTimeline";
 import { Composer } from "./components/Composer";
 import { ConversationSidebar } from "./components/ConversationSidebar";
+import { Dialog } from "./components/Dialog";
 import { PlanEditorPane } from "./components/PlanEditorPane";
 import type { ConversationDetail, ConversationMessage, ConversationStatus, ConversationSummary } from "./types";
 
@@ -56,6 +57,22 @@ interface PendingAssistantBubble {
   content: string;
 }
 
+type ConfirmDialogState =
+  | {
+      kind: "deleteConversation";
+      conversationId: string;
+      topic: string;
+    }
+  | {
+      kind: "deleteAll";
+      total: number;
+    };
+
+interface RenameDialogState {
+  conversationId: string;
+  value: string;
+}
+
 export function App() {
   const [summaries, setSummaries] = useState<ConversationSummary[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -79,6 +96,8 @@ export function App() {
   const [deletingAll, setDeletingAll] = useState(false);
   const [refreshingList, setRefreshingList] = useState(false);
   const [error, setError] = useState("");
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
+  const [renameDialog, setRenameDialog] = useState<RenameDialogState | null>(null);
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [mobileEditorOpen, setMobileEditorOpen] = useState(false);
@@ -424,13 +443,22 @@ export function App() {
     composerRef.current?.focus();
   }
 
-  async function onDeleteConversation(conversationId: string) {
-    if (!window.confirm("删除后将移除该会话的方案与消息，是否继续？")) return;
+  function onRequestDeleteConversation(conversationId: string) {
+    const summary = summaries.find((item) => item.conversationId === conversationId);
+    setConfirmDialog({
+      kind: "deleteConversation",
+      conversationId,
+      topic: summary?.topic ?? "未命名会话"
+    });
+  }
+
+  async function onConfirmDeleteConversation(conversationId: string) {
     setDeletingConversationId(conversationId);
     setError("");
     try {
       const deletingActive = activeConversationId === conversationId;
       await deleteConversation(conversationId);
+      setConfirmDialog(null);
       if (deletingActive) {
         setActiveConversationId(null);
         setActiveDetail(null);
@@ -449,11 +477,17 @@ export function App() {
     }
   }
 
-  async function onRenameConversation(conversationId: string) {
+  function onRequestRenameConversation(conversationId: string) {
     const current = summaries.find((item) => item.conversationId === conversationId);
-    const input = window.prompt("请输入新的会话名称", current?.topic ?? "");
-    if (input === null) return;
-    const topic = input.trim();
+    setRenameDialog({
+      conversationId,
+      value: current?.topic ?? ""
+    });
+  }
+
+  async function onConfirmRenameConversation() {
+    if (!renameDialog) return;
+    const topic = renameDialog.value.trim();
     if (!topic) {
       setError("会话名称不能为空。");
       return;
@@ -463,6 +497,7 @@ export function App() {
       return;
     }
 
+    const { conversationId } = renameDialog;
     setRenamingConversationId(conversationId);
     setError("");
     try {
@@ -487,6 +522,7 @@ export function App() {
         setPlanVersion(detail.currentPlan?.version ?? 0);
         setDraftDirty(false);
       }
+      setRenameDialog(null);
       await refreshConversations();
     } catch (err) {
       setError(toErrorText(err));
@@ -495,9 +531,15 @@ export function App() {
     }
   }
 
-  async function onDeleteAllConversations() {
+  function onRequestDeleteAllConversations() {
     if (summaries.length === 0) return;
-    if (!window.confirm("将删除全部会话（包括运行中会话），且不可恢复。是否继续？")) return;
+    setConfirmDialog({
+      kind: "deleteAll",
+      total: summaries.length
+    });
+  }
+
+  async function onConfirmDeleteAllConversations() {
     setDeletingAll(true);
     setError("");
     try {
@@ -515,6 +557,7 @@ export function App() {
       setRightSidebarVisible(false);
       setMobileSidebarOpen(false);
       setMobileEditorOpen(false);
+      setConfirmDialog(null);
       await refreshConversations();
     } catch (err) {
       setError(toErrorText(err));
@@ -534,6 +577,10 @@ export function App() {
           ? "输入需求，例如：改成演讲稿；补充最新证据并自动重跑。"
           : "请选择会话，或点击“新建研究”。";
   const sendLabel = draftMode && !activeConversationId ? "开始规划" : "发送";
+  const confirmDeleteConversationPending =
+    confirmDialog?.kind === "deleteConversation" && deletingConversationId === confirmDialog.conversationId;
+  const confirmDeleteAllPending = confirmDialog?.kind === "deleteAll" && deletingAll;
+  const renamePending = Boolean(renameDialog) && renamingConversationId === renameDialog.conversationId;
 
   return (
     <main
@@ -597,9 +644,9 @@ export function App() {
           setPendingAssistantBubble((prev) => (prev?.conversationId === null ? null : prev));
           setMobileSidebarOpen(false);
         }}
-        onDelete={onDeleteConversation}
-        onRename={onRenameConversation}
-        onDeleteAll={onDeleteAllConversations}
+        onDelete={onRequestDeleteConversation}
+        onRename={onRequestRenameConversation}
+        onDeleteAll={onRequestDeleteAllConversations}
       />
 
       <section className="chat-pane">
@@ -679,6 +726,91 @@ export function App() {
         onStart={onStartResearch}
         onDownload={onDownloadReport}
       />
+
+      <Dialog
+        open={Boolean(confirmDialog)}
+        dismissable={!confirmDeleteConversationPending && !confirmDeleteAllPending}
+        title={confirmDialog?.kind === "deleteAll" ? "删除全部会话" : "删除会话"}
+        description={
+          confirmDialog?.kind === "deleteAll"
+            ? `将删除全部 ${confirmDialog.total} 个会话（包括运行中会话），该操作不可恢复。`
+            : "删除后将移除该会话的方案与消息，且不可恢复。"
+        }
+        onClose={() => {
+          if (confirmDeleteConversationPending || confirmDeleteAllPending) return;
+          setConfirmDialog(null);
+        }}
+        actions={
+          <>
+            <button
+              className="ghost"
+              type="button"
+              onClick={() => setConfirmDialog(null)}
+              disabled={confirmDeleteConversationPending || confirmDeleteAllPending}
+            >
+              取消
+            </button>
+            <button
+              className="primary subtle"
+              type="button"
+              onClick={() => {
+                if (!confirmDialog) return;
+                if (confirmDialog.kind === "deleteConversation") {
+                  void onConfirmDeleteConversation(confirmDialog.conversationId);
+                  return;
+                }
+                void onConfirmDeleteAllConversations();
+              }}
+              disabled={confirmDeleteConversationPending || confirmDeleteAllPending}
+            >
+              {confirmDeleteConversationPending || confirmDeleteAllPending ? "删除中..." : "确认删除"}
+            </button>
+          </>
+        }
+      >
+        {confirmDialog?.kind === "deleteConversation" && (
+          <p className="dialog-helper">目标会话：{confirmDialog.topic}</p>
+        )}
+      </Dialog>
+
+      <Dialog
+        open={Boolean(renameDialog)}
+        dismissable={!renamePending}
+        title="重命名会话"
+        description={`请输入新的会话名称（最多 ${FIRST_MESSAGE_LIMIT} 字）。`}
+        onClose={() => {
+          if (renamePending) return;
+          setRenameDialog(null);
+        }}
+        actions={
+          <>
+            <button className="ghost" type="button" onClick={() => setRenameDialog(null)} disabled={renamePending}>
+              取消
+            </button>
+            <button className="primary" type="button" onClick={() => void onConfirmRenameConversation()} disabled={renamePending}>
+              {renamePending ? "保存中..." : "保存"}
+            </button>
+          </>
+        }
+      >
+        <input
+          className="dialog-input"
+          value={renameDialog?.value ?? ""}
+          maxLength={FIRST_MESSAGE_LIMIT}
+          autoFocus
+          onChange={(event) => {
+            const nextValue = event.target.value;
+            setRenameDialog((prev) => (prev ? { ...prev, value: nextValue } : prev));
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            if (!renamePending) {
+              void onConfirmRenameConversation();
+            }
+          }}
+        />
+      </Dialog>
 
       {error && <div className="error-banner">{error}</div>}
     </main>
