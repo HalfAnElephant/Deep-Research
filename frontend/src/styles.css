@@ -923,6 +923,23 @@ textarea:focus-visible {
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .status-chip.running,
+  .typing-dots span,
+  .message {
+    animation: none !important;
+  }
+}
+
 @media (min-width: 1121px) {
   .shell {
     transition: grid-template-columns 220ms ease;
