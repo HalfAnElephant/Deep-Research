@@ -1,943 +1,360 @@
-# Deep Research 深度科研辅助系统 - 运行流程详解
+# Deep Research 运行流程手册（代码对齐版）
 
-## 目录
-
-1. [系统架构概述](#1-系统架构概述)
-2. [全流程交互逻辑](#2-全流程交互逻辑)
-3. [核心代理详解](#3-核心代理详解)
-4. [数据流转关系](#4-数据流转关系)
-5. [API接口规范](#5-api接口规范)
-6. [错误处理与容错](#6-错误处理与容错)
+> 文档目的：把“系统实际如何运行”写成可操作流程，覆盖主流程、分支、异常和恢复。
 
 ---
 
-## 1. 系统架构概述
+## 1. 角色与核心对象
 
-### 1.1 分层架构图
+- 用户：在前端发起主题、修订计划、触发执行、改写报告。
+- 前端：三栏工作台（会话、时间线、计划编辑器）。
+- 会话编排器：`ConversationAgent`。
+- 执行引擎：`ExecutionEngine`。
+- 数据层：SQLite + 报告文件。
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        交互层 (Interaction Layer)                │
-│  ┌─────────────┐ ┌──────────────┐ ┌──────────────────────────┐  │
-│  │ CoT 编辑器   │ │ 实时证据看板  │ │ Markdown 分屏预览        │  │
-│  └─────────────┘ └──────────────┘ └──────────────────────────┘  │
-├─────────────────────────────────────────────────────────────────┤
-│                       编排层 (Orchestration Layer)               │
-│  ┌─────────────────────────┐ ┌──────────────────────────────┐   │
-│  │  主规划器 (Master Planner)│ │   状态管理器 (State Manager) │   │
-│  │  - DAG 任务图谱管理       │ │   - FSM 状态机              │   │
-│  │  - 动态任务调度           │ │   - 上下文快照              │   │
-│  └─────────────────────────┘ └──────────────────────────────┘   │
-├─────────────────────────────────────────────────────────────────┤
-│                         代理层 (Agent Layer)                     │
-│  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────────┐   │
-│  │ 检索代理   │ │ 分析代理   │ │MCP执行代理 │ │  写作代理     │   │
-│  └───────────┘ └───────────┘ └───────────┘ └───────────────┘   │
-├─────────────────────────────────────────────────────────────────┤
-│                      基础设施层 (Infrastructure)                  │
-│  ┌─────────────┐ ┌─────────────┐ ┌──────────────────────────┐   │
-│  │ 向量数据库   │ │ MCP 服务器集群 │ │   本地文件系统接口       │   │
-│  │ (L2 缓存)   │ │             │ │                          │   │
-│  └─────────────┘ └─────────────┘ └──────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### 1.2 核心组件说明
-
-| 层级 | 组件 | 职责 |
-|------|------|------|
-| **交互层** | CoT 编辑器 | 展示和编辑思维链，允许用户干预任务规划 |
-| **交互层** | 实时证据看板 | 展示收集到的证据流，支持点击锚定 |
-| **交互层** | Markdown 分屏预览 | 实时预览生成的报告，支持段落锁定 |
-| **编排层** | Master Planner | 任务拆解、DAG 生成、动态调度 |
-| **编排层** | State Manager | FSM 状态管理、上下文快照与恢复 |
-| **代理层** | Retrieval Agent | 信息检索、网页解析、缓存管理 |
-| **代理层** | Analyst Agent | 数值冲突检测、信誉评分、语义对齐 |
-| **代理层** | MCP Executor | 外部工具调用、沙盒执行 |
-| **代理层** | Writer Agent | 增量文档生成、引用管理 |
-| **基础设施层** | Vector DB | L2 向量缓存 |
-| **基础设施层** | MCP Servers | 外部工具和数据源连接 |
-| **基础设施层** | File System | 本地文件访问 |
+核心 ID：
+- `conversation_id`：会话维度。
+- `task_id`：每次运行生成的新任务维度。
+- `message_id`：时间线消息维度。
+- `evidence_id`：证据维度。
 
 ---
 
-## 2. 全流程交互逻辑
+## 2. 状态机
 
-### 2.1 状态机 (FSM) 流程图
+## 2.1 会话状态（ConversationStatus）
 
-```
-                    ┌─────────────┐
-                    │   Ready     │  ← 录入议题、上传种子文件、配置偏好
-                    └──────┬──────┘
-                           │  [启动研究]
-                           ▼
-                    ┌─────────────┐
-                    │  Planning   │  ← 生成 DAG、用户可调整节点/依赖
-                    └──────┬──────┘
-                           │  [执行计划]
-                           ▼
-                    ┌─────────────┐
-                    │  Executing  │  ← 检索/分析并行、实时推送证据
-                    └──────┬──────┘
-                           │  [发现冲突]
-                    ┌──────▼──────┐
-                    │  Reviewing  │  ← 冲突高亮、用户选择采信源
-                    └──────┬──────┘
-                           │  [冲突解决]
-                    ┌──────▼──────┐
-                    │ Synthesizing│  ← 整合证据、生成报告、锁定段落
-                    └──────┬──────┘
-                           │  [完成确认]
-                           ▼
-                    ┌─────────────┐
-                    │  Finalizing │  ← 导出文档、生成参考文献、归档
-                    └─────────────┘
-```
+- `DRAFTING_PLAN`
+- `PLAN_READY`
+- `RUNNING`
+- `COMPLETED`
+- `FAILED`
 
-### 2.2 各状态详解
+## 2.2 任务状态（TaskStatus）
 
-#### **状态 1: Ready (就绪)**
+- `READY`
+- `PLANNING`
+- `EXECUTING`
+- `REVIEWING`
+- `SYNTHESIZING`
+- `FINALIZING`
+- `COMPLETED`
+- `FAILED`
+- `SUSPENDED`
+- `ABORTED`
 
-| 属性 | 说明 |
-|------|------|
-| **UI 表现** | 初始化界面，含多模态输入模块 |
-| **用户操作** | 录入研究议题、上传种子文件、配置偏好 |
-| **系统响应** | 预加载常用 MCP 服务列表 |
-
-**输入数据:**
-```json
-{
-  "title": "研究标题",
-  "description": "研究描述",
-  "config": {
-    "maxDepth": 3,
-    "maxNodes": 50,
-    "searchSources": ["arXiv", "Google Scholar", "IEEE"],
-    "priority": 5
-  }
-}
-```
-
-**输出数据:**
-```json
-{
-  "taskId": "uuid-xxxx",
-  "status": "READY",
-  "createdAt": "2024-01-01T00:00:00Z"
-}
-```
+迁移规则由 `state_machine.py` 的 `ALLOWED_TRANSITIONS` 严格控制。
 
 ---
 
-#### **状态 2: Planning (规划)**
+## 3. 主流程 A：新建会话并完成研究
 
-| 属性 | 说明 |
-|------|------|
-| **UI 表现** | 展示任务图谱节点 (DAG) |
-| **用户操作** | 暂停修改节点、拖拽调整依赖、删除冗余路径 |
-| **系统响应** | 规划器拆解任务，生成依赖关系图 |
+## 3.1 创建会话
 
-**Master Planner 处理流程:**
+### 用户动作
+在“新建研究”后发送第一条主题消息。
 
-```
-输入: CreateTaskRequest
-  │
-  ├─> [BFS 展开] 生成首级子课题
-  │   ├─> 背景研究
-  │   ├─> 现状分析
-  │   └─> 挑战识别
-  │
-  ├─> [DFS 深挖] 根据反馈垂直展开
-  │
-  ├─> [循环检测] 维护 VisitedStack 防止无限循环
-  │
-  ├─> [动态剪枝] 计算 infoGainScore
-  │   └─> 若连续 < 0.2，合并/舍弃分支
-  │
-  └─> 输出: DAGGraph
-```
+### 前端调用
+`POST /api/v1/conversations`
 
-**输出数据 (DAG):**
-```json
-{
-  "nodes": [
-    {
-      "taskId": "node-1",
-      "title": "背景研究",
-      "status": "PENDING",
-      "priority": 5,
-      "depth": 1
-    }
-  ],
-  "edges": [
-    {
-      "from": "node-1",
-      "to": "node-2",
-      "type": "DEPENDS_ON"
-    }
-  ]
-}
-```
+### 后端行为（`ConversationAgent.create_conversation`）
+1. 新建会话，状态 `DRAFTING_PLAN`。
+2. 写入首条用户消息 `USER_TEXT`。
+3. 生成首版计划（LLM 或 fallback）。
+4. 写入 `PLAN_DRAFT` 消息。
+5. 状态切到 `PLAN_READY`。
+
+### 前端表现
+- 中间时间线出现首版计划。
+- 右侧计划编辑器自动填充 Markdown。
 
 ---
 
-#### **状态 3: Executing (执行)**
+## 3.2 用户修订计划（可选）
 
-| 属性 | 说明 |
-|------|------|
-| **UI 表现** | 进度条显示、实时证据流看板 |
-| **用户操作** | 干预调整检索词、调整优先级、授权 MCP 调用 |
-| **系统响应** | 检索/执行代理并行运作，推送 Evidence[] |
+### 方式 1：右侧编辑器直接改
+- 前端调用：`PUT /api/v1/conversations/{id}/plan`
+- 后端写入新 `PlanRevision` + `PLAN_EDITED` 消息。
 
-**WebSocket 实时推送:**
-```json
-{
-  "event": "EVIDENCE_FOUND",
-  "timestamp": "2024-01-01T00:00:00Z",
-  "data": {
-    "taskId": "node-1",
-    "evidence": { ... }
-  }
-}
-```
+### 方式 2：聊天输入自然语言“改方案”
+- 前端调用：`POST /api/v1/conversations/{id}/plan/revise`
+- 后端按指令生成新版本并追加 `PLAN_REVISION` 消息。
 
 ---
 
-#### **状态 4: Reviewing (审查)**
+## 3.3 启动研究
 
-| 属性 | 说明 |
-|------|------|
-| **UI 表现** | 冲突节点高亮显示、对比弹窗 |
-| **用户操作** | 选择采信源、指令深挖争议点 |
-| **系统响应** | 分析代理检测一致性，聚合冲突数据 |
+### 用户动作
+点击“开始研究”或在时间线点“继续执行”。
 
-**冲突检测流程:**
-```
-输入: Evidence[]
-  │
-  ├─> [单位标准化] 统一转换为 SI 单位
-  │
-  ├─> [阈值判定]
-  │   └─> 若 (ValueA - ValueB) / Max > 15% 且环境相似
-  │       └─> 生成 ConflictRecord
-  │
-  └─> 输出: ConflictRecord[]
-```
+### 前端调用
+`POST /api/v1/conversations/{id}/run`
 
----
-
-#### **状态 5: Synthesizing (合成)**
-
-| 属性 | 说明 |
-|------|------|
-| **UI 表现** | 文档分屏预览、实时高亮 |
-| **用户操作** | 查看引用源、指令重写、锁定段落 |
-| **系统响应** | 写作代理整合证据，执行增量润色 |
-
-**写作流程:**
-```
-输入: Evidence[] + TaskNode[]
-  │
-  ├─> [分段绑定] 每个 # Section 绑定 TaskNode
-  │
-  ├─> [局部生成] 节点完成时触发对应段落生成
-  │
-  ├─> [段落锁定] 人工编辑段落标记为 LOCKED
-  │
-  ├─> [溯源索引] 维护 UUID -> Citation 映射
-  │
-  └─> 输出: Markdown 文档
-```
+### 后端行为（`ConversationAgent.start_research`）
+1. 读取当前计划，解析 front matter：
+   - `title`
+   - `max_depth`
+   - `max_nodes`
+   - `priority`
+   - `search_sources`
+2. 使用解析结果创建**新任务**（每次 run 都是新 task_id）。
+3. 会话绑定 task_id，状态置 `RUNNING`。
+4. 写一条系统消息“研究任务已启动”。
+5. 调 `execution_engine.start(task_id)`。
 
 ---
 
-#### **状态 6: Finalizing (归档)**
+## 3.4 执行引擎流水线
 
-| 属性 | 说明 |
-|------|------|
-| **UI 表现** | 最终报告生成、参考文献列表 |
-| **用户操作** | 导出文档、同步 Zotero、启动后续研究 |
-| **系统响应** | 生成 .bib 文件、清理临时上下文 |
+`ExecutionEngine._run_task` 时序如下：
 
----
-
-## 3. 核心代理详解
-
-### 3.1 Master Planner Agent (首席任务规划代理)
-
-#### 职能
-将抽象的科研目标转化为可执行的有向无环图 (DAG)。
-
-#### 输入
-
-```typescript
-interface CreateTaskRequest {
-  title: string;           // 研究标题
-  description: string;     // 研究描述
-  config: {
-    maxDepth: number;      // 最大搜索深度 (默认 3)
-    maxNodes: number;      // 最大节点数 (默认 50)
-    searchSources: string[]; // 数据源列表
-    priority: number;      // 优先级 (1-5)
-  };
-}
-```
-
-#### 处理流程
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Master Planner 处理流程                      │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  1. [初始化] 创建根节点                                          │
-│     └─> taskId = uuid(), parentTaskId = null                    │
-│                                                                 │
-│  2. [BFS 展开] 首级子课题                                        │
-│     ├─> 背景研究 (Background Research)                          │
-│     ├─> 现状分析 (State of the Art)                            │
-│     └─> 挑战识别 (Challenge Identification)                     │
-│                                                                 │
-│  3. [DFS 深挖] 根据检索反馈垂直展开                              │
-│     └─> 递归展开子任务，直至达到 maxDepth                        │
-│                                                                 │
-│  4. [循环检测] 防止无限循环                                      │
-│     └─> 维护 VisitedStack，检测重复访问                         │
-│                                                                 │
-│  5. [动态剪枝] 信息增益判定                                      │
-│     ├─> 计算 infoGainScore = newInfo / existingInfo            │
-│     └─> 若连续 < 0.2，标记为 PRUNED                             │
-│                                                                 │
-│  6. [依赖解析] 构建任务依赖关系                                  │
-│     └─> 生成 edges: [{from, to, type}]                         │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-#### 调度算法
-
-```
-PRIORITY_QUEUE ← 所有 PENDING 节点
-VISITED_SET    ← ∅
-
-while PRIORITY_QUEUE 非空:
-    task ← PRIORITY_QUEUE.pop()
-
-    if task.id ∈ VISITED_SET:
-        continue
-
-    if task.dependencies 未全部完成:
-        continue
-
-    task.status ← RUNNING
-    VISITED_SET.add(task.id)
-
-    // 调用对应 Agent 处理
-    result ← execute_task(task)
-
-    // 计算信息增益
-    infoGain ← calculate_info_gain(result)
-    if infoGain < 0.2:
-        task.status ← PRUNED
-    else:
-        task.status ← COMPLETED
-        task.output ← result
-
-    // 激活子任务
-    for child in task.children:
-        PRIORITY_QUEUE.push(child)
-```
-
-#### 输出
-
-```typescript
-interface DAGGraph {
-  nodes: TaskNode[];
-  edges: Edge[];
-}
-
-interface TaskNode {
-  taskId: string;
-  parentTaskId: string | null;
-  title: string;
-  description: string;
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SUSPENDED' | 'PRUNED';
-  priority: number;
-  dependencies: string[];
-  children: string[];
-  metadata: {
-    estimatedTokenCost: number;
-    searchDepth: number;
-    infoGainScore: number;
-    createdAt: string;
-    updatedAt: string;
-  };
-}
-```
+1. 推送 `TASK_STARTED`。
+2. 若 DAG 为空：
+   - `READY -> PLANNING`
+   - `MasterPlanner.build_dag`
+   - `save_dag`
+   - 推送 `TASK_PROGRESS(phase=BUILDING_PLAN, progress=20)`
+3. 迁移到 `EXECUTING`。
+4. 遍历可执行节点（非 root 且非 PRUNED）：
+   - 节点置 `RUNNING`
+   - 生成 query（`task.title + node.title`）
+   - 推送 `TASK_PROGRESS(SEARCHING)`
+   - `ResearchAgent.collect_evidence`
+   - `EvidenceRepository.save_many`
+   - 对每条证据推送 `EVIDENCE_FOUND`
+   - 节点置 `COMPLETED`
+   - 推送 `TASK_PROGRESS(NODE_COMPLETED)`
+   - 保存 snapshot
+5. 节点完成后进行分析：
+   - 对证据计算 score
+   - 检测冲突（阈值默认 0.15）
+   - 有冲突：`EXECUTING -> REVIEWING -> SYNTHESIZING`
+   - 无冲突：`EXECUTING -> SYNTHESIZING`
+6. 写作阶段：
+   - 推送 `OUTLINING`
+   - 逐 section 推送 `WRITING_SECTION`
+   - `ReportAgent.generate_report` 输出 `.md/.bib`
+7. 收尾：
+   - `SYNTHESIZING -> FINALIZING -> COMPLETED`
+   - 写 `report_path`
+   - 推送 `TASK_COMPLETED(progress=100)`
 
 ---
 
-### 3.2 Retrieval Agent (检索代理)
+## 3.5 事件回流会话
 
-#### 职能
-执行全域信息捕获，配置三级缓存机制。
+执行引擎事件通过 listener 回到 `ConversationAgent.on_task_event`：
 
-#### 输入
+- `TASK_PROGRESS`
+  - 进入 `ConversationRepository.append_progress_entry`
+  - 聚合为 `PROGRESS_GROUP` 消息
+- `TASK_COMPLETED`
+  - 会话状态置 `COMPLETED`
+  - 读取报告文件，追加 `FINAL_REPORT` 消息
+- `ERROR/TASK_FAILED/TASK_ABORTED`
+  - 会话状态置 `FAILED`
+  - 追加 `ERROR` 消息
 
-```typescript
-interface RetrievalRequest {
-  taskNode: TaskNode;
-  query: string;
-  sources: string[];  // ['arXiv', 'Google Scholar', 'IEEE', ...]
-}
-```
-
-#### 处理流程
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Retrieval Agent 处理流程                     │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  1. [查询扩展] 生成结构化检索式                                   │
-│     格式: (Term OR Abbreviation) AND (Year) AND (Action Verb)   │
-│                                                                 │
-│  2. [L1 缓存校验] 内存缓存 (LRU, 最大 1000 条, TTL 1h)          │
-│     └─> 若相似度 > 0.9，直接返回                                 │
-│                                                                 │
-│  3. [L2 缓存校验] 向量数据库 (Qdrant, TTL 24h)                  │
-│     ├─> 向量化查询                                              │
-│     └─> 若相似度 > 0.9，直接返回                                 │
-│                                                                 │
-│  4. [API 调用] 执行外部检索                                      │
-│     ├─> Serper / Google Search (网页)                           │
-│     ├─> arXiv API (学术论文)                                    │
-│     ├─> Semantic Scholar (元数据增强)                           │
-│     └─> CrossRef (DOI 解析)                                     │
-│                                                                 │
-│  5. [网页解析] 提取正文内容                                      │
-│     ├─> 使用 Readability/trafilatura                            │
-│     ├─> 检测 <table> 标签 → 提取题注 + 独立 evidenceId          │
-│     └─> 检测 <img> 标签 → 提取题注 + 独立 evidenceId            │
-│                                                                 │
-│  6. [缓存写入] 更新 L1 和 L2 缓存                                │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-#### 查询扩展示例
-
-```
-输入: "transformer architecture"
-
-扩展后:
-  ("transformer" OR "attention mechanism") AND
-  (2024 OR 2023 OR 2022) AND
-  ("improve" OR "optimize" OR "analyze" OR "review")
-```
-
-#### 输出
-
-```typescript
-interface Evidence {
-  id: string;
-  sourceType: 'PAPER' | 'WEB' | 'PATENT' | 'MCP';
-  url: string;
-  content: string;  // Markdown 格式
-  metadata: {
-    authors: string[];
-    publishDate: string;
-    title: string;
-    abstract: string;
-    impactFactor: number;
-    isPeerReviewed: boolean;
-    relevanceScore: number;  // 0-1
-    citationCount: number;
-  };
-  score: number;  // 综合信誉评分 0-1
-  extractedData: {
-    tables: Array<{caption: string, data: any}>;
-    images: Array<{caption: string, url: string}>;
-    numericalValues: Array<{value: number, unit: string, context: string}>;
-  };
-}
-```
+前端时间线会自动显示这些消息。
 
 ---
 
-### 3.3 Analyst Agent (分析代理)
+## 4. 主流程 B：已完成后继续提要求
 
-#### 职能
-作为质量控制核心，执行语义数值对齐 (SNA) 和冲突检测。
+`POST /plan/revise` 在“已有报告”场景会做意图分流。
 
-#### 输入
+## 4.1 PLAN 模式（继续改计划）
+触发词示例：`研究方案 / max_depth / 任务树 / 执行步骤`。
 
-```typescript
-interface AnalysisRequest {
-  evidences: Evidence[];
-}
-```
+行为：
+- 新增 `PlanRevision`
+- 状态保持/回到 `PLAN_READY`
 
-#### 处理流程
+## 4.2 RESEARCH 模式（补检索并重跑）
+触发词示例：`重跑 / 补充检索 / 再搜索 / 查询最新`。
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                       Analyst Agent 处理流程                      │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  1. [信誉评分计算]                                               │
-│     │                                                           │
-│     ├─> 基础权重:                                               │
-│     │   • 论文 = 1.0                                            │
-│     │   • 专利 = 0.8                                            │
-│     │   • 网页 = 0.5                                            │
-│     │   • MCP 数据 = 0.9                                        │
-│     │                                                           │
-│     ├─> 影响因子加成 = IF / 10 (最高 1.5)                       │
-│     │                                                           │
-│     ├─> 同行评议加成 = 1.2x (若已评议)                          │
-│     │                                                           │
-│     ├─> 时效性衰减:                                             │
-│     │   • < 5 年: 1.0x                                          │
-│     │   • 5-10 年: 线性衰减                                     │
-│     │   • > 10 年: 0.5x                                         │
-│     │                                                           │
-│     └─> 最终评分 = 基础 × 影响因子 × 同行评议 × 时效性 × 相关性  │
-│                                                                 │
-│  2. [单位标准化] 统一转换为 SI 单位                              │
-│     • 1 km → 1000 m                                            │
-│     • 1 GB → 1e9 bytes                                         │
-│     • 等                                                       │
-│                                                                 │
-│  3. [冲突检测]                                                   │
-│     │                                                           │
-│     ├─> 提取所有数值                                            │
-│     │   └─> {value, unit, context, evidenceId}                 │
-│     │                                                           │
-│     ├─> 按 (parameter + context) 分组                           │
-│     │                                                           │
-│     ├─> 计算差异: variance = (ValueA - ValueB) / Max           │
-│     │                                                           │
-│     └─> 若 variance > 15% 且环境相似                            │
-│         └─> 生成 ConflictRecord                                │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+行为：
+1. 先修订计划。
+2. 立即调用 `start_research`。
+3. 新建 task_id 并进入 RUNNING。
 
-#### 输出
+## 4.3 REPORT 模式（只改报告，不重检索）
+触发词示例：`改写报告 / 演讲稿 / 改风格 / rewrite`。
 
-```typescript
-interface ConflictRecord {
-  conflictId: string;
-  parameter: string;  // 发生冲突的参数名称
-  disputedValues: Array<{
-    value: number;
-    unit: string;
-    evidenceId: string;
-    source: string;
-  }>;
-  variance: number;  // 差异程度 (百分比)
-  context: string;   // 冲突上下文
-  resolutionStatus: 'OPEN' | 'RESOLVED' | 'IGNORED';
-  resolution?: {
-    selectedEvidenceId: string;
-    reason: string;
-    resolvedAt: string;
-  };
-}
-```
+行为：
+1. 会话状态置 `RUNNING`。
+2. 写一条“正在修改中”系统消息。
+3. 异步执行报告改写任务：
+   - 优先基于现有报告做 LLM 改写
+   - 若指令包含“从证据重写/全量重写”等标记，可触发证据重建
+4. 追加新的 `FINAL_REPORT`。
+5. 会话回 `COMPLETED`。
 
 ---
 
-### 3.4 MCP Executor Agent (MCP 执行代理)
+## 5. 前端视角流程
 
-#### 职能
-安全地连接外部工具与数据源。
+## 5.1 页面启动
+- `listConversations()` 拉侧栏。
+- 若有会话自动选第一条。
 
-#### 输入
+## 5.2 轮询策略
+当 active 会话状态为：
+- `RUNNING`
+- `DRAFTING_PLAN`
 
-```typescript
-interface MCPExecutionRequest {
-  toolName: string;
-  method: string;
-  params: Record<string, any>;
-  mode: 'read' | 'write' | 'execute';
-}
-```
+前端按 `VITE_CONVERSATION_REFRESH_MS`（默认 2500ms）轮询：
+- `GET /conversations/{id}`
+- `GET /conversations`
 
-#### 处理流程
+## 5.3 时间线渲染规则
+- `PLAN_*` 消息：代码块 + “打开草稿抽屉”。
+- `PROGRESS_GROUP`：可折叠，显示 phase/state/progress 明细。
+- `FINAL_REPORT`：支持全宽、收起、下载。
+- `ERROR`：红色文本。
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      MCP Executor 处理流程                        │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  1. [协议处理] 基于 JSON-RPC 2.0                                 │
-│     └─> 构建 JSON-RPC 请求体                                    │
-│                                                                 │
-│  2. [权限检查]                                                   │
-│     │                                                           │
-│     ├─> Read-Only 模式                                          │
-│     │   └─> 允许直接执行                                        │
-│     │                                                           │
-│     └─> Write/Execute 模式                                      │
-│         ├─> 挂起任务                                            │
-│         ├─> 返回 USER_CONFIRMATION_REQUIRED                     │
-│         └─> 等待 UI 授权后执行                                   │
-│                                                                 │
-│  3. [执行调用]                                                   │
-│     │                                                           │
-│     ├─> 短耗时任务                                              │
-│     │   └─> 同步等待结果                                        │
-│     │                                                           │
-│     └─> 长耗时任务                                              │
-│         ├─> 返回 JOB_ID                                         │
-│         └─> 每 5 秒轮询一次状态                                  │
-│                                                                 │
-│  4. [沙盒隔离]                                                   │
-│     └─> 若执行失败，隔离错误，返回部分结果                       │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-#### JSON-RPC 请求示例
-
-```json
-{
-  "jsonrpc": "2.0",
-  "method": "tools/call",
-  "params": {
-    "name": "python-executor",
-    "arguments": {
-      "code": "print('Hello World')",
-      "timeout": 30
-    }
-  },
-  "id": 1
-}
-```
-
-#### 输出
-
-```typescript
-interface MCPExecutionResult {
-  status: 'SUCCESS' | 'USER_CONFIRMATION_REQUIRED' | 'FAILED';
-  result?: any;
-  jobId?: string;  // 长耗时任务
-  error?: string;
-}
-```
+## 5.4 历史轮次
+同一会话多次运行会产生多个 task_id。
+时间线支持：
+- 展示全部历史轮次
+- 仅显示当前轮次（按消息中的 taskId 过滤）
 
 ---
 
-### 3.5 Writer Agent (写作代理)
+## 6. 检索与证据流
 
-#### 职能
-执行增量式文档生成作业。
+## 6.1 查询生成
+`RetrievalService.expand_query` 统一附加近 3 年窗口。
 
-#### 输入
+## 6.2 Provider 选择
+输入 `searchSources` 会做归一化：
+- `arxiv` / `arxivorg` -> `arxiv`
+- `semanticscholar` / `s2` -> `semanticscholar`
+- `tavily` -> `tavily`
 
-```typescript
-interface WritingRequest {
-  taskNode: TaskNode;
-  evidences: Evidence[];
-  existingContent: string;  // 已存在的内容
-  lockedSections: string[];  // 已锁定的段落 ID
-}
-```
+## 6.3 并发调用
+每个 provider 独立 task，失败只影响自己，不影响总流程。
 
-#### 处理流程
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                       Writer Agent 处理流程                       │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  1. [分段绑定]                                                   │
-│     └─> 每个 # Section 绑定至特定 TaskNode                      │
-│                                                                 │
-│  2. [锁定检查]                                                   │
-│     └─> 检查 lockedSections，跳过已锁定段落                      │
-│                                                                 │
-│  3. [局部生成]                                                   │
-│     │                                                           │
-│     ├─> 节点完成时触发                                          │
-│     ├─> 仅生成对应段落                                          │
-│     └─> 使用 LLM (GPT-4 / Claude Opus)                         │
-│                                                                 │
-│  4. [溯源索引]                                                   │
-│     │                                                           │
-│     ├─> 维护 UUID -> Citation 映射                              │
-│     └─> 自动生成 [1][2] 引用标记                                │
-│                                                                 │
-│  5. [增量润色]                                                   │
-│     │                                                           │
-│     ├─> 合并新段落到现有内容                                    │
-│     └─> 检测并修复格式问题                                      │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-#### 输出
-
-```typescript
-interface WritingResult {
-  content: string;  // Markdown 格式
-  citations: Record<string, Citation>;  // UUID -> 映射
-  lockedSections: string[];  // 更新后的锁定列表
-}
-
-interface Citation {
-  id: string;
-  authors: string[];
-  title: string;
-  year: number;
-  source: string;
-  url: string;
-}
-```
+## 6.4 质量过滤
+证据写库前会过滤掉：
+- 非 http(s)
+- placeholder host
+- 内容太短
 
 ---
 
-## 4. 数据流转关系
+## 7. 冲突与投票流程
 
-### 4.1 全局数据流图
-
-```
-┌──────────────┐
-│  User Input  │
-│  (研究议题)   │
-└──────┬───────┘
-       │
-       ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                       Master Planner                            │
-│  输入: CreateTaskRequest                                         │
-│  输出: DAGGraph (nodes + edges)                                  │
-└──────┬──────────────────────────────────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      Retrieval Agent                             │
-│  输入: TaskNode + Query                                          │
-│  输出: Evidence[]                                                │
-└──────┬──────────────────────────────────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                       Analyst Agent                              │
-│  输入: Evidence[]                                                │
-│  输出: Evidence[] (带评分) + ConflictRecord[]                    │
-└──────┬──────────────────────────────────────────────────────────┘
-       │
-       ├──────────────┐
-       │              ▼
-       │     ┌─────────────────┐
-       │     │  Conflict?      │──Yes──> Reviewing 状态
-       │     └────────┬────────┘
-       │              │ No
-       │              ▼
-       │     ┌─────────────────┐
-       │     │ MCP Required?   │──Yes──> MCP Executor
-       │     └────────┬────────┘
-       │              │ No
-       ▼              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                        Writer Agent                              │
-│  输入: Evidence[] + TaskNode[] + existingContent                 │
-│  输出: Markdown Document + Bibliography                          │
-└──────┬──────────────────────────────────────────────────────────┘
-       │
-       ▼
-┌──────────────┐
-│ Final Report │
-│  (导出)       │
-└──────────────┘
-```
-
-### 4.2 数据结构关系图
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         数据结构关系                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  TaskNode (1) ────────────────┬────────> (N) Evidence           │
-│    ├─ taskId: UUID            │           ├─ id: UUID           │
-│    ├─ status: enum            │           ├─ sourceType: enum   │
-│    ├─ dependencies: UUID[]    │           ├─ content: string    │
-│    ├─ children: UUID[]        │           ├─ score: number      │
-│    └─ output: Evidence[]  ────┘           └─ extractedData      │
-│                                         │                        │
-│                                         ▼                        │
-│                                ConflictRecord                   │
-│                                  ├─ conflictId: UUID            │
-│                                  ├─ disputedValues[]            │
-│                                  └─ resolutionStatus            │
-│                                                                 │
-│  TaskNode (N) ──> DAGGraph                                     │
-│    ├─ nodes: TaskNode[]                                         │
-│    └─ edges: Edge[]                                             │
-│        ├─ from: UUID                                            │
-│        └─ to: UUID                                              │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+1. 引擎进入分析阶段，生成 `ConflictRecord[]`（可为空）。
+2. 前端可调用：
+   - `GET /api/v1/tasks/{task_id}/conflicts`
+3. 用户投票：
+   - `POST /api/v1/evidence/{evidence_id}/vote`
+   - body: `conflictId + selectedEvidenceId + reason`
+4. `ConflictRepository.resolve` 更新为 `RESOLVED`。
 
 ---
 
-## 5. API 接口规范
+## 8. 暂停/恢复/终止/恢复快照
 
-### 5.1 RESTful API 端点
+## 8.1 暂停
+`POST /tasks/{id}/pause`
+- `control.paused = true`
+- 任务状态置 `SUSPENDED`
 
-#### 任务管理
+## 8.2 恢复
+`POST /tasks/{id}/resume`
+- 清 `paused`
+- 重新调用 `start()`
 
-| 方法 | 端点 | 描述 | 请求体 | 响应 |
-|------|------|------|--------|------|
-| POST | `/api/v1/tasks` | 创建新研究任务 | CreateTaskRequest | TaskNode |
-| GET | `/api/v1/tasks/{task_id}` | 获取任务详情 | - | TaskNode |
-| PUT | `/api/v1/tasks/{task_id}` | 更新任务配置 | UpdateTaskRequest | TaskNode |
-| DELETE | `/api/v1/tasks/{task_id}` | 删除任务 | - | DeleteResponse |
-| GET | `/api/v1/tasks/{task_id}/dag` | 获取任务 DAG 结构 | - | DAGGraph |
+## 8.3 终止
+`POST /tasks/{id}/abort`
+- `control.aborted = true`
+- 状态置 `ABORTED`
 
-#### 证据管理
-
-| 方法 | 端点 | 描述 | 请求体 | 响应 |
-|------|------|------|--------|------|
-| GET | `/api/v1/evidence` | 获取证据列表 | QueryParams | Evidence[] |
-| GET | `/api/v1/evidence/{evidence_id}` | 获取证据详情 | - | Evidence |
-| POST | `/api/v1/evidence/{evidence_id}/vote` | 证据投票 | VoteRequest | VoteResponse |
-
-#### 状态控制
-
-| 方法 | 端点 | 描述 | 请求体 | 响应 |
-|------|------|------|--------|------|
-| POST | `/api/v1/tasks/{task_id}/start` | 启动任务执行 | - | StateResponse |
-| POST | `/api/v1/tasks/{task_id}/pause` | 暂停任务 | - | StateResponse |
-| POST | `/api/v1/tasks/{task_id}/resume` | 恢复任务 | - | StateResponse |
-| POST | `/api/v1/tasks/{task_id}/abort` | 终止任务 | - | StateResponse |
-
-### 5.2 WebSocket 事件流
-
-**订阅频道:** `task/{task_id}/progress`
-
-**推送事件类型:**
-
-| 事件类型 | 说明 | 数据结构 |
-|---------|------|----------|
-| TASK_STARTED | 任务开始执行 | `{taskId, timestamp, node}` |
-| TASK_PROGRESS | 进度更新 | `{taskId, timestamp, progress: 0-100}` |
-| EVIDENCE_FOUND | 发现新证据 | `{taskId, timestamp, evidence}` |
-| TASK_COMPLETED | 任务完成 | `{taskId, timestamp, result}` |
-| ERROR | 执行错误 | `{taskId, timestamp, error}` |
-
-### 5.3 请求/响应示例
-
-#### 创建任务
-
-**请求** (POST /api/v1/tasks):
-```json
-{
-  "title": "大语言模型的幻觉问题研究",
-  "description": "调研 LLM 幻觉问题的成因、检测方法和缓解策略",
-  "config": {
-    "maxDepth": 3,
-    "maxNodes": 50,
-    "searchSources": ["arXiv", "Google Scholar"],
-    "priority": 5
-  }
-}
-```
-
-**响应** (201 Created):
-```json
-{
-  "taskId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "status": "READY",
-  "createdAt": "2024-01-01T00:00:00Z",
-  "dag": {
-    "nodes": [...],
-    "edges": [...]
-  }
-}
-```
+## 8.4 快照恢复
+`POST /tasks/{id}/recover`
+- 读取 snapshot 的 `completed_nodes`
+- 从剩余节点继续执行
 
 ---
 
-## 6. 错误处理与容错
+## 9. 报告生成与下载
 
-### 6.1 错误分类与处理策略
+## 9.1 报告文件
+输出目录：`backend/.data/reports/`
+- `{task_id}.md`
+- `{task_id}.bib`
 
-| 错误类型 | 示例 | 处理策略 |
-|---------|------|----------|
-| 网络超时 | API 请求超时 (>30s) | 重试 3 次，指数退避 (1s, 2s, 4s) |
-| API 失败 | 429/5xx 响应 | 切换备用 API，记录日志 |
-| 解析失败 | 网页内容提取异常 | 标记为低质量，继续处理 |
-| DAG 冲突 | 循环依赖检测 | 拒绝提交，返回错误路径 |
-| 资源耗尽 | Token 限额超出 | 暂停任务，用户确认后续 |
-| MCP 失败 | 外部工具调用失败 | 沙盒隔离，返回部分结果 |
+## 9.2 下载接口
+- 任务下载：`GET /tasks/{task_id}/report/download`
+- 会话下载：`GET /conversations/{conversation_id}/report/download`
 
-### 6.2 状态恢复机制
-
-**快照保存:**
-- 触发时机: 每个任务节点完成时
-- 存储位置: Redis
-- 过期时间: 24 小时
-
-**快照结构:**
-```typescript
-interface StateSnapshot {
-  task_id: string;
-  timestamp: string;
-  fsm_state: 'READY' | 'PLANNING' | 'EXECUTING' | 'REVIEWING' | 'SYNTHESIZING' | 'FINALIZING';
-  completed_nodes: string[];
-  pending_nodes: string[];
-  evidence_cache: Record<string, Evidence>;
-  conflict_records: ConflictRecord[];
-}
-```
-
-**恢复逻辑:**
-1. 检查 Redis 中是否存在快照
-2. 若存在，反序列化并恢复状态
-3. 从断点处继续执行
+前端通过 Blob 触发浏览器下载。
 
 ---
 
-## 附录
+## 10. API 调用顺序示例
 
-### A. 状态转换表
+## 10.1 从 0 到 1 完整跑通
 
-| 当前状态 | 触发事件 | 目标状态 |
-|---------|---------|----------|
-| READY | start() | PLANNING |
-| PLANNING | dag_generated | EXECUTING |
-| EXECUTING | conflict_detected | REVIEWING |
-| EXECUTING | all_completed | SYNTHESIZING |
-| REVIEWING | conflict_resolved | EXECUTING |
-| REVIEWING | all_resolved | SYNTHESIZING |
-| SYNTHESIZING | content_approved | FINALIZING |
-| * | abort() | FINALIZING |
-| * | pause() | SUSPENDED |
-| SUSPENDED | resume() | 恢复原状态 |
+1. `POST /conversations`
+2. `GET /conversations/{id}`（前端轮询）
+3. `PUT /conversations/{id}/plan`（可选）
+4. `POST /conversations/{id}/run`
+5. `GET /conversations/{id}`（轮询直到 COMPLETED）
+6. `GET /conversations/{id}/report/download`
 
-### B. 配置参数汇总
+## 10.2 已完成后补检索重跑
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| maxDepth | 3 | 最大搜索深度 |
-| maxNodes | 50 | 最大任务节点数 |
-| L1_CACHE_SIZE | 1000 | L1 缓存容量 |
-| L1_CACHE_TTL | 3600 | L1 缓存过期时间 (秒) |
-| L2_SIMILARITY_THRESHOLD | 0.9 | L2 相似度阈值 |
-| L2_CACHE_TTL | 86400 | L2 缓存过期时间 (秒) |
-| INFO_GAIN_THRESHOLD | 0.2 | 信息增益剪枝阈值 |
-| CONFLICT_VARIANCE_THRESHOLD | 0.15 | 冲突检测差异阈值 (15%) |
-| MAX_CONCURRENT_TASKS | 5 | 最大并发任务数 |
-| RETRY_MAX_ATTEMPTS | 3 | 最大重试次数 |
-| RETRY_BASE_DELAY | 1 | 重试基础延迟 (秒) |
+1. `POST /conversations/{id}/plan/revise`（指令含“补充检索/重跑”）
+2. 后端自动触发新任务运行
+3. 前端轮询 `GET /conversations/{id}` 直到完成
+
+## 10.3 已完成后改写报告
+
+1. `POST /conversations/{id}/plan/revise`（指令含“改写报告/演讲稿”）
+2. 后端异步报告改写
+3. 时间线出现报告改写进度组
+4. 完成后追加新 `FINAL_REPORT`
 
 ---
 
-*文档版本: 1.0*
-*更新日期: 2024*
+## 11. 错误分支与降级策略
+
+- LLM 不可用：
+  - 计划生成回退 `_fallback_plan`
+  - 报告改写回退 `_fallback_revised_report`
+- 检索 provider 失败：
+  - 单 provider 警告，其他 provider 继续
+- 状态迁移非法：
+  - 抛 `InvalidStateTransition`
+  - 任务置 `FAILED`
+- 前端请求超时：
+  - API 层给出统一中文超时提示
+
+---
+
+## 12. 调试建议
+
+1. 后端日志看 `ExecutionEngine` 阶段事件是否完整。
+2. 查 `conversation_messages` 中 `PROGRESS_GROUP` 的 `metadata.entries` 是否连续。
+3. 报告异常优先检查：
+   - `tasks.report_path`
+   - `backend/.data/reports/*.md`
+4. 若计划解析不符合预期，检查 front matter 字段名是否严格使用：
+   - `title/topic/max_depth/max_nodes/priority/search_sources`
+
+---
+
+## 13. 回归检查最小清单
+
+1. 创建会话 -> 生成计划 -> 启动研究 -> 完成 -> 下载报告。
+2. 完成后发送“改成演讲稿”，确认追加新 `FINAL_REPORT`。
+3. 完成后发送“补充检索并重跑”，确认 task_id 变化。
+4. 删除单会话和删除全部会话均可用，运行中任务会被中断。
+5. 移动端抽屉开关、对话框 Esc/遮罩关闭、Enter 发送均正常。
+
+---
+
+如需继续扩展，请先读 `doc.md` 的模块说明，再根据本手册挑选插点。
