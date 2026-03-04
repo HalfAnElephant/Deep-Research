@@ -11,6 +11,14 @@ const STATUS_LABEL: Record<ConversationStatus, string> = {
   FAILED: "失败"
 };
 
+const STATUS_DESCRIPTION: Record<ConversationStatus, string> = {
+  DRAFTING_PLAN: "Agent 正在生成研究方案",
+  PLAN_READY: "方案已就绪，可以开始研究",
+  RUNNING: "研究任务正在执行中",
+  COMPLETED: "研究已完成",
+  FAILED: "执行失败，请重试"
+};
+
 interface ConversationSidebarProps {
   summaries: ConversationSummary[];
   activeConversationId: string | null;
@@ -50,14 +58,19 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
   const [activeItemMenuId, setActiveItemMenuId] = useState<string | null>(null);
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" aria-label="会话列表">
       <div className="sidebar-head">
         <div className="sidebar-head-main">
           <h2>Deep Research</h2>
           <p>多会话研究空间</p>
         </div>
         {showMobileClose && (
-          <button className="ghost pane-close mobile-only" type="button" onClick={onRequestCloseMobile}>
+          <button
+            className="ghost pane-close mobile-only"
+            type="button"
+            onClick={onRequestCloseMobile}
+            aria-label="关闭会话列表"
+          >
             关闭
           </button>
         )}
@@ -72,6 +85,7 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
             setActiveItemMenuId(null);
             onCreateDraft();
           }}
+          aria-label={creatingDraft ? "等待首条输入" : "新建研究"}
         >
           {creatingDraft ? "等待首条输入" : "新建研究"}
         </button>
@@ -89,7 +103,11 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
             aria-expanded={globalMenuOpen}
             aria-controls="sidebar-global-menu"
           >
-            ⋯
+            <svg width="4" height="16" viewBox="0 0 4 16" fill="currentColor" aria-hidden="true">
+              <circle cx="2" cy="3" r="1.5" />
+              <circle cx="2" cy="8" r="1.5" />
+              <circle cx="2" cy="13" r="1.5" />
+            </svg>
           </button>
           {globalMenuOpen && (
             <div className="menu-popover" id="sidebar-global-menu" role="menu" aria-label="更多会话操作">
@@ -102,6 +120,7 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
                   onDeleteAll();
                 }}
                 disabled={deletingAll || summaries.length === 0}
+                aria-label={deletingAll ? "删除中..." : summaries.length === 0 ? "没有会话可删除" : `删除全部 ${summaries.length} 个会话`}
               >
                 {deletingAll ? "删除中..." : "全部删除"}
               </button>
@@ -110,24 +129,29 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
         </div>
       </div>
 
-      <div className="sidebar-list">
+      <nav className="sidebar-list" aria-label="会话列表">
         <div className="sidebar-list-head">
           <span>会话列表</span>
-          <span className="mono">{refreshing ? "刷新中" : `${summaries.length} 个`}</span>
+          <span className="mono" aria-live="polite" aria-atomic="true">
+            {refreshing ? "刷新中" : `${summaries.length} 个`}
+          </span>
         </div>
-        <div className="sidebar-list-body">
+        <ul className="sidebar-list-body" role="list">
           {summaries.length === 0 ? (
-            <div className="empty-item">暂无会话，点击“新建研究”开始。</div>
+            <li className="empty-item" role="status">
+              暂无会话，点击"新建研究"开始。
+            </li>
           ) : (
             summaries.map((conversation) => {
               const isMenuOpen = activeItemMenuId === conversation.conversationId;
               const deleting = deletingConversationId === conversation.conversationId;
               const renaming = renamingConversationId === conversation.conversationId;
+              const isActive = activeConversationId === conversation.conversationId;
 
               return (
-                <div
+                <li
                   key={conversation.conversationId}
-                  className={`conversation-item ${activeConversationId === conversation.conversationId ? "active" : ""}`}
+                  className={`conversation-item ${isActive ? "active" : ""}`}
                 >
                   <button
                     className="conversation-select"
@@ -137,13 +161,21 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
                       setActiveItemMenuId(null);
                       onSelect(conversation.conversationId);
                     }}
+                    aria-current={isActive ? "true" : undefined}
+                    aria-describedby={`status-${conversation.conversationId}`}
                   >
                     <div className="conversation-topic">{conversation.topic}</div>
                     <div className="conversation-meta">
-                      <span className={`status-chip ${conversation.status.toLowerCase()}`}>
+                      <span
+                        id={`status-${conversation.conversationId}`}
+                        className={`status-chip ${conversation.status.toLowerCase()}`}
+                        aria-label={STATUS_DESCRIPTION[conversation.status]}
+                      >
                         {STATUS_LABEL[conversation.status]}
                       </span>
-                      <span className="mono">{formatLocalTime(conversation.updatedAt)}</span>
+                      <time className="mono" dateTime={conversation.updatedAt}>
+                        {formatLocalTime(conversation.updatedAt)}
+                      </time>
                     </div>
                   </button>
 
@@ -158,19 +190,23 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
                         );
                       }}
                       title="会话操作"
-                      aria-label={`打开会话“${conversation.topic}”操作`}
+                      aria-label={`打开会话"${conversation.topic}"操作`}
                       aria-haspopup="menu"
                       aria-expanded={isMenuOpen}
                       aria-controls={`conversation-menu-${conversation.conversationId}`}
                     >
-                      ⋯
+                      <svg width="4" height="16" viewBox="0 0 4 16" fill="currentColor" aria-hidden="true">
+                        <circle cx="2" cy="3" r="1.5" />
+                        <circle cx="2" cy="8" r="1.5" />
+                        <circle cx="2" cy="13" r="1.5" />
+                      </svg>
                     </button>
                     {isMenuOpen && (
                       <div
                         className="menu-popover item-menu"
                         id={`conversation-menu-${conversation.conversationId}`}
                         role="menu"
-                        aria-label={`会话“${conversation.topic}”操作`}
+                        aria-label={`会话"${conversation.topic}"操作`}
                       >
                         <button
                           className="menu-item"
@@ -181,6 +217,7 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
                             onRename(conversation.conversationId);
                           }}
                           disabled={renaming || deleting}
+                          aria-busy={renaming}
                         >
                           {renaming ? "重命名中..." : "重命名"}
                         </button>
@@ -193,18 +230,19 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
                             onDelete(conversation.conversationId);
                           }}
                           disabled={deleting || renaming}
+                          aria-busy={deleting}
                         >
                           {deleting ? "删除中..." : "删除"}
                         </button>
                       </div>
                     )}
                   </div>
-                </div>
+                </li>
               );
             })
           )}
-        </div>
-      </div>
+        </ul>
+      </nav>
     </aside>
   );
 }
