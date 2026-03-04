@@ -1,4 +1,5 @@
 import type { ConversationStatus } from "../types";
+import { PlanConfigForm } from "./PlanConfigForm";
 
 interface PlanEditorPaneProps {
   markdown: string;
@@ -109,42 +110,50 @@ export function PlanEditorPane(props: PlanEditorPaneProps) {
         </div>
       </header>
       <div className="editor-actions" role="toolbar" aria-label="编辑器操作">
-        <button
-          className="primary"
-          type="button"
-          onClick={onSave}
-          disabled={saveDisabled}
-          aria-label={dirty ? "保存草稿" : "已保存，无需操作"}
-          aria-busy={saving}
-        >
-          {saving ? "保存中..." : dirty ? "保存草稿" : "已保存"}
-        </button>
-        <button
-          className="primary subtle"
-          type="button"
-          onClick={onStart}
-          disabled={startDisabled}
-          aria-label={canStart(status) ? "开始执行研究" : "无法开始研究"}
-          aria-busy={starting}
-          title={getStatusDescription(status)}
-        >
-          {starting ? "启动中..." : "开始研究"}
-        </button>
-        <button
-          className="ghost"
-          type="button"
-          onClick={onDownload}
-          disabled={!downloadEnabled || downloading}
-          aria-label={downloadEnabled ? "下载研究报告" : "研究完成后可下载"}
-          aria-busy={downloading}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px' }}>
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-          {downloading ? "下载中..." : "下载报告"}
-        </button>
+        <PlanConfigForm
+          markdown={markdown}
+          onMarkdownChange={onChange}
+          defaultExpanded={false}
+          disabled={saving || starting}
+        />
+        <div className="editor-action-buttons">
+          <button
+            className="primary"
+            type="button"
+            onClick={onSave}
+            disabled={saveDisabled}
+            aria-label={dirty ? "保存草稿" : "已保存，无需操作"}
+            aria-busy={saving}
+          >
+            {saving ? "保存中..." : dirty ? "保存草稿" : "已保存"}
+          </button>
+          <button
+            className="primary subtle"
+            type="button"
+            onClick={onStart}
+            disabled={startDisabled}
+            aria-label={canStart(status) ? "开始执行研究" : "无法开始研究"}
+            aria-busy={starting}
+            title={getStatusDescription(status)}
+          >
+            {starting ? "启动中..." : "开始研究"}
+          </button>
+          <button
+            className="ghost"
+            type="button"
+            onClick={onDownload}
+            disabled={!downloadEnabled || downloading}
+            aria-label={downloadEnabled ? "下载研究报告" : "研究完成后可下载"}
+            aria-busy={downloading}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px' }}>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            {downloading ? "下载中..." : "下载报告"}
+          </button>
+        </div>
       </div>
       <div className="editor-body">
         <div className="editor-meta" aria-live="polite" aria-atomic="true">
