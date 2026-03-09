@@ -199,7 +199,169 @@
 }
 
 /* ============================================================================
- * 5. MOBILE RESPONSIVE
+ * 5. PREVIEW MODE
+ * ============================================================================ */
+
+.preview-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg-soft);
+  color: var(--ink-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.preview-toggle:hover {
+  border-color: var(--line-strong);
+  background: var(--bg-warm);
+}
+
+.preview-toggle.active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.editor-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.markdown-preview {
+  flex: 1;
+  width: min(100%, 104ch);
+  min-height: clamp(280px, 52vh, 640px);
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  overflow: auto;
+  background: var(--card);
+  line-height: 1.72;
+  font-size: var(--text-base);
+}
+
+.markdown-preview-empty {
+  color: var(--muted);
+  text-align: center;
+  margin: var(--space-8) 0;
+  font-style: italic;
+}
+
+/* Markdown content styles */
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4,
+.markdown-preview h5,
+.markdown-preview h6 {
+  margin-top: var(--space-4);
+  margin-bottom: var(--space-2);
+  font-weight: var(--font-semibold);
+  line-height: var(--leading-tight);
+  color: var(--ink);
+}
+
+.markdown-preview h1 {
+  font-size: var(--text-xl);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: var(--space-2);
+}
+
+.markdown-preview h2 {
+  font-size: var(--text-lg);
+}
+
+.markdown-preview h3 {
+  font-size: var(--text-base);
+}
+
+.markdown-preview p {
+  margin-bottom: var(--space-3);
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+  margin-bottom: var(--space-3);
+  padding-left: var(--space-4);
+}
+
+.markdown-preview li {
+  margin-bottom: var(--space-1);
+}
+
+.markdown-preview code {
+  background: var(--bg-soft);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.markdown-preview pre {
+  background: var(--bg-soft);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  overflow: auto;
+  margin-bottom: var(--space-3);
+}
+
+.markdown-preview pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.markdown-preview blockquote {
+  border-left: 3px solid var(--primary);
+  padding-left: var(--space-3);
+  margin-left: 0;
+  margin-bottom: var(--space-3);
+  color: var(--ink-secondary);
+}
+
+.markdown-preview a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.markdown-preview a:hover {
+  text-decoration: underline;
+}
+
+.markdown-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: var(--space-3);
+}
+
+.markdown-preview th,
+.markdown-preview td {
+  border: 1px solid var(--line);
+  padding: var(--space-2);
+  text-align: left;
+}
+
+.markdown-preview th {
+  background: var(--bg-soft);
+  font-weight: var(--font-semibold);
+}
+
+.markdown-preview hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: var(--space-4) 0;
+}
+
+/* ============================================================================
+ * 6. MOBILE RESPONSIVE
  * ============================================================================ */
 
 .plan-config-form {
