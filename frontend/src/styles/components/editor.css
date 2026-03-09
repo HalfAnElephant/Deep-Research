@@ -467,7 +467,7 @@
 
 .config-slider {
   width: 100%;
-  height: 6px;
+  height: 4px;
   border-radius: var(--radius-full);
   background: var(--line-subtle);
   outline: none;
@@ -479,35 +479,35 @@
 .config-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: var(--primary);
   border: 2px solid var(--card);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .config-slider::-webkit-slider-thumb:hover {
   transform: scale(1.15);
-  box-shadow: 0 2px 6px var(--primary-glow);
+  box-shadow: 0 2px 8px var(--primary-glow);
 }
 
 .config-slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: var(--primary);
   border: 2px solid var(--card);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .config-slider::-moz-range-thumb:hover {
   transform: scale(1.15);
-  box-shadow: 0 2px 6px var(--primary-glow);
+  box-shadow: 0 2px 8px var(--primary-glow);
 }
 
 .config-slider:disabled {
@@ -608,10 +608,10 @@
 .config-checkbox-input {
   appearance: none;
   -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--line-strong);
-  border-radius: 4px;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 3px;
   background: var(--card);
   cursor: pointer;
   position: relative;
@@ -627,12 +627,12 @@
 .config-checkbox-input:checked::after {
   content: "";
   position: absolute;
-  left: 4px;
-  top: 1px;
-  width: 5px;
-  height: 9px;
+  left: 4.5px;
+  top: 1.5px;
+  width: 4px;
+  height: 8px;
   border: solid var(--card);
-  border-width: 0 2px 2px 0;
+  border-width: 0 1.5px 1.5px 0;
   transform: rotate(45deg);
 }
 

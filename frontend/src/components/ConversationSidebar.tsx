@@ -19,6 +19,45 @@ const STATUS_DESCRIPTION: Record<ConversationStatus, string> = {
   FAILED: "执行失败，请重试"
 };
 
+/**
+ * 根据会话主题生成合适的emoji
+ * 使用简单的关键词匹配来选择emoji
+ */
+function getTopicEmoji(topic: string): string {
+  const lowerTopic = topic.toLowerCase();
+
+  // 科学研究相关
+  if (lowerTopic.includes('ai') || lowerTopic.includes('人工智能') || lowerTopic.includes('机器学习') || lowerTopic.includes('深度学习')) return '🤖';
+  if (lowerTopic.includes('医学') || lowerTopic.includes('医学') || lowerTopic.includes('健康') || lowerTopic.includes('医疗')) return '🏥';
+  if (lowerTopic.includes('生物') || lowerTopic.includes('基因') || lowerTopic.includes('细胞')) return '🧬';
+  if (lowerTopic.includes('化学') || lowerTopic.includes('分子') || lowerTopic.includes('药物')) return '⚗️';
+  if (lowerTopic.includes('物理') || lowerTopic.includes('量子') || lowerTopic.includes('粒子')) return '⚛️';
+  if (lowerTopic.includes('天文') || lowerTopic.includes('宇宙') || lowerTopic.includes('星球')) return '🌌';
+  if (lowerTopic.includes('数学') || lowerTopic.includes('算法') || lowerTopic.includes('计算')) return '🔢';
+  if (lowerTopic.includes('数据') || lowerTopic.includes('统计') || lowerTopic.includes('分析')) return '📊';
+  if (lowerTopic.includes('环境') || lowerTopic.includes('气候') || lowerTopic.includes('生态')) return '🌿';
+  if (lowerTopic.includes('能源') || lowerTopic.includes('电力') || lowerTopic.includes('可持续')) return '⚡';
+  if (lowerTopic.includes('材料') || lowerTopic.includes('纳米') || lowerTopic.includes('合成')) return '🔬';
+  if (lowerTopic.includes('心理') || lowerTopic.includes('认知') || lowerTopic.includes('神经')) return '🧠';
+  if (lowerTopic.includes('经济') || lowerTopic.includes('金融') || lowerTopic.includes('市场')) return '💹';
+  if (lowerTopic.includes('社会') || lowerTopic.includes('人口') || lowerTopic.includes('文化')) return '👥';
+  if (lowerTopic.includes('教育') || lowerTopic.includes('学习') || lowerTopic.includes('教学')) return '📚';
+  if (lowerTopic.includes('法律') || lowerTopic.includes('政策') || lowerTopic.includes('法规')) return '⚖️';
+  if (lowerTopic.includes('历史') || lowerTopic.includes('考古') || lowerTopic.includes('文明')) return '🏛️';
+  if (lowerTopic.includes('语言') || lowerTopic.includes('文字') || lowerTopic.includes('翻译')) return '💬';
+  if (lowerTopic.includes('艺术') || lowerTopic.includes('设计') || lowerTopic.includes('创意')) return '🎨';
+  if (lowerTopic.includes('音乐') || lowerTopic.includes('声音') || lowerTopic.includes('音频')) return '🎵';
+  if (lowerTopic.includes('体育') || lowerTopic.includes('运动') || lowerTopic.includes('健身')) return '🏃';
+  if (lowerTopic.includes('食品') || lowerTopic.includes('营养') || lowerTopic.includes('农业')) return '🌾';
+  if (lowerTopic.includes('交通') || lowerTopic.includes('汽车') || lowerTopic.includes('航空')) return '🚀';
+  if (lowerTopic.includes('建筑') || lowerTopic.includes('城市') || lowerTopic.includes('规划')) return '🏗️';
+  if (lowerTopic.includes('网络') || lowerTopic.includes('安全') || lowerTopic.includes('隐私')) return '🔐';
+  if (lowerTopic.includes('游戏') || lowerTopic.includes('娱乐') || lowerTopic.includes('媒体')) return '🎮';
+
+  // 默认返回研究相关的emoji
+  return '🔬';
+}
+
 // 键盘导航相关类型
 type FocusArea = "list" | "globalMenu" | "itemMenu";
 
@@ -527,18 +566,23 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
                     aria-current={isActive ? "true" : undefined}
                     aria-describedby={`status-${conversation.conversationId}`}
                   >
-                    <div className="conversation-topic">{conversation.topic}</div>
-                    <div className="conversation-meta">
-                      <span
-                        id={`status-${conversation.conversationId}`}
-                        className={`status-chip ${conversation.status.toLowerCase()}`}
-                        aria-label={STATUS_DESCRIPTION[conversation.status]}
-                      >
-                        {STATUS_LABEL[conversation.status]}
-                      </span>
-                      <time className="mono" dateTime={conversation.updatedAt}>
-                        {formatLocalTime(conversation.updatedAt)}
-                      </time>
+                    <span className="conversation-emoji" aria-hidden="true">
+                      {getTopicEmoji(conversation.topic)}
+                    </span>
+                    <div className="conversation-content">
+                      <div className="conversation-topic">{conversation.topic}</div>
+                      <div className="conversation-meta">
+                        <span
+                          id={`status-${conversation.conversationId}`}
+                          className={`status-chip ${conversation.status.toLowerCase()}`}
+                          aria-label={STATUS_DESCRIPTION[conversation.status]}
+                        >
+                          {STATUS_LABEL[conversation.status]}
+                        </span>
+                        <time className="mono" dateTime={conversation.updatedAt}>
+                          {formatLocalTime(conversation.updatedAt)}
+                        </time>
+                      </div>
                     </div>
                   </button>
 
