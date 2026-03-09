@@ -276,7 +276,7 @@ export interface PlanConfigFormProps {
 export function PlanConfigForm({
   markdown,
   onMarkdownChange,
-  defaultExpanded = false,
+  defaultExpanded = true,
   disabled = false,
   className = "",
 }: PlanConfigFormProps) {

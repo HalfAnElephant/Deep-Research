@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import type { ConversationStatus } from "../types";
 import { PlanConfigForm } from "./PlanConfigForm";
 
@@ -73,6 +73,10 @@ function PlanEditorPaneBase(props: PlanEditorPaneProps) {
   // Character and line count for display
   const lineCount = markdown.split("\n").length;
   const charCount = markdown.length;
+
+  // State for markdown section collapse
+  const [markdownCollapsed, setMarkdownCollapsed] = useState(false);
+  const toggleMarkdownCollapse = () => setMarkdownCollapsed(!markdownCollapsed);
 
   return (
     <section className="editor-pane" aria-label="研究方案编辑器">
@@ -166,25 +170,53 @@ function PlanEditorPaneBase(props: PlanEditorPaneProps) {
       </div>
       <div className="editor-body">
         <div className="editor-meta" aria-live="polite" aria-atomic="true">
-          {lineCount} 行 · {charCount} 字
-        </div>
-        {mode === "edit" ? (
-          <textarea
-            value={markdown}
-            onChange={(event) => onChange(event.target.value)}
-            placeholder="在此输入研究方案..."
-            aria-label="研究方案编辑"
-            spellCheck={false}
-          />
-        ) : (
-          <pre
-            className="preview-content"
-            role="region"
-            aria-label="方案预览"
-            tabIndex={0}
+          <button
+            type="button"
+            className="markdown-collapse-toggle"
+            onClick={toggleMarkdownCollapse}
+            aria-expanded={!markdownCollapsed}
+            aria-label={markdownCollapsed ? "展开 Markdown 源码" : "折叠 Markdown 源码"}
           >
-            {markdown || "暂无可预览内容"}
-          </pre>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden="true"
+              style={{
+                transform: markdownCollapsed ? "rotate(-90deg)" : "rotate(0deg)",
+                transition: "transform 200ms ease"
+              }}
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+            <span>Markdown 源码</span>
+            <span className="editor-meta-stats">{lineCount} 行 · {charCount} 字</span>
+          </button>
+        </div>
+        {!markdownCollapsed && (
+          <>
+            {mode === "edit" ? (
+              <textarea
+                value={markdown}
+                onChange={(event) => onChange(event.target.value)}
+                placeholder="在此输入研究方案..."
+                aria-label="研究方案编辑"
+                spellCheck={false}
+              />
+            ) : (
+              <pre
+                className="preview-content"
+                role="region"
+                aria-label="方案预览"
+                tabIndex={0}
+              >
+                {markdown || "暂无可预览内容"}
+              </pre>
+            )}
+          </>
         )}
       </div>
     </section>
