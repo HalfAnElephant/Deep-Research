@@ -1,6 +1,6 @@
-import { useState } from "react";
-
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ConversationStatus, ConversationSummary } from "../types";
+import { useMenuState } from "../hooks";
 import { formatLocalTime } from "../utils/formatTime";
 
 const STATUS_LABEL: Record<ConversationStatus, string> = {
@@ -18,6 +18,15 @@ const STATUS_DESCRIPTION: Record<ConversationStatus, string> = {
   COMPLETED: "研究已完成",
   FAILED: "执行失败，请重试"
 };
+
+// 键盘导航相关类型
+type FocusArea = "list" | "globalMenu" | "itemMenu";
+
+interface KeyboardNavigationState {
+  focusedConversationIndex: number;
+  focusedMenuIndex: number;
+  currentFocusArea: FocusArea;
+}
 
 interface ConversationSidebarProps {
   summaries: ConversationSummary[];
@@ -54,11 +63,329 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
     onDeleteAll
   } = props;
 
-  const [globalMenuOpen, setGlobalMenuOpen] = useState(false);
-  const [activeItemMenuId, setActiveItemMenuId] = useState<string | null>(null);
+  const {
+    globalMenuOpen,
+    activeItemMenuId,
+    toggleGlobalMenu,
+    closeGlobalMenu,
+    toggleItemMenu,
+    closeItemMenu,
+    closeAllMenus,
+    isItemMenuOpen
+  } = useMenuState();
+
+  // ============ 键盘导航状态 ============
+  const [navState, setNavState] = useState<KeyboardNavigationState>({
+    focusedConversationIndex: -1,
+    focusedMenuIndex: 0,
+    currentFocusArea: "list"
+  });
+
+  // Refs 用于焦点管理
+  const sidebarRef = useRef<HTMLElement>(null);
+  const globalMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const globalMenuRef = useRef<HTMLDivElement>(null);
+  const itemMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const itemMenuRef = useRef<HTMLDivElement>(null);
+  const conversationItemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const liveRegionRef = useRef<HTMLDivElement>(null);
+
+  // 公告消息状态
+  const [announcement, setAnnouncement] = useState<string>("");
+
+  // ============ 辅助函数 ============
+
+  // 公告状态变化（用于屏幕阅读器）
+  const announce = useCallback((message: string) => {
+    setAnnouncement(message);
+    // 短暂延迟后清空，允许重复公告相同消息
+    setTimeout(() => setAnnouncement(""), 1000);
+  }, []);
+
+  // 获取当前聚焦的会话 ID
+  const getFocusedConversationId = useCallback(() => {
+    if (navState.focusedConversationIndex >= 0 && navState.focusedConversationIndex < summaries.length) {
+      return summaries[navState.focusedConversationIndex].conversationId;
+    }
+    return null;
+  }, [navState.focusedConversationIndex, summaries]);
+
+  // 获取菜单项数量
+  const getMenuItemCount = useCallback((isGlobal: boolean) => {
+    if (isGlobal) {
+      // 全局菜单只有一个"全部删除"项
+      return 1;
+    }
+    // 会话菜单有"重命名"和"删除"两项
+    return 2;
+  }, []);
+
+  // ============ 焦点管理 ============
+
+  // 聚焦会话列表项
+  const focusConversationItem = useCallback((index: number) => {
+    if (index >= 0 && index < summaries.length) {
+      const conversationId = summaries[index].conversationId;
+      const buttonEl = conversationItemRefs.current.get(conversationId);
+      if (buttonEl) {
+        buttonEl.focus();
+      }
+    }
+  }, [summaries]);
+
+  // 聚焦菜单项
+  const focusMenuItem = useCallback((menuRef: React.RefObject<HTMLDivElement | null>, index: number) => {
+    if (menuRef.current) {
+      const menuItems = menuRef.current.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])');
+      if (index >= 0 && index < menuItems.length) {
+        menuItems[index].focus();
+      }
+    }
+  }, []);
+
+  // 恢复焦点到触发元素
+  const restoreFocusToTrigger = useCallback((isGlobal: boolean) => {
+    if (isGlobal && globalMenuTriggerRef.current) {
+      globalMenuTriggerRef.current.focus();
+    } else if (!isGlobal && itemMenuTriggerRef.current) {
+      itemMenuTriggerRef.current.focus();
+    }
+  }, []);
+
+  // ============ 键盘事件处理 ============
+
+  // 处理会话列表键盘导航
+  const handleListKeyDown = useCallback((event: React.KeyboardEvent) => {
+    const { key } = event;
+
+    switch (key) {
+      case "ArrowDown":
+        event.preventDefault();
+        setNavState(prev => {
+          const newIndex = prev.focusedConversationIndex < summaries.length - 1
+            ? prev.focusedConversationIndex + 1
+            : 0;
+          focusConversationItem(newIndex);
+          return { ...prev, focusedConversationIndex: newIndex };
+        });
+        break;
+
+      case "ArrowUp":
+        event.preventDefault();
+        setNavState(prev => {
+          const newIndex = prev.focusedConversationIndex > 0
+            ? prev.focusedConversationIndex - 1
+            : summaries.length - 1;
+          focusConversationItem(newIndex);
+          return { ...prev, focusedConversationIndex: newIndex };
+        });
+        break;
+
+      case "Enter":
+      case " ": // Space 键
+        event.preventDefault();
+        if (navState.focusedConversationIndex >= 0) {
+          const conversationId = summaries[navState.focusedConversationIndex]?.conversationId;
+          if (conversationId) {
+            closeAllMenus();
+            onSelect(conversationId);
+            announce(`已打开会话：${summaries[navState.focusedConversationIndex].topic}`);
+          }
+        }
+        break;
+
+      case "Delete":
+      case "Backspace":
+        event.preventDefault();
+        if (navState.focusedConversationIndex >= 0) {
+          const conversationId = summaries[navState.focusedConversationIndex]?.conversationId;
+          if (conversationId) {
+            closeAllMenus();
+            onDelete(conversationId);
+            announce(`正在删除会话：${summaries[navState.focusedConversationIndex].topic}`);
+          }
+        }
+        break;
+
+      case "F2":
+        event.preventDefault();
+        if (navState.focusedConversationIndex >= 0) {
+          const conversationId = summaries[navState.focusedConversationIndex]?.conversationId;
+          if (conversationId) {
+            closeAllMenus();
+            onRename(conversationId);
+            announce(`正在重命名会话：${summaries[navState.focusedConversationIndex].topic}`);
+          }
+        }
+        break;
+
+      case "Home":
+        event.preventDefault();
+        setNavState(prev => ({ ...prev, focusedConversationIndex: 0 }));
+        focusConversationItem(0);
+        break;
+
+      case "End":
+        event.preventDefault();
+        const lastIndex = summaries.length - 1;
+        setNavState(prev => ({ ...prev, focusedConversationIndex: lastIndex }));
+        focusConversationItem(lastIndex);
+        break;
+    }
+  }, [summaries, navState.focusedConversationIndex, focusConversationItem, closeAllMenus, onSelect, onDelete, onRename, announce]);
+
+  // 处理菜单键盘导航
+  const handleMenuKeyDown = useCallback((
+    event: React.KeyboardEvent,
+    isGlobal: boolean
+  ) => {
+    const { key } = event;
+    const menuRef = isGlobal ? globalMenuRef : itemMenuRef;
+    const itemCount = getMenuItemCount(isGlobal);
+
+    switch (key) {
+      case "ArrowDown":
+        event.preventDefault();
+        setNavState(prev => {
+          const newIndex = prev.focusedMenuIndex < itemCount - 1
+            ? prev.focusedMenuIndex + 1
+            : 0;
+          focusMenuItem(menuRef, newIndex);
+          return { ...prev, focusedMenuIndex: newIndex };
+        });
+        break;
+
+      case "ArrowUp":
+        event.preventDefault();
+        setNavState(prev => {
+          const newIndex = prev.focusedMenuIndex > 0
+            ? prev.focusedMenuIndex - 1
+            : itemCount - 1;
+          focusMenuItem(menuRef, newIndex);
+          return { ...prev, focusedMenuIndex: newIndex };
+        });
+        break;
+
+      case "Enter":
+      case " ":
+        // 让 onClick 处理，这里只阻止默认行为
+        break;
+
+      case "Escape":
+        event.preventDefault();
+        if (isGlobal) {
+          closeGlobalMenu();
+        } else {
+          closeItemMenu();
+        }
+        restoreFocusToTrigger(isGlobal);
+        announce("菜单已关闭");
+        break;
+
+      case "Tab":
+        // Tab 键关闭菜单并移动焦点
+        if (isGlobal) {
+          closeGlobalMenu();
+        } else {
+          closeItemMenu();
+        }
+        // 不阻止默认行为，允许 Tab 自然移动
+        break;
+    }
+  }, [getMenuItemCount, focusMenuItem, closeGlobalMenu, closeItemMenu, restoreFocusToTrigger, announce]);
+
+  // ============ 菜单打开时的焦点管理 ============
+
+  // 全局菜单打开时聚焦第一个菜单项
+  useEffect(() => {
+    if (globalMenuOpen && globalMenuRef.current) {
+      setNavState(prev => ({
+        ...prev,
+        currentFocusArea: "globalMenu",
+        focusedMenuIndex: 0
+      }));
+      // 使用 setTimeout 确保 DOM 已渲染
+      setTimeout(() => {
+        focusMenuItem(globalMenuRef, 0);
+      }, 0);
+      announce("全局菜单已打开");
+    }
+  }, [globalMenuOpen, focusMenuItem, announce]);
+
+  // 会话菜单打开时聚焦第一个菜单项
+  useEffect(() => {
+    if (activeItemMenuId && itemMenuRef.current) {
+      setNavState(prev => ({
+        ...prev,
+        currentFocusArea: "itemMenu",
+        focusedMenuIndex: 0
+      }));
+      // 使用 setTimeout 确保 DOM 已渲染
+      setTimeout(() => {
+        focusMenuItem(itemMenuRef, 0);
+      }, 0);
+      const conversation = summaries.find(s => s.conversationId === activeItemMenuId);
+      if (conversation) {
+        announce(`会话"${conversation.topic}"的菜单已打开`);
+      }
+    }
+  }, [activeItemMenuId, focusMenuItem, summaries, announce]);
+
+  // 初始化聚焦到当前活动会话或第一个会话
+  useEffect(() => {
+    if (summaries.length > 0 && navState.focusedConversationIndex === -1) {
+      let initialIndex = 0;
+      if (activeConversationId) {
+        const activeIndex = summaries.findIndex(s => s.conversationId === activeConversationId);
+        if (activeIndex >= 0) {
+          initialIndex = activeIndex;
+        }
+      }
+      setNavState(prev => ({ ...prev, focusedConversationIndex: initialIndex }));
+    }
+  }, [summaries, activeConversationId, navState.focusedConversationIndex]);
+
+  // ============ 回调函数包装 ============
+
+  // 打开全局菜单（保存触发元素引用）
+  const handleToggleGlobalMenu = useCallback(() => {
+    toggleGlobalMenu();
+  }, [toggleGlobalMenu]);
+
+  // 打开会话菜单（保存触发元素引用）
+  const handleToggleItemMenu = useCallback((conversationId: string, triggerElement: HTMLButtonElement) => {
+    itemMenuTriggerRef.current = triggerElement;
+    toggleItemMenu(conversationId);
+  }, [toggleItemMenu]);
 
   return (
-    <aside className="sidebar" aria-label="会话列表">
+    <aside
+      ref={sidebarRef}
+      className="sidebar"
+      aria-label="会话列表"
+    >
+      {/* 屏幕阅读器公告区域 */}
+      <div
+        ref={liveRegionRef}
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+        style={{
+          position: "absolute",
+          width: "1px",
+          height: "1px",
+          padding: 0,
+          margin: "-1px",
+          overflow: "hidden",
+          clip: "rect(0, 0, 0, 0)",
+          whiteSpace: "nowrap",
+          border: 0
+        }}
+      >
+        {announcement}
+      </div>
+
       <div className="sidebar-head">
         <div className="sidebar-head-main">
           <h2>Deep Research</h2>
@@ -81,8 +408,7 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
           className="primary"
           type="button"
           onClick={() => {
-            setGlobalMenuOpen(false);
-            setActiveItemMenuId(null);
+            closeAllMenus();
             onCreateDraft();
           }}
           aria-label={creatingDraft ? "等待首条输入" : "新建研究"}
@@ -91,11 +417,18 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
         </button>
         <div className="menu-wrap">
           <button
+            ref={globalMenuTriggerRef}
             className={`icon-button ${globalMenuOpen ? "active" : ""}`}
             type="button"
-            onClick={() => {
-              setActiveItemMenuId(null);
-              setGlobalMenuOpen((open) => !open);
+            onClick={handleToggleGlobalMenu}
+            onKeyDown={(e) => {
+              // Enter 或 Space 打开菜单时聚焦第一项
+              if ((e.key === "Enter" || e.key === " ") && !globalMenuOpen) {
+                // 菜单打开后会通过 useEffect 自动聚焦
+              }
+              if (globalMenuOpen) {
+                handleMenuKeyDown(e, true);
+              }
             }}
             title="更多操作"
             aria-label="打开更多会话操作"
@@ -110,13 +443,22 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
             </svg>
           </button>
           {globalMenuOpen && (
-            <div className="menu-popover" id="sidebar-global-menu" role="menu" aria-label="更多会话操作">
+            <div
+              ref={globalMenuRef}
+              className="menu-popover"
+              id="sidebar-global-menu"
+              role="menu"
+              aria-label="更多会话操作"
+              onKeyDown={(e) => handleMenuKeyDown(e, true)}
+            >
               <button
                 className="menu-item danger"
                 type="button"
                 role="menuitem"
+                tabIndex={-1}
                 onClick={() => {
-                  setGlobalMenuOpen(false);
+                  closeGlobalMenu();
+                  restoreFocusToTrigger(true);
                   onDeleteAll();
                 }}
                 disabled={deletingAll || summaries.length === 0}
@@ -136,30 +478,51 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
             {refreshing ? "刷新中" : `${summaries.length} 个`}
           </span>
         </div>
-        <ul className="sidebar-list-body" role="list">
+        <ul
+          className="sidebar-list-body"
+          role="listbox"
+          aria-label="会话列表"
+          aria-activedescendant={navState.focusedConversationIndex >= 0 ? `conversation-item-${summaries[navState.focusedConversationIndex]?.conversationId}` : undefined}
+          onKeyDown={handleListKeyDown}
+        >
           {summaries.length === 0 ? (
             <li className="empty-item" role="status">
               暂无会话，点击"新建研究"开始。
             </li>
           ) : (
-            summaries.map((conversation) => {
-              const isMenuOpen = activeItemMenuId === conversation.conversationId;
+            summaries.map((conversation, index) => {
+              const isMenuOpen = isItemMenuOpen(conversation.conversationId);
               const deleting = deletingConversationId === conversation.conversationId;
               const renaming = renamingConversationId === conversation.conversationId;
               const isActive = activeConversationId === conversation.conversationId;
+              const isFocused = navState.focusedConversationIndex === index;
 
               return (
                 <li
                   key={conversation.conversationId}
+                  id={`conversation-item-${conversation.conversationId}`}
                   className={`conversation-item ${isActive ? "active" : ""}`}
+                  role="option"
+                  aria-selected={isActive}
                 >
                   <button
+                    ref={(el) => {
+                      if (el) {
+                        conversationItemRefs.current.set(conversation.conversationId, el);
+                      } else {
+                        conversationItemRefs.current.delete(conversation.conversationId);
+                      }
+                    }}
                     className="conversation-select"
                     type="button"
+                    tabIndex={isFocused ? 0 : -1}
                     onClick={() => {
-                      setGlobalMenuOpen(false);
-                      setActiveItemMenuId(null);
+                      closeAllMenus();
+                      setNavState(prev => ({ ...prev, focusedConversationIndex: index }));
                       onSelect(conversation.conversationId);
+                    }}
+                    onFocus={() => {
+                      setNavState(prev => ({ ...prev, focusedConversationIndex: index }));
                     }}
                     aria-current={isActive ? "true" : undefined}
                     aria-describedby={`status-${conversation.conversationId}`}
@@ -181,13 +544,20 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
 
                   <div className="menu-wrap item-menu-wrap">
                     <button
+                      ref={(el) => {
+                        if (isMenuOpen && el) {
+                          itemMenuTriggerRef.current = el;
+                        }
+                      }}
                       className={`icon-button small ${isMenuOpen ? "active" : ""}`}
                       type="button"
-                      onClick={() => {
-                        setGlobalMenuOpen(false);
-                        setActiveItemMenuId((current) =>
-                          current === conversation.conversationId ? null : conversation.conversationId
-                        );
+                      onClick={(e) => {
+                        handleToggleItemMenu(conversation.conversationId, e.currentTarget);
+                      }}
+                      onKeyDown={(e) => {
+                        if (isMenuOpen) {
+                          handleMenuKeyDown(e, false);
+                        }
                       }}
                       title="会话操作"
                       aria-label={`打开会话"${conversation.topic}"操作`}
@@ -203,17 +573,21 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
                     </button>
                     {isMenuOpen && (
                       <div
+                        ref={itemMenuRef}
                         className="menu-popover item-menu"
                         id={`conversation-menu-${conversation.conversationId}`}
                         role="menu"
                         aria-label={`会话"${conversation.topic}"操作`}
+                        onKeyDown={(e) => handleMenuKeyDown(e, false)}
                       >
                         <button
                           className="menu-item"
                           type="button"
                           role="menuitem"
+                          tabIndex={-1}
                           onClick={() => {
-                            setActiveItemMenuId(null);
+                            closeItemMenu();
+                            restoreFocusToTrigger(false);
                             onRename(conversation.conversationId);
                           }}
                           disabled={renaming || deleting}
@@ -225,8 +599,10 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
                           className="menu-item danger"
                           type="button"
                           role="menuitem"
+                          tabIndex={-1}
                           onClick={() => {
-                            setActiveItemMenuId(null);
+                            closeItemMenu();
+                            restoreFocusToTrigger(false);
                             onDelete(conversation.conversationId);
                           }}
                           disabled={deleting || renaming}

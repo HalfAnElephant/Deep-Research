@@ -1,0 +1,700 @@
+/**
+ * ============================================================================
+ * EDITOR COMPONENT STYLES
+ * ============================================================================
+ *
+ * Styles for the editor pane including header, body, actions, and
+ * configuration form components.
+ *
+ * TABLE OF CONTENTS
+ * -----------------
+ * 1. Editor Pane Container
+ * 2. Editor Header
+ * 3. Editor Actions
+ * 4. Editor Body
+ * 5. Mode Switch
+ * 6. Plan Config Form
+ * 7. Form Fields
+ * 8. Slider Controls
+ * 9. Checkbox Components
+ *
+ * ============================================================================
+ */
+
+/* ============================================================================
+ * 1. EDITOR PANE CONTAINER
+ * ============================================================================ */
+
+.editor-pane {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(8px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  transition: background var(--transition-slow), border-color var(--transition-slow);
+}
+
+/* ============================================================================
+ * 2. EDITOR HEADER
+ * ============================================================================ */
+
+.editor-head {
+  border-bottom: 1px solid var(--line);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+  .editor-head {
+    background: linear-gradient(180deg, rgba(30, 41, 59, 0.5), transparent);
+  }
+}
+
+.editor-head h3 {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+}
+
+.editor-head p {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.editor-head-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ============================================================================
+ * 3. EDITOR ACTIONS
+ * ============================================================================ */
+
+.editor-actions {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.editor-actions > button {
+  align-self: flex-start;
+}
+
+.editor-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* ============================================================================
+ * 4. EDITOR BODY
+ * ============================================================================ */
+
+.editor-body {
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+/* Custom scrollbar for editor body */
+.editor-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.editor-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.editor-body::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 3px;
+}
+
+.editor-body::-webkit-scrollbar-thumb:hover {
+  background: var(--line-strong);
+}
+
+.editor-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  padding: var(--space-1) var(--space-4);
+  text-align: right;
+}
+
+.editor-body textarea,
+.editor-body pre,
+.editor-body .preview-content {
+  width: min(100%, 104ch);
+  flex: 1;
+  min-height: clamp(280px, 52vh, 640px);
+  margin: 0 auto;
+}
+
+.editor-body pre,
+.editor-body .preview-content {
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  overflow: auto;
+  white-space: pre-wrap;
+  background: var(--bg-soft);
+  line-height: 1.72;
+  font-size: var(--text-base);
+  word-break: break-word;
+}
+
+.editor-body pre:focus,
+.editor-body .preview-content:focus {
+  outline: none;
+  border-color: var(--line-strong);
+  box-shadow: 0 0 0 2px var(--primary-glow);
+}
+
+/* ============================================================================
+ * 5. MODE SWITCH
+ * ============================================================================ */
+
+.mode-switch {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  padding: 2px;
+  display: inline-flex;
+  gap: 2px;
+  background: var(--bg-soft);
+}
+
+.mode-switch button {
+  border-radius: var(--radius-full);
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  background: transparent;
+  font-size: var(--text-sm);
+  color: var(--ink-secondary);
+  transition: all var(--transition-fast);
+}
+
+.mode-switch button:hover:not(.active) {
+  background: var(--bg-warm);
+}
+
+.mode-switch button.active {
+  background: var(--card);
+  color: var(--primary);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* ============================================================================
+ * 6. PLAN CONFIG FORM
+ * ============================================================================ */
+
+.plan-config-form {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  overflow: hidden;
+  transition: all var(--transition-fast);
+}
+
+.plan-config-form:hover:not(.disabled) {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.plan-config-form.disabled {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+/* Config Form Header */
+.config-form-header {
+  padding: 0;
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--transition-fast);
+}
+
+.plan-config-form.expanded .config-form-header {
+  border-bottom-color: var(--line);
+}
+
+.config-form-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  color: var(--ink-secondary);
+  font-weight: var(--font-medium);
+  font-size: var(--text-base);
+  text-align: left;
+  cursor: pointer;
+  min-height: 44px;
+  transition: background var(--transition-fast);
+}
+
+.config-form-toggle:hover {
+  background: var(--bg-soft);
+}
+
+.config-form-toggle:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+.config-chevron {
+  flex-shrink: 0;
+  transition: transform var(--transition-normal);
+}
+
+.config-chevron.rotated {
+  transform: rotate(180deg);
+}
+
+.config-form-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.unsaved-indicator {
+  color: var(--warning);
+  font-size: var(--text-xl);
+  line-height: 1;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Config Form Content */
+.config-form-content {
+  padding: var(--space-4);
+  animation: form-fade-in var(--duration-normal) var(--ease-out);
+}
+
+@keyframes form-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.config-form-content form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* ============================================================================
+ * 7. FORM FIELDS
+ * ============================================================================ */
+
+.config-field {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.config-field-compact {
+  gap: var(--space-1);
+}
+
+.config-field-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+}
+
+@media (max-width: 768px) {
+  .config-field-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.config-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  color: var(--ink-secondary);
+}
+
+.config-label-hint {
+  font-weight: var(--font-normal);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.config-value-display {
+  margin-left: auto;
+  padding: 2px var(--space-2);
+  background: var(--primary-light);
+  color: var(--primary);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  min-width: 24px;
+  text-align: center;
+}
+
+.config-input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-base);
+  color: var(--ink);
+  background: var(--card);
+  transition: all var(--transition-fast);
+}
+
+.config-input:hover:not(:disabled) {
+  border-color: var(--line-strong);
+}
+
+.config-input:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow:
+    0 0 0 2px var(--card),
+    0 0 0 4px var(--primary);
+}
+
+.config-input:disabled {
+  background: var(--bg-soft);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.config-input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.config-input[aria-invalid="true"]:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--card),
+    0 0 0 4px var(--danger-glow);
+}
+
+.config-hint {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.config-error {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--danger);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.config-error::before {
+  content: "!";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  background: var(--danger);
+  color: #fff;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  font-weight: var(--font-bold);
+  flex-shrink: 0;
+}
+
+/* ============================================================================
+ * 8. SLIDER CONTROLS
+ * ============================================================================ */
+
+.config-slider-wrapper {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.config-slider {
+  width: 100%;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--line-subtle);
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.config-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--card);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.config-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 2px 6px var(--primary-glow);
+}
+
+.config-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--card);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.config-slider::-moz-range-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 2px 6px var(--primary-glow);
+}
+
+.config-slider:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.config-slider:disabled::-webkit-slider-thumb {
+  background: var(--muted);
+  transform: none;
+}
+
+.config-slider:disabled::-moz-range-thumb {
+  background: var(--muted);
+  transform: none;
+}
+
+.config-slider-marks {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 2px;
+}
+
+.config-slider-marks span {
+  font-size: 10px;
+  color: var(--muted-light);
+  font-weight: var(--font-medium);
+}
+
+/* ============================================================================
+ * 9. CHECKBOX COMPONENTS
+ * ============================================================================ */
+
+.config-fieldset {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  margin: 0;
+  background: var(--card);
+  transition: border-color var(--transition-fast);
+}
+
+.config-fieldset:hover:not(:disabled) {
+  border-color: var(--line-strong);
+}
+
+.config-fieldset[aria-invalid="true"] {
+  border-color: var(--danger);
+  background: var(--danger-light);
+}
+
+.config-legend {
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  color: var(--ink-secondary);
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.config-checkbox-group {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+@media (max-width: 480px) {
+  .config-checkbox-group {
+    grid-template-columns: 1fr;
+  }
+}
+
+.config-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+.config-checkbox:hover {
+  border-color: var(--line-strong);
+  background: var(--bg-soft);
+}
+
+.config-checkbox.checked {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.config-checkbox-input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--card);
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.config-checkbox-input:checked {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.config-checkbox-input:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
+  border: solid var(--card);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.config-checkbox-input:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--card),
+    0 0 0 4px var(--primary);
+}
+
+.config-checkbox-label {
+  font-size: var(--text-sm);
+  color: var(--ink-secondary);
+  flex: 1;
+}
+
+.config-checkbox.checked .config-checkbox-label {
+  color: var(--primary);
+  font-weight: var(--font-medium);
+}
+
+/* Form Actions */
+.config-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line-subtle);
+  margin-top: var(--space-1);
+}
+
+.config-form-actions button {
+  min-width: 88px;
+}
+
+/* ============================================================================
+ * 10. MOBILE RESPONSIVE
+ * ============================================================================ */
+
+@media (max-width: 1120px) {
+  .editor-pane {
+    position: fixed;
+    top: 10px;
+    bottom: 10px;
+    right: 10px;
+    width: min(95vw, 560px);
+    z-index: var(--z-overlay);
+    transition: transform 180ms ease;
+    transform: translateX(105%);
+  }
+
+  .shell.editor-open .editor-pane {
+    transform: translateX(0);
+  }
+}
+
+/* ============================================================================
+ * 11. DESKTOP SIDEBAR TRANSITIONS
+ * ============================================================================ */
+
+@media (min-width: 1121px) {
+  .editor-pane {
+    min-width: 0;
+    overflow: hidden;
+    transition: opacity 200ms ease, transform 220ms ease, border-color 200ms ease, box-shadow 200ms ease;
+  }
+
+  .shell.right-hidden .editor-pane {
+    opacity: 0;
+    transform: translateX(14px);
+    pointer-events: none;
+    border-color: transparent;
+    box-shadow: none;
+  }
+}
+
+/* ============================================================================
+ * 12. REDUCED MOTION SUPPORT
+ * ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .config-chevron,
+  .config-form-toggle,
+  .config-input,
+  .config-slider,
+  .config-slider::-webkit-slider-thumb,
+  .config-slider::-moz-range-thumb,
+  .config-checkbox,
+  .config-checkbox-input {
+    transition: none;
+    animation: none;
+  }
+
+  .unsaved-indicator {
+    animation: none;
+  }
+}

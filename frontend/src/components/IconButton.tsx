@@ -1,4 +1,4 @@
-import type { ReactNode, ButtonHTMLAttributes } from "react";
+import { memo, type ReactNode, type ButtonHTMLAttributes } from "react";
 
 interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: ReactNode;
@@ -22,7 +22,15 @@ const variantClasses = {
   danger: "icon-button-danger"
 };
 
-export function IconButton({
+/**
+ * IconButtonBase - Internal implementation wrapped with React.memo.
+ *
+ * Performance optimization:
+ * - Wrapped in React.memo to prevent unnecessary re-renders
+ * - Useful for toolbar buttons and repeated icon buttons in lists
+ * - Props comparison handles primitive types efficiently
+ */
+function IconButtonBase({
   icon,
   size = "medium",
   variant = "default",
@@ -79,3 +87,9 @@ export function IconButton({
     </button>
   );
 }
+
+/**
+ * Export memoized IconButton component.
+ * Prevents re-renders when parent components update but IconButton props remain stable.
+ */
+export const IconButton = memo(IconButtonBase);

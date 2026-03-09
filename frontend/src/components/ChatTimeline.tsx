@@ -1,6 +1,12 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import type { ConversationMessage, ConversationStatus } from "../types";
+import {
+  useMessageTimeline,
+  isPlanMessageKind,
+  roleLabel,
+  type ProgressBundle
+} from "../hooks";
 import { formatLocalTime } from "../utils/formatTime";
 import { ReportViewer } from "./ReportViewer";
 
@@ -19,80 +25,6 @@ interface ChatTimelineProps {
   onDownloadReport: () => void;
 }
 
-interface ProgressEntry {
-  summary: string;
-  phase: string;
-  state: string;
-  progress: number | null;
-}
-
-interface ProgressBundle {
-  bundleKey: string;
-  taskId: string | null;
-  hostMessageId: string;
-  role: ConversationMessage["role"];
-  createdAt: string;
-  collapsed: boolean;
-  latestSummary: string;
-  latestProgress: number | null;
-  entries: ProgressEntry[];
-}
-
-const PROGRESS_BUNDLE_KEY = "__progress_bundle__";
-
-function toProgressEntries(message: ConversationMessage): ProgressEntry[] {
-  const rawEntries = message.metadata.entries;
-  if (!Array.isArray(rawEntries)) return [];
-  const parsed: ProgressEntry[] = [];
-  for (const item of rawEntries) {
-    if (!item || typeof item !== "object") continue;
-    const value = item as Record<string, unknown>;
-    parsed.push({
-      summary: typeof value.summary === "string" ? value.summary : "进度更新",
-      phase: typeof value.phase === "string" ? value.phase : "UNKNOWN",
-      state: typeof value.state === "string" ? value.state : "UNKNOWN",
-      progress: typeof value.progress === "number" ? value.progress : null
-    });
-  }
-  return parsed;
-}
-
-function toProgressNumber(value: unknown): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) return null;
-  const rounded = Math.round(value);
-  return Math.min(100, Math.max(0, rounded));
-}
-
-function roleLabel(role: ConversationMessage["role"]): string {
-  if (role === "assistant") return "Agent";
-  if (role === "system") return "System";
-  return "你";
-}
-
-function isPlanMessage(kind: ConversationMessage["kind"]): boolean {
-  return kind === "PLAN_DRAFT" || kind === "PLAN_REVISION" || kind === "PLAN_EDITED";
-}
-
-function extractMessageTaskId(message: ConversationMessage): string | null {
-  const directTaskId = message.metadata.taskId;
-  if (typeof directTaskId === "string" && directTaskId.trim()) {
-    return directTaskId.trim();
-  }
-  const rawEntries = message.metadata.entries;
-  if (!Array.isArray(rawEntries)) return null;
-  for (let i = rawEntries.length - 1; i >= 0; i -= 1) {
-    const entry = rawEntries[i];
-    if (!entry || typeof entry !== "object") continue;
-    const raw = (entry as Record<string, unknown>).raw;
-    if (!raw || typeof raw !== "object") continue;
-    const taskId = (raw as Record<string, unknown>).taskId;
-    if (typeof taskId === "string" && taskId.trim()) {
-      return taskId.trim();
-    }
-  }
-  return null;
-}
-
 export function ChatTimeline(props: ChatTimelineProps) {
   const {
     messages,
@@ -108,106 +40,85 @@ export function ChatTimeline(props: ChatTimelineProps) {
     onFocusComposer,
     onDownloadReport
   } = props;
+
+  // UI state for expanded/collapsed sections
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [expandedReport, setExpandedReport] = useState<Record<string, boolean>>({});
   const [closedReport, setClosedReport] = useState<Record<string, boolean>>({});
   const [showHistoryRounds, setShowHistoryRounds] = useState(true);
 
-  const ordered = useMemo(() => messages, [messages]);
-  const taskIdByMessageId = useMemo(() => {
-    const mapping = new Map<string, string | null>();
-    for (const message of ordered) {
-      mapping.set(message.messageId, extractMessageTaskId(message));
-    }
-    return mapping;
-  }, [ordered]);
+  // Use the custom hook for timeline calculations
+  const {
+    taskIdByMessageId,
+    historyTaskIds,
+    visibleMessages,
+    latestPlanMessageId,
+    progressBundles
+  } = useMessageTimeline({
+    messages,
+    currentTaskId,
+    activeStatus,
+    showHistoryRounds
+  });
 
-  const historyTaskIds = useMemo(() => {
-    if (!currentTaskId) return [];
-    const ids = new Set<string>();
-    for (const message of ordered) {
-      const taskId = taskIdByMessageId.get(message.messageId);
-      if (taskId && taskId !== currentTaskId) {
-        ids.add(taskId);
-      }
-    }
-    return Array.from(ids);
-  }, [ordered, taskIdByMessageId, currentTaskId]);
+  const canStartResearch =
+    activeStatus === "PLAN_READY" || activeStatus === "COMPLETED" || activeStatus === "FAILED";
 
-  const visibleMessages = useMemo(() => {
-    if (showHistoryRounds || !currentTaskId) {
-      return ordered;
-    }
-    return ordered.filter((message) => {
-      const taskId = taskIdByMessageId.get(message.messageId);
-      return !taskId || taskId === currentTaskId;
-    });
-  }, [ordered, taskIdByMessageId, currentTaskId, showHistoryRounds]);
+  // Helper to render progress bundle
+  const renderProgressBundle = (bundle: ProgressBundle) => {
+    const isExpanded = expanded[bundle.bundleKey] ?? !bundle.collapsed;
+    const toggle = () =>
+      setExpanded((prev) => ({ ...prev, [bundle.bundleKey]: !isExpanded }));
 
-  const latestPlanMessageId = useMemo(() => {
-    for (let i = visibleMessages.length - 1; i >= 0; i -= 1) {
-      if (isPlanMessage(visibleMessages[i].kind)) {
-        return visibleMessages[i].messageId;
-      }
-    }
-    return null;
-  }, [visibleMessages]);
+    return (
+      <article
+        key={bundle.bundleKey}
+        className={`message-row ${bundle.role === "user" ? "row-user" : "row-agent"}`}
+      >
+        <div className={`message message-${bundle.role}`}>
+          <header>
+            <span className="message-role">{roleLabel(bundle.role)}</span>
+            <span className="mono">{formatLocalTime(bundle.createdAt)}</span>
+          </header>
 
-  const progressBundles = useMemo<Map<string, ProgressBundle>>(() => {
-    const bundles = new Map<string, ProgressBundle>();
-    const progressMessages = visibleMessages.filter((item) => item.kind === "PROGRESS_GROUP");
-    if (progressMessages.length === 0) return bundles;
-
-    for (const progressMessage of progressMessages) {
-      const taskId = taskIdByMessageId.get(progressMessage.messageId);
-      const taskKey = taskId ?? "__no_task__";
-      let bundle = bundles.get(taskKey);
-      if (!bundle) {
-        bundle = {
-          bundleKey: `${PROGRESS_BUNDLE_KEY}:${taskKey}`,
-          taskId: taskId ?? null,
-          hostMessageId: progressMessage.messageId,
-          role: progressMessage.role,
-          createdAt: progressMessage.createdAt,
-          collapsed: progressMessage.collapsed,
-          latestSummary: progressMessage.content || "研究进行中",
-          latestProgress: null,
-          entries: []
-        };
-        bundles.set(taskKey, bundle);
-      } else {
-        bundle.createdAt = progressMessage.createdAt;
-        bundle.collapsed = bundle.collapsed && progressMessage.collapsed;
-      }
-
-      const messageEntries = toProgressEntries(progressMessage);
-      bundle.entries.push(...messageEntries);
-      for (const entry of messageEntries) {
-        if (entry.progress !== null && (bundle.latestProgress === null || entry.progress >= bundle.latestProgress)) {
-          bundle.latestProgress = entry.progress;
-          bundle.latestSummary = entry.summary;
-        }
-      }
-      const metadataProgress = toProgressNumber(progressMessage.metadata.latestProgress);
-      if (metadataProgress !== null && (bundle.latestProgress === null || metadataProgress >= bundle.latestProgress)) {
-        bundle.latestProgress = metadataProgress;
-        const metadataSummary = progressMessage.metadata.latestSummary;
-        if (typeof metadataSummary === "string" && metadataSummary.trim()) {
-          bundle.latestSummary = metadataSummary;
-        } else if (progressMessage.content.trim()) {
-          bundle.latestSummary = progressMessage.content;
-        }
-      }
-    }
-    for (const bundle of bundles.values()) {
-      if (bundle.taskId === currentTaskId && activeStatus === "COMPLETED") {
-        bundle.latestProgress = 100;
-      }
-    }
-    return bundles;
-  }, [visibleMessages, taskIdByMessageId, currentTaskId, activeStatus]);
-
-  const canStartResearch = activeStatus === "PLAN_READY" || activeStatus === "COMPLETED" || activeStatus === "FAILED";
+          <div className="progress-group">
+            <button className="progress-toggle" type="button" onClick={toggle}>
+              <div className="progress-toggle-head">
+                <span>{isExpanded ? "收起研究进度" : "展开研究进度"}</span>
+                {!isExpanded && (
+                  <span className="mono progress-percent">
+                    {bundle.latestProgress !== null ? `${bundle.latestProgress}%` : "--"}
+                  </span>
+                )}
+              </div>
+              <strong>{bundle.latestSummary}</strong>
+              {isExpanded && (
+                <div className="mono progress-current">
+                  当前进度：{bundle.latestProgress !== null ? `${bundle.latestProgress}%` : "--"}
+                </div>
+              )}
+            </button>
+            {isExpanded && (
+              <div className="progress-entries">
+                {bundle.entries.length === 0 ? (
+                  <div className="progress-entry">暂无明细</div>
+                ) : (
+                  bundle.entries.map((entry, index) => (
+                    <div className="progress-entry" key={`${bundle.bundleKey}-${index}`}>
+                      <div>{entry.summary}</div>
+                      <div className="mono">
+                        {entry.state}/{entry.phase} {entry.progress !== null ? `| ${entry.progress}%` : ""}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </article>
+    );
+  };
 
   return (
     <section className="timeline">
@@ -225,7 +136,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
           <div className="timeline-empty">
             {historyTaskIds.length > 0 && !showHistoryRounds
               ? "当前仅展示最新轮次，点击下方按钮可展开历史轮次。"
-              : "从左侧选择会话，或点击“新建研究”。"}
+              : '从左侧选择会话，或点击"新建研究"。'}
           </div>
         )
       ) : (
@@ -234,61 +145,12 @@ export function ChatTimeline(props: ChatTimelineProps) {
           const isReportExpanded = message.kind === "FINAL_REPORT" ? Boolean(expandedReport[message.messageId]) : false;
           const isReportClosed = message.kind === "FINAL_REPORT" ? Boolean(closedReport[message.messageId]) : false;
 
+          // Handle progress group messages
           if (message.kind === "PROGRESS_GROUP") {
             const taskId = taskIdByMessageId.get(message.messageId) ?? "__no_task__";
             const progressBundle = progressBundles.get(taskId);
             if (!progressBundle || message.messageId !== progressBundle.hostMessageId) return null;
-            const isExpanded = expanded[progressBundle.bundleKey] ?? !progressBundle.collapsed;
-            const toggle = () => setExpanded((prev) => ({ ...prev, [progressBundle.bundleKey]: !isExpanded }));
-
-            return (
-              <article
-                key={progressBundle.bundleKey}
-                className={`message-row ${progressBundle.role === "user" ? "row-user" : "row-agent"}`}
-              >
-                <div className={`message message-${progressBundle.role}`}>
-                  <header>
-                    <span className="message-role">{roleLabel(progressBundle.role)}</span>
-                    <span className="mono">{formatLocalTime(progressBundle.createdAt)}</span>
-                  </header>
-
-                  <div className="progress-group">
-                    <button className="progress-toggle" type="button" onClick={toggle}>
-                      <div className="progress-toggle-head">
-                        <span>{isExpanded ? "收起研究进度" : "展开研究进度"}</span>
-                        {!isExpanded && (
-                          <span className="mono progress-percent">
-                            {progressBundle.latestProgress !== null ? `${progressBundle.latestProgress}%` : "--"}
-                          </span>
-                        )}
-                      </div>
-                      <strong>{progressBundle.latestSummary}</strong>
-                      {isExpanded && (
-                        <div className="mono progress-current">
-                          当前进度：{progressBundle.latestProgress !== null ? `${progressBundle.latestProgress}%` : "--"}
-                        </div>
-                      )}
-                    </button>
-                    {isExpanded && (
-                      <div className="progress-entries">
-                        {progressBundle.entries.length === 0 ? (
-                          <div className="progress-entry">暂无明细</div>
-                        ) : (
-                          progressBundle.entries.map((entry, index) => (
-                            <div className="progress-entry" key={`${progressBundle.bundleKey}-${index}`}>
-                              <div>{entry.summary}</div>
-                              <div className="mono">
-                                {entry.state}/{entry.phase} {entry.progress !== null ? `| ${entry.progress}%` : ""}
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </article>
-            );
+            return renderProgressBundle(progressBundle);
           }
 
           return (
@@ -304,7 +166,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
                   <span className="mono">{formatLocalTime(message.createdAt)}</span>
                 </header>
 
-                {isPlanMessage(message.kind) && (
+                {isPlanMessageKind(message.kind) && (
                   <div className="plan-card">
                     <pre>{message.content}</pre>
                     <button
@@ -386,7 +248,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
         </article>
       )}
 
-      {!draftMode && activeStatus !== "RUNNING" && activeStatus !== "DRAFTING_PLAN" && ordered.length > 0 && (
+      {!draftMode && activeStatus !== "RUNNING" && activeStatus !== "DRAFTING_PLAN" && messages.length > 0 && (
         <article className="message-row row-agent">
           <div className="message message-assistant message-hint">
             <header>

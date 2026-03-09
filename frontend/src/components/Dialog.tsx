@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { memo, useEffect, useId, useRef, type ReactNode } from "react";
 
 interface DialogProps {
   open: boolean;
@@ -10,7 +10,14 @@ interface DialogProps {
   onClose: () => void;
 }
 
-export function Dialog(props: DialogProps) {
+/**
+ * Dialog component - modal dialog with focus trap and accessibility support.
+ *
+ * Performance optimization:
+ * - Wrapped in React.memo to prevent unnecessary re-renders
+ * - Useful when parent component has frequent state changes but dialog props remain stable
+ */
+function DialogBase(props: DialogProps) {
   const { open, title, description, dismissable = true, children, actions, onClose } = props;
   const titleId = useId();
   const descriptionId = useId();
@@ -139,3 +146,10 @@ export function Dialog(props: DialogProps) {
     </div>
   );
 }
+
+/**
+ * Export memoized Dialog component.
+ * Prevents re-renders when parent components update but Dialog props remain stable.
+ * Important for modal dialogs that may be rendered but hidden (open=false).
+ */
+export const Dialog = memo(DialogBase);

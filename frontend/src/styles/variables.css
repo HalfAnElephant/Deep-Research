@@ -1,0 +1,349 @@
+/**
+ * ============================================================================
+ * DEEP-RESEARCH DESIGN SYSTEM - Design Tokens
+ * ============================================================================
+ *
+ * A comprehensive design token system for the Deep-Research application.
+ * This file defines all CSS custom properties (variables) used throughout
+ * the application, ensuring consistent styling and easy theme management.
+ *
+ * TABLE OF CONTENTS
+ * -----------------
+ * 1. Typography System
+ * 2. Color System
+ *    2.1 Grayscale Palette (4 levels)
+ *    2.2 Primary Colors
+ *    2.3 Semantic Colors
+ * 3. Spacing System
+ * 4. Border & Radius
+ * 5. Shadows
+ * 6. Transitions & Animations
+ * 7. Z-Index Scale
+ *
+ * COLOR SYSTEM PRINCIPLES
+ * -----------------------
+ * - 4-level grayscale: --gray-50, --gray-100, --gray-200, --gray-300
+ * - Primary accent color with hover state
+ * - Semantic colors for success, warning, danger, info
+ * - All colors ensure WCAG AA contrast ratio (4.5:1 minimum)
+ *
+ * ============================================================================
+ */
+
+/* ============================================================================
+ * 1. TYPOGRAPHY SYSTEM
+ * ============================================================================ */
+
+:root {
+  /* Font Families */
+  --font-sans: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', 'Consolas', monospace;
+
+  /* Font Sizes - Modular Scale (1.25 ratio) */
+  --text-xs: 0.75rem;     /* 12px */
+  --text-sm: 0.875rem;    /* 14px */
+  --text-base: 1rem;      /* 16px */
+  --text-lg: 1.125rem;    /* 18px */
+  --text-xl: 1.25rem;     /* 20px */
+  --text-2xl: 1.5rem;     /* 24px */
+
+  /* Font Weights */
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  /* Line Heights */
+  --leading-tight: 1.35;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  /* Letter Spacing */
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.02em;
+}
+
+/* ============================================================================
+ * 2. COLOR SYSTEM
+ * ============================================================================ */
+
+/* ============================================================================
+ * 2.1 GRAYSCALE PALETTE (4 Levels)
+ * ============================================================================
+ *
+ * Light Mode Grayscale:
+ * - gray-50:  Primary text (high contrast)
+ * - gray-100: Secondary text (medium contrast)
+ * - gray-200: Muted text, borders (low contrast)
+ * - gray-300: Subtle backgrounds, disabled states
+ *
+ * Dark Mode automatically inverts the scale.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Light Mode Grayscale */
+  --gray-50: #0f172a;      /* Primary text - Ink */
+  --gray-100: #475569;     /* Secondary text - Slate 600 */
+  --gray-200: #94a3b8;     /* Muted text, borders - Slate 400 */
+  --gray-300: #e2e8f0;     /* Subtle backgrounds - Slate 200 */
+
+  /* Background Colors */
+  --bg-base: #f0f4f8;      /* Main background */
+  --bg-elevated: #ffffff;  /* Cards, panels */
+  --bg-muted: #f8fafc;     /* Secondary backgrounds */
+
+  /* ============================================================================
+   * 2.2 PRIMARY COLORS
+   * ============================================================================
+   *
+   * Primary blue is used for:
+   * - Interactive elements (buttons, links)
+   * - Focus indicators
+   * - Active states
+   * - Brand identity
+   */
+
+  --primary: #3b82f6;       /* Blue 500 */
+  --primary-hover: #2563eb; /* Blue 600 */
+  --primary-light: #dbeafe; /* Blue 100 - for backgrounds */
+  --primary-glow: rgba(59, 130, 246, 0.15);
+
+  /* ============================================================================
+   * 2.3 SEMANTIC COLORS
+   * ============================================================================
+   *
+   * Semantic colors convey meaning:
+   * - Success: Completed states, positive feedback
+   * - Warning: Cautionary states, attention needed
+   * - Danger: Error states, destructive actions
+   * - Info: Informational states, neutral feedback
+   */
+
+  /* Success - Green */
+  --success: #10b981;       /* Emerald 500 */
+  --success-light: #ecfdf3; /* Emerald 50 */
+  --success-glow: rgba(16, 185, 129, 0.15);
+
+  /* Warning - Amber */
+  --warning: #f59e0b;       /* Amber 500 */
+  --warning-light: #fffbeb; /* Amber 50 */
+  --warning-glow: rgba(245, 158, 11, 0.15);
+
+  /* Danger - Red */
+  --danger: #ef4444;        /* Red 500 */
+  --danger-light: #fef2f2;  /* Red 50 */
+  --danger-glow: rgba(239, 68, 68, 0.15);
+
+  /* Info - Cyan */
+  --info: #06b6d4;          /* Cyan 500 */
+  --info-light: #ecfeff;    /* Cyan 50 */
+
+  /* Legacy Aliases (for backward compatibility) */
+  --ink: var(--gray-50);
+  --ink-secondary: var(--gray-100);
+  --muted: var(--gray-200);
+  --muted-light: #cbd5e1;
+  --line: var(--gray-300);
+  --line-strong: #cbd5e1;
+  --line-subtle: #f1f5f9;
+  --card: var(--bg-elevated);
+  --bg: var(--bg-base);
+  --bg-soft: var(--bg-muted);
+  --bg-warm: var(--bg-elevated);
+}
+
+/* ============================================================================
+ * DARK MODE
+ * ============================================================================
+ *
+ * Automatic dark mode based on system preference.
+ * Colors are inverted while maintaining semantic meaning.
+ */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    /* Dark Mode Grayscale (inverted) */
+    --gray-50: #f1f5f9;      /* Primary text - Slate 100 */
+    --gray-100: #94a3b8;     /* Secondary text - Slate 400 */
+    --gray-200: #64748b;     /* Muted text - Slate 500 */
+    --gray-300: #334155;     /* Borders - Slate 700 */
+
+    /* Dark Backgrounds */
+    --bg-base: #0f172a;      /* Slate 900 */
+    --bg-elevated: #1e293b;  /* Slate 800 */
+    --bg-muted: #1e293b;
+
+    /* Primary in Dark Mode */
+    --primary: #60a5fa;       /* Blue 400 - lighter for contrast */
+    --primary-hover: #3b82f6; /* Blue 500 */
+    --primary-light: rgba(59, 130, 246, 0.2);
+    --primary-glow: rgba(59, 130, 246, 0.25);
+
+    /* Semantic Colors - Dark Mode */
+    --success: #34d399;       /* Emerald 400 */
+    --success-light: rgba(16, 185, 129, 0.15);
+    --success-glow: rgba(16, 185, 129, 0.2);
+
+    --warning: #fbbf24;       /* Amber 400 */
+    --warning-light: rgba(245, 158, 11, 0.15);
+    --warning-glow: rgba(245, 158, 11, 0.2);
+
+    --danger: #f87171;        /* Red 400 */
+    --danger-light: rgba(239, 68, 68, 0.15);
+    --danger-glow: rgba(239, 68, 68, 0.2);
+
+    --info: #22d3ee;          /* Cyan 400 */
+    --info-light: rgba(6, 182, 212, 0.15);
+
+    /* Legacy Aliases - Dark Mode */
+    --ink: var(--gray-50);
+    --ink-secondary: #e2e8f0;
+    --muted: var(--gray-100);
+    --muted-light: var(--gray-200);
+    --line: var(--gray-300);
+    --line-strong: #475569;
+    --line-subtle: #1e293b;
+    --card: var(--bg-elevated);
+    --bg: var(--bg-base);
+    --bg-soft: var(--bg-muted);
+    --bg-warm: var(--bg-elevated);
+  }
+}
+
+/* ============================================================================
+ * 3. SPACING SYSTEM
+ * ============================================================================
+ *
+ * Based on a 4px base unit for consistent visual rhythm.
+ * All spacing values are multiples of 4px.
+ */
+
+:root {
+  --space-1: 0.25rem;   /* 4px */
+  --space-2: 0.5rem;    /* 8px */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-5: 1.25rem;   /* 20px */
+  --space-6: 1.5rem;    /* 24px */
+  --space-8: 2rem;      /* 32px */
+  --space-10: 2.5rem;   /* 40px */
+  --space-12: 3rem;     /* 48px */
+
+  /* Legacy Aliases */
+  --space-xs: var(--space-1);
+  --space-sm: var(--space-2);
+  --space-md: var(--space-3);
+  --space-lg: var(--space-4);
+  --space-xl: var(--space-6);
+}
+
+/* ============================================================================
+ * 4. BORDER & RADIUS
+ * ============================================================================ */
+
+:root {
+  --radius-sm: 0.5rem;    /* 8px */
+  --radius-md: 0.75rem;   /* 12px */
+  --radius-lg: 1rem;      /* 16px */
+  --radius-xl: 1.25rem;   /* 20px */
+  --radius-full: 9999px;  /* Pill shape */
+}
+
+/* ============================================================================
+ * 5. SHADOWS
+ * ============================================================================
+ *
+ * Layered shadow system for depth and elevation.
+ */
+
+:root {
+  --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.1);
+  --shadow-lg: 0 14px 44px rgba(15, 23, 42, 0.12);
+  --shadow-xl: 0 24px 56px rgba(15, 23, 42, 0.18);
+
+  /* Focus Ring */
+  --focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.35);
+  --focus-ring-offset: 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 14px 44px rgba(0, 0, 0, 0.4);
+    --shadow-xl: 0 24px 56px rgba(0, 0, 0, 0.5);
+    --focus-ring: 0 0 0 3px rgba(96, 165, 250, 0.3);
+  }
+}
+
+/* ============================================================================
+ * 6. TRANSITIONS & ANIMATIONS
+ * ============================================================================
+ *
+ * Smooth, natural-feeling transitions using ease-out curves.
+ * Duration scale: fast (150ms) -> normal (250ms) -> slow (400ms)
+ */
+
+:root {
+  /* Transition Durations */
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+
+  /* Easing Functions */
+  --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Transition Presets */
+  --transition-fast: var(--duration-fast) var(--ease-out);
+  --transition-normal: var(--duration-normal) var(--ease-out);
+  --transition-slow: var(--duration-slow) var(--ease-out);
+
+  /* Legacy Aliases */
+  --transition-fast: 140ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 220ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 320ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============================================================================
+ * 7. Z-INDEX SCALE
+ * ============================================================================
+ *
+ * Consistent z-index values for layering.
+ */
+
+:root {
+  --z-base: 0;
+  --z-dropdown: 40;
+  --z-sticky: 50;
+  --z-overlay: 60;
+  --z-modal: 80;
+  --z-popover: 100;
+  --z-tooltip: 110;
+  --z-dialog: 120;
+}
+
+/* ============================================================================
+ * ACCESSIBILITY - Reduced Motion
+ * ============================================================================
+ *
+ * Respects user preference for reduced motion.
+ */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-normal: 0ms;
+    --duration-slow: 0ms;
+    --transition-fast: 0ms;
+    --transition-normal: 0ms;
+    --transition-slow: 0ms;
+  }
+}

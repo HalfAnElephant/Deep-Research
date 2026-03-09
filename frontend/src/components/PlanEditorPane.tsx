@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { ConversationStatus } from "../types";
 import { PlanConfigForm } from "./PlanConfigForm";
 
@@ -39,7 +40,15 @@ function getStatusDescription(status: ConversationStatus | null): string {
   }
 }
 
-export function PlanEditorPane(props: PlanEditorPaneProps) {
+/**
+ * PlanEditorPaneBase - Internal implementation wrapped with React.memo.
+ *
+ * Performance optimization:
+ * - Wrapped in React.memo to prevent unnecessary re-renders
+ * - Editor pane only updates when markdown content or status changes
+ * - Important for avoiding re-renders during polling/timer updates
+ */
+function PlanEditorPaneBase(props: PlanEditorPaneProps) {
   const {
     markdown,
     mode,
@@ -181,3 +190,5 @@ export function PlanEditorPane(props: PlanEditorPaneProps) {
     </section>
   );
 }
+
+export const PlanEditorPane = memo(PlanEditorPaneBase);

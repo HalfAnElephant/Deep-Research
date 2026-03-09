@@ -583,12 +583,19 @@ export function App() {
   const renamePending = Boolean(renameDialog) && renamingConversationId === renameDialog.conversationId;
 
   return (
-    <main
-      className={`shell ${mobileSidebarOpen ? "sidebar-open" : ""} ${mobileEditorOpen ? "editor-open" : ""} ${
-        leftSidebarVisible ? "" : "left-hidden"
-      } ${rightSidebarVisible ? "" : "right-hidden"}`}
-    >
-      <div className="edge-hotspot left">
+    <>
+      {/* Skip Link - 可访问性：让键盘用户快速跳过导航到主内容 */}
+      <a href="#main-content-start" className="skip-link">
+        跳转到主内容
+      </a>
+      <main
+        className={`shell ${mobileSidebarOpen ? "sidebar-open" : ""} ${mobileEditorOpen ? "editor-open" : ""} ${
+          leftSidebarVisible ? "" : "left-hidden"
+        } ${rightSidebarVisible ? "" : "right-hidden"}`}
+      >
+        {/* 可访问性：隐藏的标记，用于 Skip Link 跳转焦点 */}
+        <div id="main-content-start" tabIndex={-1} className="sr-only" />
+        <div className="edge-hotspot left">
         <button
           className="edge-toggle"
           type="button"
@@ -813,6 +820,7 @@ export function App() {
       </Dialog>
 
       {error && <div className="error-banner">{error}</div>}
-    </main>
+      </main>
+    </>
   );
 }

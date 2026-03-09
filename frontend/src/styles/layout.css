@@ -1,0 +1,129 @@
+/**
+ * ============================================================================
+ * LAYOUT STYLES
+ * ============================================================================
+ *
+ * Grid layout, shell structure, and responsive design for the main
+ * application layout.
+ *
+ * TABLE OF CONTENTS
+ * -----------------
+ * 1. Shell Grid
+ * 2. Mobile Backdrop
+ * 3. Edge Hotspots
+ * 4. Desktop Sidebar Transitions
+ * 5. Mobile Responsive
+ *
+ * ============================================================================
+ */
+
+/* ============================================================================
+ * 1. SHELL GRID
+ * ============================================================================ */
+
+.shell {
+  position: relative;
+  height: 100%;
+  --left-col: 320px;
+  --right-col: 470px;
+  display: grid;
+  grid-template-columns: var(--left-col) minmax(0, 1fr) var(--right-col);
+  gap: 14px;
+  padding: 14px;
+  max-width: 1700px;
+  margin: 0 auto;
+}
+
+/* ============================================================================
+ * 2. MOBILE BACKDROP
+ * ============================================================================ */
+
+.mobile-backdrop {
+  display: none;
+}
+
+/* ============================================================================
+ * 3. EDGE HOTSPOTS
+ * ============================================================================ */
+
+.edge-hotspot {
+  display: none;
+}
+
+/* ============================================================================
+ * 4. DESKTOP SIDEBAR TRANSITIONS
+ * ============================================================================ */
+
+@media (min-width: 1121px) {
+  .shell {
+    transition: grid-template-columns var(--transition-normal);
+  }
+
+  .shell.left-hidden {
+    --left-col: 0px;
+  }
+
+  .shell.right-hidden {
+    --right-col: 0px;
+  }
+
+  .edge-hotspot {
+    display: flex;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 26px;
+    align-items: center;
+    z-index: 75;
+  }
+
+  .edge-hotspot.left {
+    left: -4px;
+    justify-content: flex-start;
+  }
+
+  .edge-hotspot.right {
+    right: -4px;
+    justify-content: flex-end;
+  }
+
+  .edge-toggle {
+    opacity: 0.38;
+    transform: translateY(0) scale(0.94);
+    pointer-events: auto;
+    transition: opacity 160ms ease, transform 160ms ease;
+  }
+
+  .edge-hotspot:hover .edge-toggle,
+  .edge-toggle:focus-visible,
+  .shell.left-hidden .edge-hotspot.left .edge-toggle,
+  .shell.right-hidden .edge-hotspot.right .edge-toggle {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ============================================================================
+ * 5. MOBILE RESPONSIVE
+ * ============================================================================ */
+
+@media (max-width: 1120px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 10px;
+  }
+
+  .mobile-only {
+    display: inline-flex;
+  }
+
+  .mobile-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    border: 0;
+    background: rgba(15, 23, 42, 0.28);
+    backdrop-filter: blur(2px);
+    z-index: var(--z-overlay);
+  }
+}

@@ -1,3 +1,5 @@
+import { memo, useMemo } from "react";
+
 interface ReportViewerProps {
   markdown: string;
   downloading: boolean;
@@ -8,12 +10,22 @@ interface ReportViewerProps {
   onToggleClose: () => void;
 }
 
-export function ReportViewer(props: ReportViewerProps) {
+/**
+ * ReportViewer component - displays final research report with expand/collapse controls.
+ *
+ * Performance optimization:
+ * - Wrapped in React.memo to prevent unnecessary re-renders when parent re-renders
+ * - Uses useMemo for line/char count calculations (avoids re-splitting on every render)
+ */
+function ReportViewerBase(props: ReportViewerProps) {
   const { markdown, downloading, expanded, closed, onDownload, onToggleExpand, onToggleClose } = props;
 
-  // Get line count for display
-  const lineCount = markdown.split("\n").length;
-  const charCount = markdown.length;
+  // Memoize line/char count calculations to avoid re-splitting on every render
+  // Only recalculate when markdown content actually changes
+  const { lineCount, charCount } = useMemo(() => ({
+    lineCount: markdown.split("\n").length,
+    charCount: markdown.length,
+  }), [markdown]);
 
   return (
     <div className="report-viewer">
@@ -74,3 +86,7 @@ export function ReportViewer(props: ReportViewerProps) {
     </div>
   );
 }
+
+// Wrap with React.memo for performance optimization
+// This prevents re-renders when parent component re-renders but props haven't changed
+export const ReportViewer = memo(ReportViewerBase);

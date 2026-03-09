@@ -1,0 +1,73 @@
+/**
+ * ============================================================================
+ * DEEP-RESEARCH STYLES - Main Entry Point
+ * ============================================================================
+ *
+ * This is the main stylesheet entry point that imports all CSS modules
+ * in the correct order for the application.
+ *
+ * ARCHITECTURE
+ * ------------
+ * 1. Design System (variables.css) - CSS custom properties for theming
+ * 2. Base Styles (base.css) - Reset, typography, utility classes
+ * 3. Layout (layout.css) - Grid, shell, responsive structure
+ * 4. Components - Individual component styles
+ *
+ * USAGE
+ * -----
+ * Import this file in your main entry point:
+ * import './styles/index.css';
+ *
+ * ============================================================================
+ */
+
+/* ============================================================================
+ * 1. DESIGN SYSTEM
+ * ============================================================================
+ *
+ * CSS custom properties (variables) for consistent theming.
+ * Includes colors, typography, spacing, shadows, and transitions.
+ */
+
+@import './variables.css';
+
+/* ============================================================================
+ * 2. BASE STYLES
+ * ============================================================================
+ *
+ * Foundation styles including CSS reset, base element styling,
+ * typography, and utility classes.
+ */
+
+@import './base.css';
+
+/* ============================================================================
+ * 3. LAYOUT
+ * ============================================================================
+ *
+ * Grid layout, shell structure, and responsive design.
+ */
+
+@import './layout.css';
+
+/* ============================================================================
+ * 4. COMPONENTS
+ * ============================================================================
+ *
+ * Individual component styles organized by feature area.
+ */
+
+/* Button styles - loaded early for other components */
+@import './components/buttons.css';
+
+/* Sidebar styles */
+@import './components/sidebar.css';
+
+/* Chat message and timeline styles */
+@import './components/chat.css';
+
+/* Editor and config form styles */
+@import './components/editor.css';
+
+/* Dialog, toast, and notification styles */
+@import './components/dialog.css';
