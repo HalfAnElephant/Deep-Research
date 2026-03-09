@@ -4,14 +4,12 @@ import { PlanConfigForm } from "./PlanConfigForm";
 
 interface PlanEditorPaneProps {
   markdown: string;
-  mode: "edit" | "preview";
   dirty: boolean;
   showMobileClose: boolean;
   saving: boolean;
   starting: boolean;
   downloading: boolean;
   status: ConversationStatus | null;
-  onModeChange: (mode: "edit" | "preview") => void;
   onRequestCloseMobile: () => void;
   onChange: (value: string) => void;
   onSave: () => void;
@@ -51,14 +49,12 @@ function getStatusDescription(status: ConversationStatus | null): string {
 function PlanEditorPaneBase(props: PlanEditorPaneProps) {
   const {
     markdown,
-    mode,
     dirty,
     showMobileClose,
     saving,
     starting,
     downloading,
     status,
-    onModeChange,
     onRequestCloseMobile,
     onChange,
     onSave,
@@ -86,38 +82,6 @@ function PlanEditorPaneBase(props: PlanEditorPaneProps) {
           <p>可直接编辑 Markdown，或在聊天中让 Agent 改报告/补检索/修订方案。</p>
         </div>
         <div className="editor-head-actions">
-          <div
-            className="mode-switch"
-            role="radiogroup"
-            aria-label="编辑模式"
-          >
-            <button
-              className={mode === "edit" ? "active" : ""}
-              type="button"
-              role="radio"
-              aria-checked={mode === "edit"}
-              onClick={() => onModeChange("edit")}
-              title="编辑模式"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
-            </button>
-            <button
-              className={mode === "preview" ? "active" : ""}
-              type="button"
-              role="radio"
-              aria-checked={mode === "preview"}
-              onClick={() => onModeChange("preview")}
-              title="预览模式"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                <circle cx="12" cy="12" r="3" />
-              </svg>
-            </button>
-          </div>
           {showMobileClose && (
             <button
               className="ghost pane-close mobile-only"
@@ -205,26 +169,13 @@ function PlanEditorPaneBase(props: PlanEditorPaneProps) {
           </button>
         </div>
         {!markdownCollapsed && (
-          <>
-            {mode === "edit" ? (
-              <textarea
-                value={markdown}
-                onChange={(event) => onChange(event.target.value)}
-                placeholder="在此输入研究方案..."
-                aria-label="研究方案编辑"
-                spellCheck={false}
-              />
-            ) : (
-              <pre
-                className="preview-content"
-                role="region"
-                aria-label="方案预览"
-                tabIndex={0}
-              >
-                {markdown || "暂无可预览内容"}
-              </pre>
-            )}
-          </>
+          <textarea
+            value={markdown}
+            onChange={(event) => onChange(event.target.value)}
+            placeholder="在此输入研究方案..."
+            aria-label="研究方案编辑"
+            spellCheck={false}
+          />
         )}
       </div>
     </section>

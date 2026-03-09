@@ -457,7 +457,7 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
         <div className="menu-wrap">
           <button
             ref={globalMenuTriggerRef}
-            className={`icon-button ${globalMenuOpen ? "active" : ""}`}
+            className={`icon-button icon-button-small ${globalMenuOpen ? "active" : ""}`}
             type="button"
             onClick={handleToggleGlobalMenu}
             onKeyDown={(e) => {
@@ -593,7 +593,7 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
                           itemMenuTriggerRef.current = el;
                         }
                       }}
-                      className={`icon-button small ${isMenuOpen ? "active" : ""}`}
+                      className={`icon-button icon-button-small ${isMenuOpen ? "active" : ""}`}
                       type="button"
                       onClick={(e) => {
                         handleToggleItemMenu(conversation.conversationId, e.currentTarget);
