@@ -27,7 +27,7 @@ const RIGHT_SIDEBAR_KEY = "dr:right-sidebar-visible";
 const DEFAULT_CONFIG = {
   maxDepth: 2,
   maxNodes: 8,
-  searchSources: ["arXiv", "Semantic Scholar"],
+  searchSources: ["Web Search", "arXiv", "Semantic Scholar"],
   priority: 4
 };
 
@@ -85,7 +85,6 @@ export function App() {
   const [planDraft, setPlanDraft] = useState("");
   const [planVersion, setPlanVersion] = useState(0);
   const [draftDirty, setDraftDirty] = useState(false);
-  const [editorMode, setEditorMode] = useState<"edit" | "preview">("edit");
 
   const [sending, setSending] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -435,7 +434,6 @@ export function App() {
   function onApplyPlan(markdown: string) {
     setPlanDraft(markdown);
     setDraftDirty(true);
-    setEditorMode("edit");
     onOpenPlanDrawer();
   }
 
@@ -716,14 +714,12 @@ export function App() {
 
       <PlanEditorPane
         markdown={planDraft}
-        mode={editorMode}
         dirty={draftDirty}
         showMobileClose={mobileEditorOpen}
         saving={saving}
         starting={starting}
         downloading={downloading}
         status={activeStatus}
-        onModeChange={setEditorMode}
         onRequestCloseMobile={() => setMobileEditorOpen(false)}
         onChange={(value) => {
           setPlanDraft(value);

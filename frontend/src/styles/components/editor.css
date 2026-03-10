@@ -199,40 +199,169 @@
 }
 
 /* ============================================================================
- * 5. MODE SWITCH
+ * 5. PREVIEW MODE
  * ============================================================================ */
 
-.mode-switch {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-full);
-  padding: 2px;
+.preview-toggle {
   display: inline-flex;
-  gap: 2px;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
   background: var(--bg-soft);
-}
-
-.mode-switch button {
-  border-radius: var(--radius-full);
-  padding: var(--space-2) var(--space-3);
-  border: 0;
-  background: transparent;
-  font-size: var(--text-sm);
   color: var(--ink-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
   transition: all var(--transition-fast);
 }
 
-.mode-switch button:hover:not(.active) {
+.preview-toggle:hover {
+  border-color: var(--line-strong);
   background: var(--bg-warm);
 }
 
-.mode-switch button.active {
-  background: var(--card);
+.preview-toggle.active {
+  background: var(--primary-light);
+  border-color: var(--primary);
   color: var(--primary);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.editor-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.markdown-preview {
+  flex: 1;
+  width: min(100%, 104ch);
+  min-height: clamp(280px, 52vh, 640px);
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  overflow: auto;
+  background: var(--card);
+  line-height: 1.72;
+  font-size: var(--text-base);
+}
+
+.markdown-preview-empty {
+  color: var(--muted);
+  text-align: center;
+  margin: var(--space-8) 0;
+  font-style: italic;
+}
+
+/* Markdown content styles */
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4,
+.markdown-preview h5,
+.markdown-preview h6 {
+  margin-top: var(--space-4);
+  margin-bottom: var(--space-2);
+  font-weight: var(--font-semibold);
+  line-height: var(--leading-tight);
+  color: var(--ink);
+}
+
+.markdown-preview h1 {
+  font-size: var(--text-xl);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: var(--space-2);
+}
+
+.markdown-preview h2 {
+  font-size: var(--text-lg);
+}
+
+.markdown-preview h3 {
+  font-size: var(--text-base);
+}
+
+.markdown-preview p {
+  margin-bottom: var(--space-3);
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+  margin-bottom: var(--space-3);
+  padding-left: var(--space-4);
+}
+
+.markdown-preview li {
+  margin-bottom: var(--space-1);
+}
+
+.markdown-preview code {
+  background: var(--bg-soft);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.markdown-preview pre {
+  background: var(--bg-soft);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  overflow: auto;
+  margin-bottom: var(--space-3);
+}
+
+.markdown-preview pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.markdown-preview blockquote {
+  border-left: 3px solid var(--primary);
+  padding-left: var(--space-3);
+  margin-left: 0;
+  margin-bottom: var(--space-3);
+  color: var(--ink-secondary);
+}
+
+.markdown-preview a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.markdown-preview a:hover {
+  text-decoration: underline;
+}
+
+.markdown-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: var(--space-3);
+}
+
+.markdown-preview th,
+.markdown-preview td {
+  border: 1px solid var(--line);
+  padding: var(--space-2);
+  text-align: left;
+}
+
+.markdown-preview th {
+  background: var(--bg-soft);
+  font-weight: var(--font-semibold);
+}
+
+.markdown-preview hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: var(--space-4) 0;
 }
 
 /* ============================================================================
- * 6. PLAN CONFIG FORM
+ * 6. MOBILE RESPONSIVE
  * ============================================================================ */
 
 .plan-config-form {
@@ -463,11 +592,13 @@
 .config-slider-wrapper {
   display: grid;
   gap: var(--space-1);
+  padding: 0 var(--space-2);
 }
 
 .config-slider {
-  width: 100%;
-  height: 4px;
+  width: calc(100% - var(--space-4));
+  margin: 0 var(--space-2);
+  height: 6px;
   border-radius: var(--radius-full);
   background: var(--line-subtle);
   outline: none;
@@ -479,8 +610,8 @@
 .config-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: var(--primary);
   border: 2px solid var(--card);
@@ -490,13 +621,13 @@
 }
 
 .config-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
-  box-shadow: 0 2px 8px var(--primary-glow);
+  transform: scale(1.2);
+  box-shadow: 0 2px 10px var(--primary-glow);
 }
 
 .config-slider::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: var(--primary);
   border: 2px solid var(--card);
@@ -506,8 +637,8 @@
 }
 
 .config-slider::-moz-range-thumb:hover {
-  transform: scale(1.15);
-  box-shadow: 0 2px 8px var(--primary-glow);
+  transform: scale(1.2);
+  box-shadow: 0 2px 10px var(--primary-glow);
 }
 
 .config-slider:disabled {
@@ -608,15 +739,18 @@
 .config-checkbox-input {
   appearance: none;
   -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
-  border: 1.5px solid var(--line-strong);
-  border-radius: 3px;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--line-strong);
+  border-radius: 4px;
   background: var(--card);
   cursor: pointer;
   position: relative;
   flex-shrink: 0;
   transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .config-checkbox-input:checked {
@@ -626,14 +760,11 @@
 
 .config-checkbox-input:checked::after {
   content: "";
-  position: absolute;
-  left: 4.5px;
-  top: 1.5px;
-  width: 4px;
-  height: 8px;
+  width: 10px;
+  height: 6px;
   border: solid var(--card);
-  border-width: 0 1.5px 1.5px 0;
-  transform: rotate(45deg);
+  border-width: 0 0 2px 2px;
+  transform: rotate(-45deg) translate(0.5px, -1px);
 }
 
 .config-checkbox-input:focus-visible {
@@ -669,7 +800,7 @@
 }
 
 /* ============================================================================
- * 10. MOBILE RESPONSIVE
+ * 6. MOBILE RESPONSIVE
  * ============================================================================ */
 
 @media (max-width: 1120px) {
@@ -690,7 +821,7 @@
 }
 
 /* ============================================================================
- * 11. DESKTOP SIDEBAR TRANSITIONS
+ * 7. DESKTOP SIDEBAR TRANSITIONS
  * ============================================================================ */
 
 @media (min-width: 1121px) {
@@ -710,7 +841,7 @@
 }
 
 /* ============================================================================
- * 12. REDUCED MOTION SUPPORT
+ * 8. REDUCED MOTION SUPPORT
  * ============================================================================ */
 
 @media (prefers-reduced-motion: reduce) {
