@@ -26,6 +26,7 @@ export interface PlanConfig {
  * Available search sources
  */
 export type SearchSource =
+  | "Web Search"
   | "arXiv"
   | "Semantic Scholar"
   | "Google Scholar"
@@ -35,6 +36,7 @@ export type SearchSource =
  * All available search source options
  */
 export const SEARCH_SOURCE_OPTIONS: SearchSource[] = [
+  "Web Search",
   "arXiv",
   "Semantic Scholar",
   "Google Scholar",
@@ -50,7 +52,7 @@ export const DEFAULT_CONFIG: PlanConfig = {
   max_depth: 3,
   max_nodes: 10,
   priority: 5,
-  search_sources: ["arXiv", "Semantic Scholar"],
+  search_sources: ["Web Search", "arXiv", "Semantic Scholar"],
 };
 
 // ============================================================================

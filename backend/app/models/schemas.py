@@ -39,7 +39,9 @@ class NodeStatus(StrEnum):
 class TaskConfig(BaseModel):
     maxDepth: int = Field(default=3, ge=1, le=8)
     maxNodes: int = Field(default=50, ge=1, le=500)
-    searchSources: list[str] = Field(default_factory=lambda: ["arXiv", "Semantic Scholar"])
+    searchSources: list[str] = Field(
+        default_factory=lambda: ["Web Search", "arXiv", "Semantic Scholar"]
+    )
     priority: int = Field(default=3, ge=1, le=5)
 
 

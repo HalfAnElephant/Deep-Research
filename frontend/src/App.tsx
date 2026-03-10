@@ -27,7 +27,7 @@ const RIGHT_SIDEBAR_KEY = "dr:right-sidebar-visible";
 const DEFAULT_CONFIG = {
   maxDepth: 2,
   maxNodes: 8,
-  searchSources: ["arXiv", "Semantic Scholar"],
+  searchSources: ["Web Search", "arXiv", "Semantic Scholar"],
   priority: 4
 };
 

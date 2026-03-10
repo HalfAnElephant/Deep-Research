@@ -65,15 +65,53 @@ class RetrievalService:
         return evidences
 
     @staticmethod
-    def expand_query(query: str) -> str:
+    def _should_apply_year_filter(query: str) -> bool:
+        """Determine if year filter should be applied based on query content.
+
+        Returns False for historical research queries that need older documents.
+        Returns True for technical/recent research queries.
+        """
+        # Keywords indicating historical research - should NOT apply year filter
+        historical_keywords = [
+            "历史", "校史", "发展史", "沿革", "起源", "演变", "发展历程",
+            "history", "historical", "origin", "evolution", "development",
+            "古代", "近代", "现代史", "年代", "时期",
+            "传记", "生平", "往事", "回忆", "传统", "文化"
+        ]
+
+        query_lower = query.lower()
+        for keyword in historical_keywords:
+            if keyword in query_lower:
+                return False
+
+        return True
+
+    @staticmethod
+    def expand_query(query: str, *, enable_year_filter: bool | None = None) -> str:
+        """Expand query with optional year filtering.
+
+        Args:
+            query: The search query
+            enable_year_filter: If None, auto-detect based on query content.
+                               If True/False, force enable/disable.
+        """
         term = query.strip()
-        year = datetime.now(tz=UTC).year
-        year_part = f"({year} OR {year - 1} OR {year - 2})"
+
+        # Auto-detect if year filter should be applied
+        if enable_year_filter is None:
+            enable_year_filter = RetrievalService._should_apply_year_filter(term)
+
         if any(ord(ch) > 127 for ch in term):
             focus_part = f"({term})"
         else:
             focus_part = f"({term} OR {term} review)"
-        return f"{focus_part} AND {year_part}"
+
+        if enable_year_filter:
+            year = datetime.now(tz=UTC).year
+            year_part = f"({year} OR {year - 1} OR {year - 2})"
+            return f"{focus_part} AND {year_part}"
+
+        return focus_part
 
     async def _mock_retrieve(self, *, task_id: str, node_id: str, query: str, sources: list[str]) -> list[Evidence]:
         await asyncio.sleep(0.05)
@@ -407,7 +445,7 @@ class RetrievalService:
             return "arxiv"
         if lowered in {"semanticscholar", "s2"}:
             return "semanticscholar"
-        if lowered == "tavily":
+        if lowered in {"tavily", "websearch", "web", "tavilysearch"}:
             return "tavily"
         return lowered
 
@@ -428,20 +466,38 @@ class RetrievalService:
 
     @staticmethod
     def _keyword_query_for_paper_apis(query: str) -> str:
+        """Build keyword query for academic paper APIs (arXiv, Semantic Scholar).
+
+        Strategy:
+        1. Extract English tokens if present
+        2. Extract Chinese characters (Unicode CJK range)
+        3. Combine both for mixed queries
+        4. Fall back to original query (NEVER return hardcoded irrelevant terms)
+        """
         cleaned_query = re.sub(r"[\(\)]", " ", query)
+
+        # Extract ASCII tokens
         ascii_tokens = re.findall(r"[A-Za-z][A-Za-z0-9\-_]{1,}", cleaned_query)
         stop_tokens = {"and", "or", "review", "analyze", "improve", "evaluate"}
-        picked = [token for token in ascii_tokens if token.lower() not in stop_tokens]
-        if picked:
-            base = " ".join(picked[:8])
-            if any(word in query for word in ["软件", "工程", "开发", "代码"]):
-                base += " software engineering"
-            if "测试" in query:
-                base += " testing"
-            if "挑战" in query:
-                base += " challenges"
-            return base.strip()
-        return "artificial intelligence agent software engineering"
+        picked_ascii = [token for token in ascii_tokens if token.lower() not in stop_tokens]
+
+        # Extract Chinese characters (Unicode CJK range)
+        chinese_tokens = re.findall(r"[\u4e00-\u9fff]+", cleaned_query)
+
+        # Combine results
+        result_parts = []
+        if picked_ascii:
+            result_parts.append(" ".join(picked_ascii[:8]))
+        if chinese_tokens:
+            result_parts.append(" ".join(chinese_tokens[:5]))
+
+        if result_parts:
+            return " ".join(result_parts)
+
+        # Last resort: return original query stripped of special chars
+        # NEVER return hardcoded irrelevant fallback like "software engineering"
+        fallback = re.sub(r"[^\w\s\u4e00-\u9fff]", " ", cleaned_query).strip()
+        return fallback if fallback else "research"
 
     @classmethod
     def _validate_evidences(cls, evidences: list[Evidence], *, allow_mock: bool) -> list[Evidence]:
