@@ -44,6 +44,52 @@
   --info: #06b6d4;
   --info-light: #ecfeff;
 
+  /* ============================================================================
+   * RESEARCH PHASE COLORS - Each phase has a distinct color identity
+   * ============================================================================
+   * Phase Sequence:
+   * 1. PLANNING (Purple)    - Planning, Building Plan
+   * 2. EXECUTING (Blue)     - Searching, Execution
+   * 3. REVIEWING (Amber)    - Analyzing, Reviewing Conflicts
+   * 4. SYNTHESIZING (Cyan)  - Outlining, Writing
+   * 5. FINALIZING (Emerald) - Persisting, Saving Report
+   */
+
+  /* Phase 1: PLANNING - Purple/Violet (Creative, strategic thinking) */
+  --phase-planning: #8b5cf6;
+  --phase-planning-light: #ede9fe;
+  --phase-planning-border: #c4b5fd;
+  --phase-planning-glow: rgba(139, 92, 246, 0.15);
+  --phase-planning-text: #5b21b6;
+
+  /* Phase 2: EXECUTING - Blue (Action, exploration) */
+  --phase-executing: #3b82f6;
+  --phase-executing-light: #dbeafe;
+  --phase-executing-border: #93c5fd;
+  --phase-executing-glow: rgba(59, 130, 246, 0.15);
+  --phase-executing-text: #1e40af;
+
+  /* Phase 3: REVIEWING - Amber (Attention, scrutiny) */
+  --phase-reviewing: #f59e0b;
+  --phase-reviewing-light: #fef3c7;
+  --phase-reviewing-border: #fcd34d;
+  --phase-reviewing-glow: rgba(245, 158, 11, 0.15);
+  --phase-reviewing-text: #92400e;
+
+  /* Phase 4: SYNTHESIZING - Cyan/Teal (Integration, flow) */
+  --phase-synthesizing: #06b6d4;
+  --phase-synthesizing-light: #ecfeff;
+  --phase-synthesizing-border: #67e8f9;
+  --phase-synthesizing-glow: rgba(6, 182, 212, 0.15);
+  --phase-synthesizing-text: #155e75;
+
+  /* Phase 5: FINALIZING - Emerald (Completion, success) */
+  --phase-finalizing: #10b981;
+  --phase-finalizing-light: #d1fae5;
+  --phase-finalizing-border: #6ee7b7;
+  --phase-finalizing-glow: rgba(16, 185, 129, 0.15);
+  --phase-finalizing-text: #065f46;
+
   /* Shadows - Layered system */
   --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06);
   --shadow: 0 14px 44px rgba(15, 23, 42, 0.12);
@@ -119,6 +165,42 @@
 
     --info: #22d3ee;
     --info-light: rgba(6, 182, 212, 0.15);
+
+    /* Research Phase Colors - Dark Mode */
+    /* Phase 1: PLANNING - Purple (Lighter for contrast) */
+    --phase-planning: #a78bfa;
+    --phase-planning-light: rgba(139, 92, 246, 0.15);
+    --phase-planning-border: rgba(139, 92, 246, 0.4);
+    --phase-planning-glow: rgba(139, 92, 246, 0.25);
+    --phase-planning-text: #c4b5fd;
+
+    /* Phase 2: EXECUTING - Blue (Lighter for contrast) */
+    --phase-executing: #60a5fa;
+    --phase-executing-light: rgba(59, 130, 246, 0.15);
+    --phase-executing-border: rgba(59, 130, 246, 0.4);
+    --phase-executing-glow: rgba(59, 130, 246, 0.25);
+    --phase-executing-text: #93c5fd;
+
+    /* Phase 3: REVIEWING - Amber (Lighter for contrast) */
+    --phase-reviewing: #fbbf24;
+    --phase-reviewing-light: rgba(245, 158, 11, 0.15);
+    --phase-reviewing-border: rgba(245, 158, 11, 0.4);
+    --phase-reviewing-glow: rgba(245, 158, 11, 0.25);
+    --phase-reviewing-text: #fcd34d;
+
+    /* Phase 4: SYNTHESIZING - Cyan (Lighter for contrast) */
+    --phase-synthesizing: #22d3ee;
+    --phase-synthesizing-light: rgba(6, 182, 212, 0.15);
+    --phase-synthesizing-border: rgba(6, 182, 212, 0.4);
+    --phase-synthesizing-glow: rgba(6, 182, 212, 0.25);
+    --phase-synthesizing-text: #67e8f9;
+
+    /* Phase 5: FINALIZING - Emerald (Lighter for contrast) */
+    --phase-finalizing: #34d399;
+    --phase-finalizing-light: rgba(16, 185, 129, 0.15);
+    --phase-finalizing-border: rgba(16, 185, 129, 0.4);
+    --phase-finalizing-glow: rgba(16, 185, 129, 0.25);
+    --phase-finalizing-text: #6ee7b7;
 
     /* Dark shadows */
     --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
@@ -1621,11 +1703,11 @@ button.ghost:hover:not(:disabled) {
 
 .progress-card-phase {
   font-size: 11px;
-  color: var(--muted);
-  background: var(--bg-soft);
-  padding: 2px 8px;
+  font-weight: 600;
+  padding: 3px 10px;
   border-radius: var(--radius-sm);
   align-self: flex-start;
+  transition: all var(--transition-fast);
 }
 
 .progress-card-toggle {
@@ -1695,9 +1777,12 @@ button.ghost:hover:not(:disabled) {
 }
 
 .entry-phase {
-  background: var(--card);
-  padding: 1px 6px;
+  padding: 2px 8px;
   border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .entry-progress {
