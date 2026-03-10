@@ -16,8 +16,10 @@ import { ChatTimeline } from "./components/ChatTimeline";
 import { Composer } from "./components/Composer";
 import { ConversationSidebar } from "./components/ConversationSidebar";
 import { Dialog } from "./components/Dialog";
+import { ExportModal } from "./components/ExportModal";
 import { PlanEditorPane } from "./components/PlanEditorPane";
-import type { ConversationDetail, ConversationMessage, ConversationStatus, ConversationSummary } from "./types";
+import { AgentStatusPanel } from "./components/AgentStatusPanel";
+import type { ConversationDetail, ConversationMessage, ConversationStatus, ConversationSummary, AgentState, AgentType } from "./types";
 
 const FIRST_MESSAGE_LIMIT = 500;
 const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_CONVERSATION_REFRESH_MS ?? "2500");
@@ -42,6 +44,11 @@ const STATUS_LABEL: Record<ConversationStatus, string> = {
 function toErrorText(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
+}
+
+function getCurrentAgentPhase(agents: AgentState[]): AgentType | null {
+  const running = agents.find(a => a.status === "RUNNING");
+  return running ? running.agentType : null;
 }
 
 function readStoredFlag(key: string, fallback: boolean): boolean {
@@ -90,6 +97,7 @@ export function App() {
   const [saving, setSaving] = useState(false);
   const [starting, setStarting] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null);
   const [renamingConversationId, setRenamingConversationId] = useState<string | null>(null);
   const [deletingAll, setDeletingAll] = useState(false);
@@ -684,6 +692,13 @@ export function App() {
           </div>
         </header>
 
+        {activeStatus === "RUNNING" && activeDetail?.agentStates && activeDetail.agentStates.length > 0 && (
+          <AgentStatusPanel
+            agents={activeDetail.agentStates}
+            currentPhase={getCurrentAgentPhase(activeDetail.agentStates)}
+          />
+        )}
+
         <ChatTimeline
           messages={timelineMessages}
           currentTaskId={activeDetail?.taskId ?? null}
@@ -697,6 +712,7 @@ export function App() {
           onFocusComposer={onFocusComposer}
           downloadingReport={downloading}
           onDownloadReport={onDownloadReport}
+          onExportReport={() => setShowExportModal(true)}
         />
 
         <Composer
@@ -814,6 +830,13 @@ export function App() {
           }}
         />
       </Dialog>
+
+      {showExportModal && activeConversationId && (
+        <ExportModal
+          conversationId={activeConversationId}
+          onClose={() => setShowExportModal(false)}
+        />
+      )}
 
       {error && <div className="error-banner">{error}</div>}
       </main>

@@ -124,3 +124,51 @@ def download_conversation_report(conversation_id: str) -> FileResponse:
     if not path.exists():
         raise HTTPException(status_code=404, detail="Report file does not exist")
     return FileResponse(path, media_type="text/markdown", filename=f"{conversation_id}.md")
+
+
+@router.get("/conversations/{conversation_id}/export/article")
+def export_article(conversation_id: str) -> FileResponse:
+    """导出文章文件（纯内容，引用在文末）。"""
+    try:
+        summary = conversation_repository.get_summary(conversation_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Conversation not found: {conversation_id}") from exc
+    if not summary.taskId:
+        raise HTTPException(status_code=404, detail="Conversation has no task yet")
+
+    task_id = summary.taskId
+    article_path = Path(f"backend/.data/reports/{task_id}_article.md")
+    if not article_path.exists():
+        # 回退到旧的报告文件
+        legacy_path = Path(f"backend/.data/reports/{task_id}.md")
+        if not legacy_path.exists():
+            raise HTTPException(status_code=404, detail="Article file not generated yet")
+        article_path = legacy_path
+
+    return FileResponse(
+        article_path,
+        media_type="text/markdown",
+        filename=f"{conversation_id}_article.md"
+    )
+
+
+@router.get("/conversations/{conversation_id}/export/references")
+def export_references(conversation_id: str) -> FileResponse:
+    """导出引用列表文件（包含评分和说明）。"""
+    try:
+        summary = conversation_repository.get_summary(conversation_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Conversation not found: {conversation_id}") from exc
+    if not summary.taskId:
+        raise HTTPException(status_code=404, detail="Conversation has no task yet")
+
+    task_id = summary.taskId
+    references_path = Path(f"backend/.data/reports/{task_id}_references.md")
+    if not references_path.exists():
+        raise HTTPException(status_code=404, detail="References file not generated yet")
+
+    return FileResponse(
+        references_path,
+        media_type="text/markdown",
+        filename=f"{conversation_id}_references.md"
+    )

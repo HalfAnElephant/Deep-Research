@@ -36,6 +36,23 @@ class NodeStatus(StrEnum):
     PRUNED = "PRUNED"
 
 
+class AgentType(StrEnum):
+    """四 Agent 架构的智能体类型。"""
+    IDEATION = "IDEATION"      # 构思智能体
+    PLANNING = "PLANNING"      # 规划智能体
+    WRITING = "WRITING"        # 写作智能体
+    CHECKING = "CHECKING"      # 检查智能体
+
+
+class AgentStatus(StrEnum):
+    """智能体执行状态。"""
+    IDLE = "IDLE"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    WAITING_INPUT = "WAITING_INPUT"
+
+
 class TaskConfig(BaseModel):
     maxDepth: int = Field(default=3, ge=1, le=8)
     maxNodes: int = Field(default=50, ge=1, le=500)
@@ -162,9 +179,41 @@ class ConversationSummary(BaseModel):
     updatedAt: str
 
 
+class AgentStateRecord(BaseModel):
+    """智能体状态记录。"""
+    agentType: AgentType
+    status: AgentStatus
+    startedAt: str | None = None
+    completedAt: str | None = None
+    progress: int = Field(default=0, ge=0, le=100)
+    currentActivity: str = ""
+    output: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+
+
+class ResearchHypothesis(BaseModel):
+    """研究假设模型。"""
+    hypothesisId: str
+    title: str
+    description: str
+    sources: list[str] = Field(default_factory=list)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    createdAt: str
+
+
+class ResearchPlan(BaseModel):
+    """研究计划模型。"""
+    planId: str
+    hypothesisId: str
+    steps: list[dict[str, Any]] = Field(default_factory=list)
+    createdAt: str
+
+
 class ConversationDetail(ConversationSummary):
     currentPlan: PlanRevision | None = None
     messages: list[ConversationMessage] = Field(default_factory=list)
+    agentStates: list[AgentStateRecord] = Field(default_factory=list)
+    currentHypothesis: ResearchHypothesis | None = None
 
 
 class CreateConversationRequest(BaseModel):

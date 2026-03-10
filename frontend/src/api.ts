@@ -235,6 +235,14 @@ export async function downloadTaskReport(taskId: string): Promise<void> {
   await download(`${API_BASE}/api/v1/tasks/${taskId}/report/download`, `${taskId}.md`);
 }
 
+export async function exportArticle(conversationId: string): Promise<void> {
+  await download(`${API_BASE}/api/v1/conversations/${conversationId}/export/article`, `${conversationId}_article.md`);
+}
+
+export async function exportReferences(conversationId: string): Promise<void> {
+  await download(`${API_BASE}/api/v1/conversations/${conversationId}/export/references`, `${conversationId}_references.md`);
+}
+
 export function connectProgressWs(taskId: string, onMessage: (event: MessageEvent<string>) => void): WebSocket {
   const wsBase = API_BASE.replace("http://", "ws://").replace("https://", "wss://");
   const ws = new WebSocket(`${wsBase}/api/v1/ws/task/${taskId}/progress`);
