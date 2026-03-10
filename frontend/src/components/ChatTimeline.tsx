@@ -23,6 +23,7 @@ interface ChatTimelineProps {
   onStartResearch: () => void;
   onFocusComposer: () => void;
   onDownloadReport: () => void;
+  onExportReport?: () => void;
 }
 
 export function ChatTimeline(props: ChatTimelineProps) {
@@ -38,7 +39,8 @@ export function ChatTimeline(props: ChatTimelineProps) {
     onOpenPlanDrawer,
     onStartResearch,
     onFocusComposer,
-    onDownloadReport
+    onDownloadReport,
+    onExportReport
   } = props;
 
   // UI state for expanded/collapsed sections
@@ -204,6 +206,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
                     expanded={isReportExpanded}
                     closed={isReportClosed}
                     onDownload={onDownloadReport}
+                    onExport={onExportReport}
                     onToggleExpand={() =>
                       setExpandedReport((prev) => ({ ...prev, [message.messageId]: !(prev[message.messageId] ?? false) }))
                     }

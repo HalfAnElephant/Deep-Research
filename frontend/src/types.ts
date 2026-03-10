@@ -133,3 +133,41 @@ export interface ConversationBulkDeleteResponse {
   deleted: boolean;
   deletedCount: number;
 }
+
+// Agent-related types
+export type AgentType = "IDEATION" | "PLANNING" | "WRITING" | "CHECKING";
+
+export type AgentStatus = "IDLE" | "RUNNING" | "COMPLETED" | "FAILED" | "WAITING_INPUT";
+
+export interface AgentState {
+  agentType: AgentType;
+  status: AgentStatus;
+  startedAt?: string;
+  completedAt?: string;
+  progress: number;
+  currentActivity: string;
+  output?: Record<string, unknown>;
+  error?: string;
+}
+
+export interface ResearchHypothesis {
+  hypothesisId: string;
+  title: string;
+  description: string;
+  sources: string[];
+  confidence: number;
+  createdAt: string;
+}
+
+export interface ResearchPlan {
+  planId: string;
+  hypothesisId: string;
+  steps: Array<{
+    step_id: number;
+    title: string;
+    description: string;
+    type: string;
+    estimated_time: string;
+  }>;
+  createdAt: string;
+}

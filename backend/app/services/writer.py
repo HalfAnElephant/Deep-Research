@@ -20,9 +20,19 @@ class ReportBlueprint:
 
 
 class WriterService:
+    """研究文章写作服务，支持分离导出文章和引用列表。"""
+
     URL_PATTERN = re.compile(r"https?://\S+")
     PLACEHOLDER_TITLE_PATTERN = re.compile(
         r"(?i)(^\[mock\]|result\s+for|synthetic evidence|semantic scholar result|arxiv result|web result)"
+    )
+    # 需要过滤的内部标记模式
+    INTERNAL_MARKERS_PATTERN = re.compile(
+        r"(_taskId:\s*\S+_)"
+        r"|(\#\#\s*AI\s*综合解读)"
+        r"|(\#\#\s*输出格式)"
+        r"|(\#\#\s*Trace\s*Section)"
+        r"|(\[locked\])"
     )
 
     def __init__(self, output_dir: str = "backend/.data/reports") -> None:
@@ -41,6 +51,11 @@ class WriterService:
         blueprint: ReportBlueprint | None = None,
         report_body: str | None = None,
     ) -> tuple[str, str, dict[str, Citation]]:
+        """生成研究文章和引用列表两个独立的文件。
+
+        Returns:
+            tuple[str, str, dict]: (文章路径, 引用列表路径, 引用映射)
+        """
         _ = locked_sections
         blueprint = blueprint or self._default_blueprint()
         citation_map = self._build_citations(evidences)
@@ -55,19 +70,30 @@ class WriterService:
             )
         else:
             generated_body = report_body
-        lines = [f"# {task_title}", "", f"_taskId: {task_id}_", ""]
-        lines.extend(generated_body.splitlines())
-        lines.append("")
 
-        lines.extend(self._build_evidence_appendix(evidences).splitlines())
-        lines.append("")
-        lines.append("## References")
+        # 过滤内部标记，确保输出干净
+        clean_body = self._strip_internal_markers(generated_body)
+
+        # 生成文章文件（纯内容，引用在文末）
+        article_lines = [f"# {task_title}", ""]
+        article_lines.extend(clean_body.splitlines())
+        article_lines.append("")
+        article_lines.append("## 参考文献")
         for i, cid in enumerate(citation_map, start=1):
             c = citation_map[cid]
-            lines.append(f"[{i}] {', '.join(c.authors)} ({c.year}). {c.title}. {c.url}")
+            article_lines.append(f"[{i}] {', '.join(c.authors)} ({c.year}). {c.title}. {c.url}")
 
-        md_path = self.output_dir / f"{task_id}.md"
-        md_path.write_text("\n".join(lines), encoding="utf-8")
+        article_path = self.output_dir / f"{task_id}_article.md"
+        article_path.write_text("\n".join(article_lines), encoding="utf-8")
+
+        # 生成引用列表文件（包含评分和说明）
+        references_content = self._build_references_list(evidences, citation_map)
+        references_path = self.output_dir / f"{task_id}_references.md"
+        references_path.write_text(references_content, encoding="utf-8")
+
+        # 保留旧的 .md 和 .bib 文件以保持兼容
+        legacy_md_path = self.output_dir / f"{task_id}.md"
+        legacy_md_path.write_text("\n".join(article_lines), encoding="utf-8")
 
         bib_lines: list[str] = []
         for c in citation_map.values():
@@ -85,7 +111,8 @@ class WriterService:
             )
         bib_path = self.output_dir / f"{task_id}.bib"
         bib_path.write_text("\n".join(bib_lines), encoding="utf-8")
-        return str(md_path), str(bib_path), citation_map
+
+        return str(article_path), str(references_path), citation_map
 
     def generate_body(
         self,
@@ -130,6 +157,7 @@ class WriterService:
         evidences: list[Evidence],
         blueprint: ReportBlueprint,
     ) -> str:
+        """生成文章正文内容，不含内部标记。"""
         evidence_rich_template = self._generate_template(
             task_title=task_title,
             sections=sections,
@@ -149,14 +177,11 @@ class WriterService:
         if not llm_text:
             return evidence_rich_template
         sanitized = self._strip_inline_urls(llm_text.strip())
-        return "\n".join(
-            [
-                "## AI 综合解读",
-                sanitized,
-                "",
-                evidence_rich_template,
-            ]
-        )
+        # 不再添加 "## AI 综合解读" 标记，直接返回 LLM 生成的内容
+        # 如果 LLM 内容较短，补充模板内容
+        if len(sanitized) < 500:
+            return evidence_rich_template
+        return sanitized
 
     def _generate_with_llm(
         self,
@@ -438,3 +463,93 @@ class WriterService:
     @classmethod
     def _looks_placeholder_title(cls, title: str) -> bool:
         return bool(cls.PLACEHOLDER_TITLE_PATTERN.search(title.strip()))
+
+    @classmethod
+    def _strip_internal_markers(cls, text: str) -> str:
+        """移除内部标记，确保输出干净。
+
+        过滤的内容包括：
+        - _taskId: xxx_ 内部任务标记
+        - ## AI 综合解读 AI 提示词泄露
+        - ## 输出格式 输出格式信息泄露
+        - ## Trace Section 调试信息
+        - [locked] 锁定标记
+        """
+        # 移除匹配的行
+        lines = text.splitlines()
+        filtered_lines = []
+        skip_next_empty = False
+
+        for line in lines:
+            # 检查是否是需要移除的行
+            if cls.INTERNAL_MARKERS_PATTERN.search(line):
+                skip_next_empty = True
+                continue
+            # 跳过标记后的空行
+            if skip_next_empty and line.strip() == "":
+                skip_next_empty = False
+                continue
+            filtered_lines.append(line)
+
+        return "\n".join(filtered_lines)
+
+    def _build_references_list(
+        self,
+        evidences: list[Evidence],
+        citation_map: dict[str, Citation]
+    ) -> str:
+        """生成引用列表文件，包含评分和说明。
+
+        Args:
+            evidences: 证据列表
+            citation_map: 引用映射
+
+        Returns:
+            格式化的引用列表内容
+        """
+        ranked = sorted(evidences, key=lambda item: item.score, reverse=True)
+
+        lines = ["# 引用列表", ""]
+        lines.append("本文档包含研究中引用的所有文献，包括评分、来源和相关说明。")
+        lines.append("")
+
+        if not ranked:
+            lines.append("暂无引用文献。")
+            return "\n".join(lines)
+
+        lines.append(f"共 {len(ranked)} 条引用文献，按相关性评分排序。")
+        lines.append("")
+
+        for idx, ev in enumerate(ranked, start=1):
+            citation = citation_map.get(ev.id)
+            lines.append(f"## 文献 {idx}")
+            lines.append(f"- **ID**: `{ev.id}`")
+            lines.append(f"- **标题**: {self._display_title(ev)}")
+
+            if citation:
+                authors_str = "、".join(citation.authors) if citation.authors else "未知"
+                lines.append(f"- **作者**: {authors_str}")
+                lines.append(f"- **年份**: {citation.year}")
+
+            lines.append(f"- **来源类型**: {ev.sourceType.value}")
+            lines.append(f"- **发表时间**: {ev.metadata.publishDate or '未知'}")
+            lines.append(f"- **相关性评分**: {ev.score:.2f}")
+            lines.append(f"- **是否同行评审**: {'是' if ev.metadata.isPeerReviewed else '否'}")
+
+            if ev.metadata.citationCount > 0:
+                lines.append(f"- **引用次数**: {ev.metadata.citationCount}")
+
+            lines.append(f"- **链接**: [{ev.url}]({ev.url})")
+            lines.append("")
+
+            # 添加摘要/说明
+            snippet = " ".join(ev.content.split()).strip()
+            if snippet:
+                lines.append("**摘要/说明**:")
+                lines.append(f"> {snippet[:500]}{'...' if len(snippet) > 500 else ''}")
+                lines.append("")
+
+            lines.append("---")
+            lines.append("")
+
+        return "\n".join(lines)
