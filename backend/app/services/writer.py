@@ -60,6 +60,9 @@ class WriterService:
         blueprint = blueprint or self._default_blueprint()
         citation_map = self._build_citations(evidences)
 
+        # 创建 evidence_id 到引用编号的映射
+        evidence_to_index = {ev_id: idx + 1 for idx, ev_id in enumerate(citation_map.keys())}
+
         if report_body is None:
             generated_body = self.generate_body(
                 task_title=task_title,
@@ -74,14 +77,17 @@ class WriterService:
         # 过滤内部标记，确保输出干净
         clean_body = self._strip_internal_markers(generated_body)
 
+        # 将 [evidence:xxx] 替换为标准引用编号 [1], [2], ...
+        clean_body = self._replace_evidence_refs(clean_body, evidence_to_index)
+
         # 生成文章文件（纯内容，引用在文末）
         article_lines = [f"# {task_title}", ""]
         article_lines.extend(clean_body.splitlines())
         article_lines.append("")
         article_lines.append("## 参考文献")
-        for i, cid in enumerate(citation_map, start=1):
-            c = citation_map[cid]
-            article_lines.append(f"[{i}] {', '.join(c.authors)} ({c.year}). {c.title}. {c.url}")
+        for ev_id, c in citation_map.items():
+            idx = evidence_to_index.get(ev_id, 0)
+            article_lines.append(f"[{idx}] {', '.join(c.authors)} ({c.year}). {c.title}. {c.url}")
 
         article_path = self.output_dir / f"{task_id}_article.md"
         article_path.write_text("\n".join(article_lines), encoding="utf-8")
@@ -492,6 +498,29 @@ class WriterService:
             filtered_lines.append(line)
 
         return "\n".join(filtered_lines)
+
+    @staticmethod
+    def _replace_evidence_refs(text: str, evidence_to_index: dict[str, int]) -> str:
+        """将 [evidence:xxx] 替换为标准引用编号 [1], [2], ...
+
+        Args:
+            text: 包含 evidence 引用的文本
+            evidence_to_index: evidence_id 到引用编号的映射
+
+        Returns:
+            替换后的文本
+        """
+        pattern = re.compile(r"\[evidence:([\w-]+)\]")
+
+        def replace_match(match: re.Match) -> str:
+            ev_id = match.group(1)
+            idx = evidence_to_index.get(ev_id)
+            if idx:
+                return f"[{idx}]"
+            # 如果找不到对应的引用，移除该标记
+            return ""
+
+        return pattern.sub(replace_match, text)
 
     def _build_references_list(
         self,
