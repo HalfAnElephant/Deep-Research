@@ -180,6 +180,93 @@ a:focus-visible {
 }
 
 /* ============================================================================
+ * 5.5 FEEDBACK UTILITIES
+ * ============================================================================
+ *
+ * Utility classes for interaction feedback.
+ */
+
+/* Copy success feedback */
+.copy-feedback {
+  position: relative;
+}
+
+.copy-feedback::after {
+  content: "已复制！";
+  position: absolute;
+  top: -36px;
+  left: 50%;
+  transform: translateX(-50%) scale(0.9);
+  padding: 6px 12px;
+  background: var(--success);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: var(--shadow-md);
+  transition: none;
+}
+
+.copy-feedback.show::after {
+  animation: copy-toast 1.5s ease-out forwards;
+}
+
+@keyframes copy-toast {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px) scale(0.9);
+  }
+  20% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+  80% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px) scale(0.9);
+  }
+}
+
+/* Scroll indicator for scrollable areas */
+@keyframes scroll-hint-pulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: translateX(-50%) scaleX(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: translateX(-50%) scaleX(1.2);
+  }
+}
+
+.scroll-indicator {
+  position: relative;
+}
+
+.scroll-indicator::after {
+  content: "";
+  position: absolute;
+  bottom: var(--space-2);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 3px;
+  background: var(--line);
+  border-radius: 2px;
+  animation: scroll-hint-pulse 2s ease-in-out infinite;
+}
+
+.scroll-indicator.scrolled::after {
+  display: none;
+}
+
+/* ============================================================================
  * 6. SCROLLBAR STYLES
  * ============================================================================ */
 

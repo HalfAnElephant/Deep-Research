@@ -71,3 +71,9 @@
 
 /* Dialog, toast, and notification styles */
 @import './components/dialog.css';
+
+/* New Phase 1 components (Button, Skeleton, Badge, Card, Tabs, Tooltip, Avatar, Dropdown) */
+@import './components/new-components.css';
+
+/* Feedback animations (success, error, copy toast, progress flash) */
+@import './components/feedback.css';

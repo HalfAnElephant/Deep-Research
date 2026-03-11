@@ -1,0 +1,961 @@
+/**
+ * ============================================================================
+ * NEW COMPONENT STYLES
+ * ============================================================================
+ *
+ * Styles for the new Phase 1 components:
+ * - Button (unified)
+ * - Skeleton
+ * - Badge
+ * - Card
+ * - Tabs
+ * - Tooltip
+ * - Avatar
+ * - Dropdown
+ *
+ * ============================================================================
+ */
+
+/* ============================================================================
+ * 1. BUTTON COMPONENT
+ * ============================================================================
+ *
+ * Unified button component with variants, sizes, loading states,
+ * and ripple effects.
+ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-weight: var(--font-medium);
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Ripple effect base */
+.btn::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: width 0.6s ease-out, height 0.6s ease-out, opacity 0.6s ease-out;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.btn:active::after {
+  width: 300%;
+  height: 300%;
+  opacity: 1;
+  transition: width 0s, height 0s, opacity 0s;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--card),
+    0 0 0 4px var(--primary);
+  transform: translateY(-1px);
+}
+
+/* Button Sizes */
+.btn-small {
+  padding: 6px 12px;
+  min-height: 32px;
+  font-size: var(--text-sm);
+}
+
+.btn-medium {
+  padding: 9px 16px;
+  min-height: 40px;
+  font-size: var(--text-base);
+}
+
+.btn-large {
+  padding: 14px 28px;
+  min-height: 52px;
+  font-size: var(--text-lg);
+  border-radius: var(--radius-lg);
+}
+
+/* Button Variants */
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+  border-color: var(--primary-hover);
+  color: #fff;
+  box-shadow:
+    0 2px 8px rgba(59, 130, 246, 0.25),
+    0 1px 3px rgba(59, 130, 246, 0.15);
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 20px rgba(59, 130, 246, 0.35),
+    0 4px 8px rgba(59, 130, 246, 0.2);
+}
+
+.btn-secondary {
+  background: var(--bg-warm);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--bg-soft);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--ink-secondary);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.btn-text {
+  background: transparent;
+  border-color: transparent;
+  color: var(--primary);
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
+}
+
+.btn-text:hover:not(:disabled) {
+  background: var(--primary-light);
+  transform: translateY(-1px);
+}
+
+.btn-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #dc2626;
+  border-color: #dc2626;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
+}
+
+/* Button States */
+.btn-loading {
+  pointer-events: none;
+}
+
+.btn-full-width {
+  width: 100%;
+}
+
+/* Loading spinner */
+.btn-spinner {
+  animation: btn-spin 0.8s linear infinite;
+}
+
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Icon spacing */
+.btn-icon-prefix,
+.btn-icon-suffix {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ============================================================================
+ * 2. SKELETON COMPONENT
+ * ============================================================================
+ *
+ * Loading placeholder with shimmer animation.
+ */
+
+.skeleton {
+  background: var(--line);
+  border-radius: var(--radius-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.4) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  opacity: 0;
+}
+
+.skeleton-shimmer::after {
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  opacity: 1;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  50%,
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton-pulse {
+  animation: skeleton-pulse 2s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Skeleton Card */
+.skeleton-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  overflow: hidden;
+}
+
+.skeleton-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.skeleton-card-content {
+  padding: var(--space-4);
+}
+
+.skeleton-card-footer {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--line);
+  background: var(--bg-soft);
+}
+
+/* Dark mode shimmer */
+@media (prefers-color-scheme: dark) {
+  .skeleton::after {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.1) 50%,
+      transparent 100%
+    );
+  }
+}
+
+/* ============================================================================
+ * 3. BADGE COMPONENT
+ * ============================================================================
+ *
+ * Status indicator and count badge.
+ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.02em;
+  transition: all var(--transition-fast);
+}
+
+/* Badge Sizes */
+.badge-small {
+  padding: 2px 8px;
+  font-size: 10px;
+  border-radius: var(--radius-full);
+}
+
+.badge-medium {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  border-radius: var(--radius-full);
+}
+
+/* Badge Variants */
+.badge-default {
+  background: var(--bg-soft);
+  color: var(--ink-secondary);
+  border: 1px solid var(--line);
+}
+
+.badge-primary {
+  background: var(--primary-light);
+  color: var(--primary);
+  border: 1px solid var(--primary-glow);
+}
+
+.badge-success {
+  background: var(--success-light);
+  color: var(--success);
+  border: 1px solid var(--success-glow);
+}
+
+.badge-warning {
+  background: var(--warning-light);
+  color: var(--warning);
+  border: 1px solid var(--warning-glow);
+}
+
+.badge-danger {
+  background: var(--danger-light);
+  color: var(--danger);
+  border: 1px solid var(--danger-glow);
+}
+
+.badge-info {
+  background: var(--info-light);
+  color: var(--info);
+  border: 1px solid rgba(6, 182, 212, 0.25);
+}
+
+/* Count Badge (dot style) */
+.badge-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--danger);
+  color: #fff;
+  border: none;
+  font-size: 11px;
+  font-weight: var(--font-bold);
+  justify-content: center;
+}
+
+.badge-count.badge-primary {
+  background: var(--primary);
+}
+
+.badge-count.badge-success {
+  background: var(--success);
+}
+
+/* Pulse Animation */
+.badge-pulse::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: badge-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes badge-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
+}
+
+.badge-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ============================================================================
+ * 4. CARD COMPONENT
+ * ============================================================================
+ *
+ * Card container with elevation and 3D hover effects.
+ */
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: all var(--transition-normal);
+}
+
+.card-hoverable:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+/* 3D Tilt Effect */
+.card-tilt {
+  transform-style: preserve-3d;
+  perspective: 1000px;
+}
+
+.card-tilt:hover {
+  transform: translateY(-4px) perspective(1000px) rotateX(2deg);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.15),
+    0 0 0 1px var(--line-subtle);
+}
+
+.card-clickable {
+  cursor: pointer;
+}
+
+.card-header {
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+  .card-header {
+    background: linear-gradient(180deg, rgba(30, 41, 59, 0.5), transparent);
+  }
+}
+
+.card-title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  margin: 0;
+  color: var(--ink);
+}
+
+.card-description {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  margin: var(--space-1) 0 0;
+}
+
+.card-content {
+  padding: var(--space-4);
+}
+
+.card-footer {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--line);
+  background: var(--bg-soft);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* ============================================================================
+ * 5. TABS COMPONENT
+ * ============================================================================
+ *
+ * Accessible tab navigation.
+ */
+
+.tabs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.tabs-list {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--bg-soft);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+}
+
+.tabs-trigger {
+  flex: 1;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.tabs-trigger:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--card);
+}
+
+.tabs-trigger-active {
+  background: var(--card);
+  border-color: var(--line);
+  color: var(--primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.tabs-trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--primary-glow);
+}
+
+.tabs-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tabs-content {
+  animation: tabs-fade-in var(--duration-normal) var(--ease-out);
+}
+
+@keyframes tabs-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================================================
+ * 6. TOOLTIP COMPONENT
+ * ============================================================================
+ *
+ * Hover-triggered information popup.
+ */
+
+.tooltip-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.tooltip {
+  position: absolute;
+  z-index: var(--z-tooltip);
+  padding: var(--space-2) var(--space-3);
+  background: var(--gray-50);
+  color: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.95);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  box-shadow: var(--shadow-lg);
+}
+
+.tooltip-visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.tooltip-top {
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.95);
+}
+
+.tooltip-top.tooltip-visible {
+  transform: translateX(-50%) scale(1);
+}
+
+.tooltip-bottom {
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.95);
+}
+
+.tooltip-bottom.tooltip-visible {
+  transform: translateX(-50%) scale(1);
+}
+
+.tooltip-left {
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%) scale(0.95);
+}
+
+.tooltip-left.tooltip-visible {
+  transform: translateY(-50%) scale(1);
+}
+
+.tooltip-right {
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%) scale(0.95);
+}
+
+.tooltip-right.tooltip-visible {
+  transform: translateY(-50%) scale(1);
+}
+
+.tooltip-arrow {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--gray-50);
+  transform: rotate(45deg);
+}
+
+.tooltip-top .tooltip-arrow {
+  bottom: -4px;
+  left: 50%;
+  margin-left: -4px;
+}
+
+.tooltip-bottom .tooltip-arrow {
+  top: -4px;
+  left: 50%;
+  margin-left: -4px;
+}
+
+.tooltip-left .tooltip-arrow {
+  right: -4px;
+  top: 50%;
+  margin-top: -4px;
+}
+
+.tooltip-right .tooltip-arrow {
+  left: -4px;
+  top: 50%;
+  margin-top: -4px;
+}
+
+/* Dark mode tooltip */
+@media (prefers-color-scheme: dark) {
+  .tooltip {
+    background: var(--gray-100);
+    color: var(--gray-50);
+  }
+
+  .tooltip-arrow {
+    background: var(--gray-100);
+  }
+}
+
+/* ============================================================================
+ * 7. AVATAR COMPONENT
+ * ============================================================================
+ *
+ * User or entity representation.
+ */
+
+.avatar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: var(--primary-light);
+  color: var(--primary);
+  transition: all var(--transition-fast);
+}
+
+.avatar-circle {
+  border-radius: 50%;
+}
+
+.avatar-square {
+  border-radius: var(--radius-sm);
+}
+
+.avatar-rounded {
+  border-radius: var(--radius-md);
+}
+
+.avatar-clickable {
+  cursor: pointer;
+}
+
+.avatar-clickable:hover {
+  transform: scale(1.05);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Avatar Sizes */
+.avatar-xs {
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+}
+
+.avatar-small {
+  width: 32px;
+  height: 32px;
+  font-size: var(--text-xs);
+}
+
+.avatar-medium {
+  width: 40px;
+  height: 40px;
+  font-size: var(--text-sm);
+}
+
+.avatar-large {
+  width: 48px;
+  height: 48px;
+  font-size: var(--text-base);
+}
+
+.avatar-xl {
+  width: 64px;
+  height: 64px;
+  font-size: var(--text-lg);
+}
+
+.avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-initials {
+  font-weight: var(--font-semibold);
+  line-height: 1;
+}
+
+.avatar-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Status Indicator */
+.avatar-status {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--card);
+}
+
+.avatar-status-online {
+  background: var(--success);
+}
+
+.avatar-status-away {
+  background: var(--warning);
+}
+
+.avatar-status-busy {
+  background: var(--danger);
+}
+
+.avatar-status-offline {
+  background: var(--muted);
+}
+
+/* Icon Pop Animation */
+.avatar-image,
+.avatar-initials,
+.avatar-icon {
+  animation: avatar-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes avatar-pop {
+  0% {
+    transform: scale(0) rotate(-180deg);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* ============================================================================
+ * 8. DROPDOWN COMPONENT
+ * ============================================================================
+ *
+ * Menu dropdown with animation support.
+ */
+
+.dropdown {
+  position: relative;
+  display: inline-flex;
+}
+
+.dropdown-trigger {
+  cursor: pointer;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  min-width: 180px;
+  padding: var(--space-2);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: var(--z-dropdown);
+  opacity: 0;
+  transform: translateY(-8px) scale(0.96);
+  transform-origin: top;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.dropdown-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.dropdown-left {
+  left: 0;
+}
+
+.dropdown-right {
+  right: 0;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-secondary);
+  font-size: var(--text-base);
+  text-align: left;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.dropdown-item:hover:not(:disabled) {
+  background: var(--bg-soft);
+  color: var(--ink);
+  transform: translateX(2px);
+}
+
+.dropdown-item:focus-visible {
+  outline: none;
+  background: var(--bg-soft);
+  box-shadow: inset 0 0 0 2px var(--primary-glow);
+}
+
+.dropdown-item-danger {
+  color: var(--danger);
+}
+
+.dropdown-item-danger:hover:not(:disabled) {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
+.dropdown-item-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dropdown-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.dropdown-item-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.dropdown-item-shortcut {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+.dropdown-divider {
+  height: 1px;
+  margin: var(--space-2) 0;
+  background: var(--line);
+}
+
+/* ============================================================================
+ * REDUCED MOTION SUPPORT
+ * ============================================================================
+ */
+
+@media (prefers-reduced-motion: reduce) {
+  .btn::after,
+  .btn,
+  .skeleton::after,
+  .skeleton-shimmer,
+  .skeleton-pulse,
+  .badge-pulse::before,
+  .card,
+  .card-hoverable,
+  .card-tilt,
+  .tabs-trigger,
+  .tabs-content,
+  .tooltip,
+  .avatar-image,
+  .avatar-initials,
+  .avatar-icon,
+  .avatar-clickable,
+  .dropdown-menu,
+  .dropdown-item {
+    animation: none !important;
+    transition: opacity 0.01ms !important;
+    transform: none !important;
+  }
+
+  .btn:active::after {
+    display: none;
+  }
+}

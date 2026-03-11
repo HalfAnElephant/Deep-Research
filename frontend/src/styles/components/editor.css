@@ -468,6 +468,19 @@
  * 7. FORM FIELDS
  * ============================================================================ */
 
+/* Form Validation Animations */
+@keyframes error-shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
+@keyframes error-icon-pop {
+  0% { transform: translateY(-50%) scale(0); }
+  50% { transform: translateY(-50%) scale(1.2); }
+  100% { transform: translateY(-50%) scale(1); }
+}
+
 .config-field {
   display: grid;
   gap: var(--space-2);
@@ -547,6 +560,17 @@
 
 .config-input[aria-invalid="true"] {
   border-color: var(--danger);
+  animation: error-shake 0.4s ease-in-out;
+  position: relative;
+}
+
+/* Error icon on invalid input */
+.config-input[aria-invalid="true"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23ef4444' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='12' y1='8' x2='12' y2='12'/%3E%3Cline x1='12' y1='16' x2='12.01' y2='16'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--space-3) center;
+  background-size: 20px;
+  padding-right: calc(var(--space-3) * 2 + 20px);
 }
 
 .config-input[aria-invalid="true"]:focus-visible {
@@ -854,6 +878,10 @@
   .config-checkbox,
   .config-checkbox-input {
     transition: none;
+    animation: none;
+  }
+
+  .config-input[aria-invalid="true"] {
     animation: none;
   }
 
