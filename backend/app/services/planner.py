@@ -232,15 +232,19 @@ class MasterPlanner:
         parts = [part.strip() for part in raw_text.split("\n\n", 1)]
         heading = parts[0].splitlines()[0].strip(
         ) if parts and parts[0].strip() else ""
+        heading = MasterPlanner._sanitize_section_heading(heading)
         detail = parts[1].strip() if len(parts) > 1 else raw_text.strip()
         return heading, detail
 
     @staticmethod
     def _normalize_report_label(raw_label: str, title: str) -> str:
-        label = raw_label.strip().strip("：:;；，,。 ")
+        label = MasterPlanner._sanitize_section_heading(raw_label)
+        label = label.strip().strip("：:;；，,。 ")
         if not label:
             return ""
         label = re.sub(r"^(围绕|关于|研究|请|执行|输出)", "", label).strip()
+        label = re.sub(r"[：:]?\s*```(?:yaml|yml)?\s*$", "",
+                       label, flags=re.IGNORECASE).strip()
         label = re.sub(
             r"：(?:证据补充|关键分歧|适用边界|实施路径|验证方法|风险控制|案例线索|约束条件|后续问题)$", "", label)
         if label == title.strip():
@@ -248,6 +252,19 @@ class MasterPlanner:
         if len(label) > 24:
             label = label[:24].rstrip("：:;；，,。 ")
         return label
+
+    @staticmethod
+    def _sanitize_section_heading(raw_heading: str) -> str:
+        heading = raw_heading.replace("\r\n", "\n").replace("\r", "\n").strip()
+        if not heading:
+            return ""
+        heading = heading.splitlines()[0].strip().lstrip("#").strip()
+        heading = re.sub(r"^[`\-]+|[`\-]+$", "", heading).strip()
+        heading = re.sub(r"[：:]?\s*```(?:yaml|yml)?\s*$",
+                         "", heading, flags=re.IGNORECASE).strip()
+        if heading in {"```", "```yaml", "```yml", "---"}:
+            return ""
+        return heading
 
     @staticmethod
     def _expand_topic(parent_title: str, description: str, depth: int) -> list[str]:

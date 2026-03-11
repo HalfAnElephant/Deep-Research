@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import logging
 import re
+from typing import Callable
 
 from app.models.schemas import Citation, Evidence, ReportDraft, SectionDraft, WritingSectionPlan
 from app.services.mcp_executor import MCPExecutor
@@ -79,6 +80,7 @@ class ReportAgent:
         evidences: list[Evidence],
         locked_sections: set[str] | None = None,
         writing_plan: list[WritingSectionPlan] | None = None,
+        suppressed_content_callback: Callable[[str], None] | None = None,
     ) -> tuple[str, str, dict[str, Citation]]:
         import asyncio
 
@@ -94,6 +96,7 @@ class ReportAgent:
             blueprint=blueprint,
             writing_plan=writing_plan,
         )
+        suppressed_segments = list(draft.suppressedSegments)
         draft_body = draft.body
         if not draft_body.strip():
             issues = "；".join(draft.issues[:3])
@@ -116,6 +119,7 @@ class ReportAgent:
                 writing_plan=writing_plan,
             )
             draft_body = draft.body
+            suppressed_segments.extend(draft.suppressedSegments)
             if draft_body.strip():
                 last_valid_draft = draft
             else:
@@ -148,6 +152,10 @@ class ReportAgent:
             blueprint=blueprint,
             report_body=draft_body,
         )
+
+        if suppressed_content_callback is not None:
+            for segment in _dedupe_segments(suppressed_segments):
+                suppressed_content_callback(segment)
 
         # 如果配置了 checking_agent，执行深度审核
         if self.checking_agent:
@@ -377,6 +385,12 @@ class ReportReviewAgent:
         re.compile(
             r"(?i)\b(?:arxiv|semantic scholar|semanticscholar|tavily|web)\s+result\s+for\b"),
         re.compile(r"(?i)synthetic evidence"),
+        re.compile(r"当前提供的证据列表与.+?研究主题.+?不相关"),
+        re.compile(r"无法为本章节的撰写提供有效支持"),
+        re.compile(r"本章节的撰写将无法依赖当前提供的证据材料"),
+        re.compile(r"必须依据研究计划中预设的.+?进行独立论述"),
+        re.compile(r"^\s*##\s*```(?:yaml|yml)?\s*$",
+                   re.IGNORECASE | re.MULTILINE),
     )
     EVIDENCE_REF_PATTERN = re.compile(r"\[(?:evidence:[^\]]+|\d+)\]")
     MIN_BODY_BASE_CHARS = 220
@@ -396,7 +410,7 @@ class ReportReviewAgent:
         if any(pattern.search(body) for pattern in self.TRACE_PATTERNS):
             issues.append("包含中间过程痕迹（如 Trace Section 或过程标签）。")
         if any(pattern.search(body) for pattern in self.PLACEHOLDER_PATTERNS):
-            issues.append("包含占位检索文本，降低内容可信度。")
+            issues.append("包含占位检索文本或写作过程说明，降低内容可信度。")
 
         section_contents = self._section_contents(body)
         if len(section_contents) < 3:
@@ -596,5 +610,18 @@ class ReportRevisionAgent:
             "证据覆盖不足",
             "缺少有效证据ID引用",
             "正文过短",
+            "写作过程说明",
         )
         return any(any(keyword in issue for keyword in blocking_keywords) for issue in feedback.issues)
+
+
+def _dedupe_segments(segments: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for segment in segments:
+        value = segment.strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        ordered.append(value)
+    return ordered

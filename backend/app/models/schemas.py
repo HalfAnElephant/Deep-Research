@@ -378,6 +378,7 @@ class ReportDraft(BaseModel):
     sections: list[SectionDraft] = Field(default_factory=list)
     status: str = Field(default="empty", pattern="^(empty|partial|complete)$")
     issues: list[str] = Field(default_factory=list)
+    suppressedSegments: list[str] = Field(default_factory=list)
 
 
 class MCPExecutionRequest(BaseModel):

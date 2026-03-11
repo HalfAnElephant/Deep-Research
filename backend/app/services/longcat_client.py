@@ -23,7 +23,8 @@ class LongCatClient:
         Args:
             api_key: API 密钥，如果未提供则从配置中获取。
         """
-        self.api_key = api_key or getattr(settings, 'longcat_api_key', None) or "ak_2Ks0iy2p02oX0V05UN3Mk7YO38R8R"
+        self.api_key = api_key or getattr(
+            settings, 'longcat_api_key', None) or "ak_2Ks0iy2p02oX0V05UN3Mk7YO38R8R"
         self._client: httpx.AsyncClient | None = None
 
     @property
@@ -137,6 +138,32 @@ class LongCatClient:
         )
         user_message = f"当前状态是「{status}」，请建议用户下一步可以做什么。"
         return await self.chat(system_prompt, user_message)
+
+    async def summarize_suppressed_writer_note(self, *, topic: str, segments: list[str]) -> str:
+        """将被拦截的写作过程说明转成用户可见的简短气泡。"""
+        cleaned_segments = [segment.strip()
+                            for segment in segments if segment.strip()]
+        if not cleaned_segments:
+            return ""
+
+        system_prompt = (
+            "你是深度研究工作台的写作提示助手。"
+            "系统刚刚拦截了一段不应进入正式文章的写作过程说明。"
+            "请把它改写成面向用户的简短 Agent 提示，说明发生了什么以及系统如何处理。"
+            "要求：使用简洁中文，不超过 80 字，不要复述原文细节，不要输出证据 ID，"
+            "并明确说明这段内容不会进入正文。"
+        )
+        snippet = "\n\n".join(cleaned_segments[:3])[:1200]
+        user_message = (
+            f"研究主题：{topic}\n"
+            "以下内容是被拦截的写作过程说明，请转写为一条用户可见提示：\n"
+            f"{snippet}"
+        )
+        try:
+            response = await self.chat(system_prompt, user_message, temperature=0.2)
+            return response.strip()
+        except Exception:
+            return "已拦截一段写作过程说明，系统已转为内部处理提示，不会写入正式文章。"
 
 
 # 全局实例

@@ -54,6 +54,20 @@ class WriterService:
         re.compile(r"publishsource|srsltid|download\?etag=", re.IGNORECASE),
         re.compile(r"(?:_F10_|ͬ˳|ǵ\(|51sjsj|cnki ai阅读)", re.IGNORECASE),
     )
+    META_COMMENTARY_PATTERNS = (
+        re.compile(r"当前提供的证据列表与.+?研究主题.+?不相关"),
+        re.compile(r"无法为本章节的撰写提供有效支持"),
+        re.compile(r"本章节的撰写将无法依赖当前提供的证据材料"),
+        re.compile(r"必须依据研究计划中预设的.+?进行独立论述"),
+        re.compile(r"当前未检索到可用于.+?的有效证据"),
+        re.compile(r"为了完成.+?这一章节"),
+    )
+    META_HEADING_PATTERNS = (
+        re.compile(r"^\s*##\s*```(?:yaml|yml)?\s*$", re.IGNORECASE),
+        re.compile(r"^\s*```(?:yaml|yml)?\s*$", re.IGNORECASE),
+        re.compile(r"^\s*---\s*$"),
+        re.compile(r"^\s*研究问题[:：].*```(?:yaml|yml)?\s*$", re.IGNORECASE),
+    )
 
     def __init__(self, output_dir: str = "backend/.data/reports") -> None:
         self.output_dir = Path(output_dir)
@@ -98,6 +112,7 @@ class WriterService:
 
         # 过滤内部标记，确保输出干净
         clean_body = self._strip_internal_markers(generated_body)
+        clean_body, _ = self._strip_meta_commentary(clean_body)
 
         # 将 [evidence:xxx] 替换为标准引用编号 [1], [2], ...
         clean_body = self._replace_evidence_refs(clean_body, evidence_to_index)
@@ -275,7 +290,8 @@ class WriterService:
                     evidences=self._select_section_evidences(
                         cleaned_evidences, outline, index),
                 )
-            normalized_body = self._normalize_markdown_text(section_body)
+            normalized_body, suppressed_segments = self._sanitize_markdown_output(
+                section_body)
             status = "rewritten" if normalized_body else "failed"
             rebuilt_sections.append(
                 SectionDraft(
@@ -287,6 +303,7 @@ class WriterService:
                     status=status,
                     attempts=1 if regenerate_all or len(
                         existing_sections.get(outline.heading, "").strip()) < 80 else 0,
+                    issues=["已移除写作过程说明。"] if suppressed_segments else [],
                 )
             )
         return self._finalize_report_draft(
@@ -463,7 +480,7 @@ class WriterService:
                         model=model,
                         system_prompt=SYSTEM_PROMPT_ACADEMIC,
                     )
-                    normalized_text = self._normalize_markdown_text(
+                    normalized_text, suppressed_segments = self._sanitize_markdown_output(
                         section_text)
                     if not normalized_text:
                         normalized_text = self._build_fallback_section_body(
@@ -480,7 +497,11 @@ class WriterService:
                                 ev.id for ev in relevant_evidences[:outline.required_evidence_count]],
                             status="generated" if section_text.strip() else "failed",
                             attempts=1 if section_text.strip() else 2,
-                            issues=[] if section_text.strip() else ["章节生成失败，已使用回退正文。"],
+                            issues=(
+                                (["已移除写作过程说明。"] if suppressed_segments else [])
+                                if section_text.strip()
+                                else ["章节生成失败，已使用回退正文。"]
+                            ),
                         )
                     )
         except httpx.TimeoutException:
@@ -674,15 +695,25 @@ class WriterService:
             ))
         return outlines[:max(3, len(fallback_titles))]
 
-    @staticmethod
-    def _split_section_entry(raw_text: str) -> tuple[str, str]:
+    @classmethod
+    def _split_section_entry(cls, raw_text: str) -> tuple[str, str]:
         normalized = raw_text.replace("\r\n", "\n").replace("\r", "\n").strip()
         if not normalized:
             return "", ""
         parts = normalized.split("\n\n", 1)
-        heading = parts[0].splitlines()[0].strip().lstrip("#").strip()
+        heading = cls._sanitize_section_heading(parts[0].splitlines()[0])
         brief = parts[1].strip() if len(parts) > 1 else normalized
         return heading, brief
+
+    @classmethod
+    def _sanitize_section_heading(cls, raw_heading: str) -> str:
+        heading = raw_heading.strip().lstrip("#").strip()
+        heading = re.sub(r"^[`\-]+|[`\-]+$", "", heading).strip()
+        heading = re.sub(r"[：:]?\s*```(?:yaml|yml)?\s*$",
+                         "", heading, flags=re.IGNORECASE).strip()
+        if heading in {"```", "```yaml", "```yml", "---"}:
+            return ""
+        return heading
 
     @staticmethod
     def _parse_existing_sections(body: str) -> dict[str, str]:
@@ -854,13 +885,18 @@ class WriterService:
         valid_drafts = [draft for draft in drafts if draft.body.strip()]
         body = self._assemble_report_body(valid_drafts)
         issues: list[str] = []
+        suppressed_segments: list[str] = []
+        for draft in drafts:
+            if draft.issues and any("写作过程说明" in issue for issue in draft.issues):
+                suppressed_segments.append(f"章节“{draft.heading}”包含已移除的写作过程说明。")
         if not valid_drafts:
             issues.append("未生成任何可用章节。")
-            return ReportDraft(body="", sections=drafts, status="empty", issues=issues)
+            return ReportDraft(body="", sections=drafts, status="empty", issues=issues, suppressedSegments=suppressed_segments)
 
         sanitized = self._strip_inline_urls(body.strip())
-        sanitized = self._normalize_markdown_text(
+        sanitized, removed_in_body = self._sanitize_markdown_output(
             self._strip_internal_markers(sanitized))
+        suppressed_segments.extend(removed_in_body)
         required_chars = self._minimum_acceptable_body_chars(
             outlines, evidences, blueprint)
         if len(sanitized) < required_chars:
@@ -872,7 +908,14 @@ class WriterService:
             status = "partial"
         if issues and status == "complete":
             status = "partial"
-        return ReportDraft(body=sanitized, sections=drafts, status=status, issues=issues)
+        return ReportDraft(
+            body=sanitized,
+            sections=drafts,
+            status=status,
+            issues=issues,
+            suppressedSegments=self._dedupe_preserved_order(
+                suppressed_segments),
+        )
 
     def _build_draft_from_body(
         self,
@@ -891,7 +934,9 @@ class WriterService:
             )
             for outline in outlines
         ]
-        return ReportDraft(body=self._normalize_markdown_text(body), sections=drafts, status=status, issues=[])
+        normalized_body, suppressed_segments = self._sanitize_markdown_output(
+            body)
+        return ReportDraft(body=normalized_body, sections=drafts, status=status, issues=[], suppressedSegments=suppressed_segments)
 
     @staticmethod
     def _assemble_report_body(drafts: list[SectionDraft]) -> str:
@@ -1076,6 +1121,45 @@ class WriterService:
     @classmethod
     def _strip_inline_urls(cls, text: str) -> str:
         return cls.URL_PATTERN.sub("[链接见文末证据附录]", text)
+
+    @classmethod
+    def _sanitize_markdown_output(cls, text: str) -> tuple[str, list[str]]:
+        normalized = cls._normalize_markdown_text(text)
+        sanitized, suppressed_segments = cls._strip_meta_commentary(normalized)
+        return sanitized, suppressed_segments
+
+    @classmethod
+    def _strip_meta_commentary(cls, text: str) -> tuple[str, list[str]]:
+        if not text.strip():
+            return "", []
+        paragraphs = re.split(r"\n\s*\n", text)
+        kept: list[str] = []
+        removed: list[str] = []
+        for paragraph in paragraphs:
+            block = paragraph.strip()
+            if not block:
+                continue
+            if any(pattern.match(line) for line in block.splitlines() for pattern in cls.META_HEADING_PATTERNS):
+                removed.append(block)
+                continue
+            normalized_block = cls._normalize_text(block)
+            if any(pattern.search(normalized_block) for pattern in cls.META_COMMENTARY_PATTERNS):
+                removed.append(block)
+                continue
+            kept.append(block)
+        return "\n\n".join(kept).strip(), cls._dedupe_preserved_order(removed)
+
+    @staticmethod
+    def _dedupe_preserved_order(values: list[str]) -> list[str]:
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for value in values:
+            candidate = value.strip()
+            if not candidate or candidate in seen:
+                continue
+            seen.add(candidate)
+            ordered.append(candidate)
+        return ordered
 
     @staticmethod
     def _default_blueprint() -> ReportBlueprint:

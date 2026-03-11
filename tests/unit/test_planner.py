@@ -68,3 +68,19 @@ def test_planner_builds_explicit_writing_plan() -> None:
     assert writing_plan[-1].heading == "结论与建议"
     assert any(section.sourceNodeIds for section in writing_plan[1:-2])
     assert all(section.sectionId for section in writing_plan)
+
+
+def test_planner_sanitizes_yaml_polluted_heading() -> None:
+    planner = MasterPlanner()
+    writing_plan = planner.build_writing_plan(
+        title="地府货币体系",
+        description="关注历史演变与民俗本源",
+        research_sections=[
+            ("n1", "历史演变与民俗本源: ```yaml\n\n梳理起源与流变"),
+            ("n2", "仪式实践\n\n比较不同地区做法"),
+        ],
+    )
+
+    headings = [section.heading for section in writing_plan]
+    assert all("```yaml" not in heading for heading in headings)
+    assert any("历史演变与民俗本源" in heading for heading in headings)

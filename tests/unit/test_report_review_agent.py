@@ -1,4 +1,5 @@
 from app.models.schemas import Evidence, EvidenceMetadata, ExtractedData, SourceType
+from app.core.config import settings
 from app.services.agents import ReportAgent, ReportFormatAgent, ReportReviewAgent
 from app.services.writer import ReportBlueprint
 
@@ -44,6 +45,88 @@ arXiv result for challenge identification
     assert not result.approved
     assert any("中间过程痕迹" in issue for issue in result.issues)
     assert any("占位检索文本" in issue for issue in result.issues)
+
+
+def test_report_review_agent_detects_meta_commentary() -> None:
+    reviewer = ReportReviewAgent()
+    blueprint = ReportBlueprint(
+        output_format="研究报告",
+        objective="测试",
+        tone="客观",
+        section_titles=["引言", "分析", "结论"],
+    )
+    body = """## 引言
+
+当前提供的证据列表与研究主题高度不相关,无法为本章节的撰写提供有效支持。
+
+## 分析
+
+围绕主题展开分析 [evidence:e1]。
+
+## 结论
+
+给出结论 [evidence:e1]。
+"""
+    result = reviewer.review(body=body, blueprint=blueprint, evidences=[
+                             _build_evidence("e1")])
+    assert not result.approved
+    assert any("写作过程说明" in issue or "占位检索文本" in issue for issue in result.issues)
+
+
+def test_report_agent_reports_suppressed_segments_via_callback(tmp_path, monkeypatch) -> None:
+    from app.services.writer import WriterService
+    from app.services.agents import ReportReviewResult
+
+    class _ApprovingReviewAgent:
+        def review(self, **kwargs):  # noqa: ANN003
+            _ = kwargs
+            return ReportReviewResult(approved=True, issues=[])
+
+    monkeypatch.setattr(settings, "use_mock_sources", False)
+    writer = WriterService(output_dir=str(tmp_path))
+    report_agent = ReportAgent(
+        writer_service=writer,
+        review_agent=_ApprovingReviewAgent(),
+        max_review_rounds=1,
+    )
+    evidences = [_build_evidence("e1"), _build_evidence("e2")]
+    captured: list[str] = []
+
+    def _fake_generate_section(**kwargs):  # noqa: ANN003
+        outline = kwargs["outline"]
+        if outline.heading == "证据与争议":
+            return (
+                "当前提供的证据列表与研究主题高度不相关,无法为本章节的撰写提供有效支持。\n\n"
+                "这一节改为讨论证据分歧的来源 [evidence:e1]。\n\n"
+                "第二段继续说明不同研究口径的差异 [evidence:e2]。"
+            )
+        return (
+            f"围绕{outline.heading}展开第一段分析 [evidence:e1]。\n\n"
+            f"第二段继续说明 {outline.brief} [evidence:e2]。"
+        )
+
+    monkeypatch.setattr(
+        writer, "_generate_single_section_with_llm", _fake_generate_section)
+    monkeypatch.setattr(writer, "_resolve_provider", lambda: (
+        "https://example.org", "key", "model"))
+
+    report_agent.generate_report(
+        task_id="t1",
+        task_title="地府货币体系",
+        task_description="请输出研究报告。",
+        sections=[
+            ("s1", "引言与问题界定\n\n说明研究范围"),
+            ("s2", "证据与争议\n\n比较材料差异"),
+            ("s3", "综合分析\n\n整合证据链"),
+            ("s4", "结论与建议\n\n给出行动建议"),
+        ],
+        evidences=evidences,
+        locked_sections=set(),
+        suppressed_content_callback=captured.append,
+    )
+
+    assert captured
+    assert any("已移除的写作过程说明" in item or "证据与争议" in item for item in captured)
 
 
 class _StubWriter:

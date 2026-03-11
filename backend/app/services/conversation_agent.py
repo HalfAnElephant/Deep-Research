@@ -549,6 +549,25 @@ class ConversationAgent:
             )
             return
 
+        if event == "TASK_NOTE":
+            content = str(data.get("content") or "").strip()
+            if not content:
+                return
+            self.repository.add_message(
+                conversation_id,
+                message_id=new_id(),
+                role=MessageRole.ASSISTANT,
+                kind=MessageKind.USER_TEXT,
+                content=content,
+                metadata={
+                    "taskId": task_id,
+                    "event": event,
+                    "source": data.get("source"),
+                    "segments": data.get("segments", []),
+                },
+            )
+            return
+
         if event in {"TASK_FAILED", "TASK_ABORTED", "ERROR"}:
             self.repository.set_status(
                 conversation_id, ConversationStatus.FAILED)

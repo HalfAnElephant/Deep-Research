@@ -12,6 +12,7 @@ from app.repositories.evidence_repository import EvidenceRepository
 from app.repositories.task_repository import TaskRepository
 from app.services.agents import ReportAgent, ResearchAgent
 from app.services.analyst import AnalystService
+from app.services.longcat_client import longcat_client
 from app.services.planner import MasterPlanner
 from app.services.progress_hub import ProgressHub
 from app.services.retrieval import RetrievalService
@@ -318,6 +319,7 @@ class ExecutionEngine:
                 },
             )
             logger.info(f"Task {task_id}: 开始调用 LLM 生成报告")
+            suppressed_segments: list[str] = []
 
             try:
                 md_path, bib_path, _ = await asyncio.to_thread(
@@ -329,6 +331,7 @@ class ExecutionEngine:
                     evidences=evidences,
                     locked_sections=set(),
                     writing_plan=writing_plan,
+                    suppressed_content_callback=suppressed_segments.append,
                 )
             except Exception as first_exc:  # noqa: BLE001
                 logger.warning(
@@ -363,7 +366,14 @@ class ExecutionEngine:
                     evidences=evidences,
                     locked_sections=set(),
                     writing_plan=writing_plan,
+                    suppressed_content_callback=suppressed_segments.append,
                 )
+
+            await self._emit_suppressed_writer_note(
+                task_id=task_id,
+                topic=task.title,
+                suppressed_segments=suppressed_segments,
+            )
 
             logger.info(f"Task {task_id}: LLM 报告生成完成")
 
@@ -464,3 +474,36 @@ class ExecutionEngine:
             self.repository.update_status(
                 task_id, TaskStatus.FAILED, last_error=str(exc))
             await self._emit_event(task_id, "ERROR", {"taskId": task_id, "error": f"Unhandled error: {exc}"})
+
+    async def _emit_suppressed_writer_note(self, *, task_id: str, topic: str, suppressed_segments: list[str]) -> None:
+        unique_segments = _dedupe_nonempty_strings(suppressed_segments)
+        if not unique_segments:
+            return
+        content = await longcat_client.summarize_suppressed_writer_note(
+            topic=topic,
+            segments=unique_segments,
+        )
+        if not content:
+            return
+        await self._emit_event(
+            task_id,
+            "TASK_NOTE",
+            {
+                "taskId": task_id,
+                "content": content,
+                "segments": unique_segments[:3],
+                "source": "writer-suppressed-meta",
+            },
+        )
+
+
+def _dedupe_nonempty_strings(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        candidate = value.strip()
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        ordered.append(candidate)
+    return ordered
