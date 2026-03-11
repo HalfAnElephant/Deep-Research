@@ -70,7 +70,8 @@ class CreateTaskRequest(BaseModel):
 
 class UpdateTaskRequest(BaseModel):
     title: str | None = Field(default=None, min_length=3, max_length=200)
-    description: str | None = Field(default=None, min_length=3, max_length=5000)
+    description: str | None = Field(
+        default=None, min_length=3, max_length=5000)
     config: TaskConfig | None = None
 
 
@@ -349,6 +350,34 @@ class Citation(BaseModel):
     year: int
     source: str
     url: str
+
+
+class WritingSectionPlan(BaseModel):
+    sectionId: str
+    heading: str = Field(min_length=1, max_length=120)
+    brief: str = Field(min_length=1, max_length=2000)
+    sourceNodeIds: list[str] = Field(default_factory=list)
+    priority: int = Field(default=1, ge=1, le=10)
+    requiredEvidenceCount: int = Field(default=2, ge=0, le=6)
+    rewritePolicy: str = Field(default="section", pattern="^(section|global)$")
+
+
+class SectionDraft(BaseModel):
+    sectionId: str
+    heading: str
+    body: str = ""
+    usedEvidenceIds: list[str] = Field(default_factory=list)
+    status: str = Field(
+        default="pending", pattern="^(pending|generated|rewritten|reused|failed)$")
+    attempts: int = Field(default=0, ge=0, le=10)
+    issues: list[str] = Field(default_factory=list)
+
+
+class ReportDraft(BaseModel):
+    body: str = ""
+    sections: list[SectionDraft] = Field(default_factory=list)
+    status: str = Field(default="empty", pattern="^(empty|partial|complete)$")
+    issues: list[str] = Field(default_factory=list)
 
 
 class MCPExecutionRequest(BaseModel):

@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     longcat_base_url: str = "https://api.longcat.chat/openai/v1"
     longcat_model: str = "LongCat-Flash-Lite"
 
+    # LLM 超时配置（秒）
+    llm_timeout_short: int = 30      # 简单查询
+    llm_timeout_medium: int = 60     # 计划生成
+    llm_timeout_long: int = 120      # 文章生成
+
     model_config = SettingsConfigDict(env_file=".env", env_prefix="DR_")
 
 

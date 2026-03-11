@@ -17,6 +17,7 @@ from app.services.progress_hub import ProgressHub
 from app.services.retrieval import RetrievalService
 from app.services.state_machine import InvalidStateTransition, transition_or_raise
 from app.services.writer import WriterService
+from app.services.four_agents.checking_agent import CheckingAgent
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,9 @@ class ExecutionEngine:
         writer_service: WriterService,
         research_agent: ResearchAgent | None = None,
         report_agent: ReportAgent | None = None,
-        event_listener: Callable[[str, str, dict], Awaitable[None]] | None = None,
+        checking_agent: CheckingAgent | None = None,
+        event_listener: Callable[[str, str, dict],
+                                 Awaitable[None]] | None = None,
     ) -> None:
         self.repository = repository
         self.planner = planner
@@ -52,8 +55,17 @@ class ExecutionEngine:
         self.conflict_repository = conflict_repository
         self.analyst_service = analyst_service
         self.writer_service = writer_service
-        self.research_agent = research_agent or ResearchAgent(retrieval_service=retrieval_service)
-        self.report_agent = report_agent or ReportAgent(writer_service=writer_service)
+        self.research_agent = research_agent or ResearchAgent(
+            retrieval_service=retrieval_service)
+        # 如果未提供 report_agent，创建时传入 checking_agent
+        if report_agent is None:
+            self.report_agent = ReportAgent(
+                writer_service=writer_service,
+                checking_agent=checking_agent
+            )
+        else:
+            self.report_agent = report_agent
+        self.checking_agent = checking_agent
         self.event_listener = event_listener
         self._control: dict[str, TaskControlState] = {}
 
@@ -66,7 +78,8 @@ class ExecutionEngine:
             try:
                 await self.event_listener(task_id, event, payload)
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Event listener failed for task=%s event=%s: %s", task_id, event, exc)
+                logger.warning(
+                    "Event listener failed for task=%s event=%s: %s", task_id, event, exc)
 
     async def start(self, task_id: str) -> None:
         task = self.repository.get_task(task_id)
@@ -76,7 +89,8 @@ class ExecutionEngine:
         if control.running_task and not control.running_task.done():
             return
         loop = asyncio.get_running_loop()
-        control.running_task = loop.create_task(self._run_task(task_id, task.status))
+        control.running_task = loop.create_task(
+            self._run_task(task_id, task.status))
 
     def pause(self, task_id: str) -> None:
         control = self._control.setdefault(task_id, TaskControlState())
@@ -107,8 +121,10 @@ class ExecutionEngine:
             task = self.repository.get_task(task_id)
             config = task.config
             if not task.dag or not task.dag.nodes:
-                self.repository.update_status(task_id, transition_or_raise(task.status, TaskStatus.PLANNING))
-                dag = self.planner.build_dag(task_id, task.title, task.description, config)
+                self.repository.update_status(
+                    task_id, transition_or_raise(task.status, TaskStatus.PLANNING))
+                dag = self.planner.build_dag(
+                    task_id, task.title, task.description, config)
                 self.repository.save_dag(task_id, dag)
                 await self._emit_event(
                     task_id,
@@ -125,14 +141,17 @@ class ExecutionEngine:
             if current.status == TaskStatus.SUSPENDED:
                 self.repository.update_status(task_id, TaskStatus.EXECUTING)
             else:
-                self.repository.update_status(task_id, transition_or_raise(current.status, TaskStatus.EXECUTING))
+                self.repository.update_status(task_id, transition_or_raise(
+                    current.status, TaskStatus.EXECUTING))
 
             dag = self.repository.get_dag(task_id)
-            executable_nodes = [n for n in dag.nodes if n.taskId != task_id and n.status != NodeStatus.PRUNED]
+            executable_nodes = [n for n in dag.nodes if n.taskId !=
+                                task_id and n.status != NodeStatus.PRUNED]
             snapshot = self.repository.load_snapshot(task_id)
             if snapshot:
                 control = self._control.setdefault(task_id, TaskControlState())
-                control.completed_nodes = snapshot.get("completed_nodes", control.completed_nodes)
+                control.completed_nodes = snapshot.get(
+                    "completed_nodes", control.completed_nodes)
             total = max(1, len(executable_nodes))
             for idx, node in enumerate(executable_nodes, start=1):
                 control = self._control.setdefault(task_id, TaskControlState())
@@ -143,7 +162,8 @@ class ExecutionEngine:
                 if control.aborted:
                     await self._emit_event(task_id, "ERROR", {"taskId": task_id, "error": "Task aborted by user"})
                     return
-                self.repository.update_node_status(task_id, node.taskId, NodeStatus.RUNNING, node.metadata.infoGainScore)
+                self.repository.update_node_status(
+                    task_id, node.taskId, NodeStatus.RUNNING, node.metadata.infoGainScore)
                 await asyncio.sleep(0.2)
                 query = f"{task.title} {node.title}"
                 searching_progress = 20 + int(((idx - 1) / total) * 60)
@@ -171,9 +191,11 @@ class ExecutionEngine:
                     await self._emit_event(
                         task_id,
                         "EVIDENCE_FOUND",
-                        {"taskId": task_id, "nodeId": node.taskId, "evidence": ev.model_dump()},
+                        {"taskId": task_id, "nodeId": node.taskId,
+                            "evidence": ev.model_dump()},
                     )
-                self.repository.update_node_status(task_id, node.taskId, NodeStatus.COMPLETED, node.metadata.infoGainScore)
+                self.repository.update_node_status(
+                    task_id, node.taskId, NodeStatus.COMPLETED, node.metadata.infoGainScore)
                 control.completed_nodes.append(node.taskId)
                 progress = 20 + int((idx / total) * 60)
                 await self._emit_event(
@@ -203,12 +225,15 @@ class ExecutionEngine:
                     },
                 )
 
-            evidences = self.evidence_repository.list(task_id=task_id, limit=1000).items
+            evidences = self.evidence_repository.list(
+                task_id=task_id, limit=1000).items
             for ev in evidences:
                 ev.score = self.analyst_service.score(ev)
-            conflicts = self.analyst_service.detect_conflicts(task_id=task_id, evidences=evidences, threshold=0.15)
+            conflicts = self.analyst_service.detect_conflicts(
+                task_id=task_id, evidences=evidences, threshold=0.15)
             if conflicts:
-                self.repository.update_status(task_id, transition_or_raise(TaskStatus.EXECUTING, TaskStatus.REVIEWING))
+                self.repository.update_status(task_id, transition_or_raise(
+                    TaskStatus.EXECUTING, TaskStatus.REVIEWING))
                 self.conflict_repository.save_many(conflicts)
                 await self._emit_event(
                     task_id,
@@ -222,24 +247,38 @@ class ExecutionEngine:
                     },
                 )
                 # Single-user default: continue with unresolved conflicts recorded for later voting.
-                self.repository.update_status(task_id, transition_or_raise(TaskStatus.REVIEWING, TaskStatus.SYNTHESIZING))
+                self.repository.update_status(task_id, transition_or_raise(
+                    TaskStatus.REVIEWING, TaskStatus.SYNTHESIZING))
             else:
-                self.repository.update_status(task_id, transition_or_raise(TaskStatus.EXECUTING, TaskStatus.SYNTHESIZING))
+                self.repository.update_status(task_id, transition_or_raise(
+                    TaskStatus.EXECUTING, TaskStatus.SYNTHESIZING))
             await self._emit_event(
                 task_id,
                 "TASK_PROGRESS",
-                {"taskId": task_id, "progress": 90, "state": "SYNTHESIZING", "phase": "OUTLINING"},
+                {"taskId": task_id, "progress": 90,
+                    "state": "SYNTHESIZING", "phase": "OUTLINING"},
             )
             await asyncio.sleep(0.1)
             dag = self.repository.get_dag(task_id)
-            sections = [
+            research_sections = [
                 (node.taskId, f"{node.title}\n\n{node.description}")
                 for node in dag.nodes
                 if node.taskId != task_id and node.status != NodeStatus.PRUNED
             ]
+            writing_plan = self.planner.build_writing_plan(
+                title=task.title,
+                description=task.description,
+                research_sections=research_sections,
+            )
+            sections = self.planner.build_report_sections(
+                title=task.title,
+                description=task.description,
+                research_sections=research_sections,
+            )
             total_sections = max(1, len(sections))
             for section_idx, (_, section_text) in enumerate(sections, start=1):
-                section_title = section_text.splitlines()[0].strip() if section_text else ""
+                section_title = section_text.splitlines(
+                )[0].strip() if section_text else ""
                 write_progress = 90 + int((section_idx / total_sections) * 6)
                 await self._emit_event(
                     task_id,
@@ -252,31 +291,176 @@ class ExecutionEngine:
                         "currentSectionTitle": section_title or f"Section {section_idx}",
                     },
                 )
-            md_path, bib_path, _ = await asyncio.to_thread(
-                self.report_agent.generate_report,
-                task_id=task_id,
-                task_title=task.title,
-                task_description=task.description,
-                sections=sections,
-                evidences=evidences,
-                locked_sections=set(),
-            )
-            self.repository.update_status(task_id, transition_or_raise(TaskStatus.SYNTHESIZING, TaskStatus.FINALIZING))
+
+            # 准备写作材料
             await self._emit_event(
                 task_id,
                 "TASK_PROGRESS",
-                {"taskId": task_id, "progress": 98, "state": "FINALIZING", "phase": "PERSISTING_REPORT"},
+                {
+                    "taskId": task_id,
+                    "progress": 91,
+                    "state": "SYNTHESIZING",
+                    "phase": "PREPARING_MATERIALS",
+                    "detail": "正在准备写作材料...",
+                },
+            )
+
+            # 调用 LLM 生成报告 - 这是阻塞点
+            await self._emit_event(
+                task_id,
+                "TASK_PROGRESS",
+                {
+                    "taskId": task_id,
+                    "progress": 94,
+                    "state": "SYNTHESIZING",
+                    "phase": "CALLING_LLM",
+                    "detail": "正在调用 AI 生成内容，这可能需要 1-2 分钟，请耐心等待...",
+                },
+            )
+            logger.info(f"Task {task_id}: 开始调用 LLM 生成报告")
+
+            try:
+                md_path, bib_path, _ = await asyncio.to_thread(
+                    self.report_agent.generate_report,
+                    task_id=task_id,
+                    task_title=task.title,
+                    task_description=task.description,
+                    sections=sections,
+                    evidences=evidences,
+                    locked_sections=set(),
+                    writing_plan=writing_plan,
+                )
+            except Exception as first_exc:  # noqa: BLE001
+                logger.warning(
+                    f"Task {task_id}: 首次报告生成失败，准备自动重写恢复: {first_exc}")
+                await self._emit_event(
+                    task_id,
+                    "TASK_PROGRESS",
+                    {
+                        "taskId": task_id,
+                        "progress": 94,
+                        "state": "SYNTHESIZING",
+                        "phase": "AUTO_REWRITE_RECOVERY",
+                        "detail": "首次成文失败，正在自动重写关键章节并重试...",
+                    },
+                )
+                recovered_description = (
+                    f"{task.description}\n\n"
+                    "系统检测到首次成文失败。请保留已有结构，优先修复失败章节，确保最终输出至少包含三个二级章节、"
+                    "每章有自然段落，并维持证据引用可追溯。"
+                )
+                writing_plan = self.planner.build_writing_plan(
+                    title=task.title,
+                    description=recovered_description,
+                    research_sections=research_sections,
+                )
+                md_path, bib_path, _ = await asyncio.to_thread(
+                    self.report_agent.generate_report,
+                    task_id=task_id,
+                    task_title=task.title,
+                    task_description=recovered_description,
+                    sections=sections,
+                    evidences=evidences,
+                    locked_sections=set(),
+                    writing_plan=writing_plan,
+                )
+
+            logger.info(f"Task {task_id}: LLM 报告生成完成")
+
+            # 审核阶段
+            if self.checking_agent:
+                await self._emit_event(
+                    task_id,
+                    "TASK_PROGRESS",
+                    {
+                        "taskId": task_id,
+                        "progress": 95,
+                        "state": "SYNTHESIZING",
+                        "phase": "REVIEWING",
+                        "detail": "正在审核文章质量...",
+                    },
+                )
+                logger.info(f"Task {task_id}: 开始审核报告")
+
+                from app.services.four_agents.base import AgentContext
+                from pathlib import Path
+
+                # 读取生成的文章
+                article_content = Path(md_path).read_text(encoding="utf-8")
+
+                context = AgentContext(
+                    task_id=task_id,
+                    conversation_id=task_id,
+                    topic=task.title,
+                    config={"article_content": article_content,
+                            "article_path": md_path}
+                )
+
+                check_result = await self.checking_agent.run(context)
+
+                if check_result.success:
+                    logger.info(f"Task {task_id}: 审核通过")
+                    await self._emit_event(
+                        task_id,
+                        "TASK_PROGRESS",
+                        {
+                            "taskId": task_id,
+                            "progress": 96,
+                            "state": "SYNTHESIZING",
+                            "phase": "REVIEW_PASSED",
+                            "detail": "审核通过，文章质量符合要求",
+                        },
+                    )
+                else:
+                    logger.warning(
+                        f"Task {task_id}: 审核发现问题: {check_result.output.get('summary', {})}")
+                    await self._emit_event(
+                        task_id,
+                        "TASK_PROGRESS",
+                        {
+                            "taskId": task_id,
+                            "progress": 96,
+                            "state": "SYNTHESIZING",
+                            "phase": "REVIEW_ISSUES",
+                            "detail": f"审核发现问题: {check_result.output.get('summary', {}).get('total_issues', 0)} 处",
+                            "issues": check_result.output.get('issues', []),
+                        },
+                    )
+
+            # 保存报告
+            await self._emit_event(
+                task_id,
+                "TASK_PROGRESS",
+                {
+                    "taskId": task_id,
+                    "progress": 97,
+                    "state": "SYNTHESIZING",
+                    "phase": "SAVING_REPORT",
+                    "detail": "正在保存报告...",
+                },
+            )
+            self.repository.update_status(task_id, transition_or_raise(
+                TaskStatus.SYNTHESIZING, TaskStatus.FINALIZING))
+            await self._emit_event(
+                task_id,
+                "TASK_PROGRESS",
+                {"taskId": task_id, "progress": 98,
+                    "state": "FINALIZING", "phase": "PERSISTING_REPORT"},
             )
             self.repository.set_report_path(task_id, md_path)
-            self.repository.update_status(task_id, transition_or_raise(TaskStatus.FINALIZING, TaskStatus.COMPLETED))
+            self.repository.update_status(task_id, transition_or_raise(
+                TaskStatus.FINALIZING, TaskStatus.COMPLETED))
             await self._emit_event(
                 task_id,
                 "TASK_COMPLETED",
-                {"taskId": task_id, "progress": 100, "reportPath": md_path, "bibPath": bib_path},
+                {"taskId": task_id, "progress": 100,
+                    "reportPath": md_path, "bibPath": bib_path},
             )
         except InvalidStateTransition as exc:
-            self.repository.update_status(task_id, TaskStatus.FAILED, last_error=str(exc))
+            self.repository.update_status(
+                task_id, TaskStatus.FAILED, last_error=str(exc))
             await self._emit_event(task_id, "ERROR", {"taskId": task_id, "error": str(exc)})
         except Exception as exc:  # noqa: BLE001
-            self.repository.update_status(task_id, TaskStatus.FAILED, last_error=str(exc))
+            self.repository.update_status(
+                task_id, TaskStatus.FAILED, last_error=str(exc))
             await self._emit_event(task_id, "ERROR", {"taskId": task_id, "error": f"Unhandled error: {exc}"})

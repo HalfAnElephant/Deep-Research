@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 import re
+import unicodedata
 from collections import OrderedDict
 from datetime import UTC, datetime, timedelta
 from hashlib import sha1
@@ -24,7 +26,8 @@ class L1EvidenceCache:
     def __init__(self, max_size: int = 1000, ttl_seconds: int = 3600) -> None:
         self.max_size = max_size
         self.ttl = timedelta(seconds=ttl_seconds)
-        self._store: OrderedDict[str, tuple[datetime, list[Evidence]]] = OrderedDict()
+        self._store: OrderedDict[str, tuple[datetime,
+                                            list[Evidence]]] = OrderedDict()
 
     def get(self, key: str) -> list[Evidence] | None:
         item = self._store.get(key)
@@ -45,14 +48,22 @@ class L1EvidenceCache:
 
 
 class RetrievalService:
-    _PLACEHOLDER_HOSTS = {"example.org", "example.com", "localhost", "127.0.0.1", "httpbin.org"}
+    _PLACEHOLDER_HOSTS = {"example.org", "example.com",
+                          "localhost", "127.0.0.1", "httpbin.org"}
+    _UNICODE_ESCAPE_PATTERN = re.compile(r"\\u([0-9a-fA-F]{4})")
+    _MOJIBAKE_PATTERNS = (
+        re.compile(r"\\u[0-9a-fA-F]{4}"),
+        re.compile(r"publishsource|srsltid|download\?etag=", re.IGNORECASE),
+        re.compile(r"(?:_F10_|ͬ˳|ǵ\(|51sjsj)", re.IGNORECASE),
+    )
 
     def __init__(self) -> None:
         self.cache = L1EvidenceCache()
 
     async def retrieve(self, *, task_id: str, node_id: str, query: str, sources: list[str]) -> list[Evidence]:
         expanded = self.expand_query(query)
-        cache_key = sha1(f"{task_id}:{node_id}:{expanded}".encode()).hexdigest()
+        cache_key = sha1(
+            f"{task_id}:{node_id}:{expanded}".encode()).hexdigest()
         cached = self.cache.get(cache_key)
         if cached:
             return cached
@@ -99,7 +110,8 @@ class RetrievalService:
 
         # Auto-detect if year filter should be applied
         if enable_year_filter is None:
-            enable_year_filter = RetrievalService._should_apply_year_filter(term)
+            enable_year_filter = RetrievalService._should_apply_year_filter(
+                term)
 
         if any(ord(ch) > 127 for ch in term):
             focus_part = f"({term})"
@@ -116,7 +128,8 @@ class RetrievalService:
     async def _mock_retrieve(self, *, task_id: str, node_id: str, query: str, sources: list[str]) -> list[Evidence]:
         await asyncio.sleep(0.05)
         source = sources[0] if sources else "MockSource"
-        synthetic_metric = round(((sum(ord(c) for c in node_id) % 60) / 100) + 0.2, 2)
+        synthetic_metric = round(
+            ((sum(ord(c) for c in node_id) % 60) / 100) + 0.2, 2)
         return [
             Evidence(
                 id=new_id(),
@@ -138,14 +151,17 @@ class RetrievalService:
                 score=synthetic_metric,
                 extractedData=ExtractedData(
                     tables=[{"caption": "Sample table", "data": {"rows": 3}}],
-                    images=[{"caption": "Sample figure", "url": "mock://img/1.png"}],
-                    numericalValues=[{"value": synthetic_metric, "unit": "score", "context": "relevance"}],
+                    images=[{"caption": "Sample figure",
+                             "url": "mock://img/1.png"}],
+                    numericalValues=[{"value": synthetic_metric,
+                                      "unit": "score", "context": "relevance"}],
                 ),
             )
         ]
 
     async def _real_retrieve(self, *, task_id: str, node_id: str, query: str, sources: list[str]) -> list[Evidence]:
-        normalized_sources = [self._normalize_source_name(s) for s in sources] if sources else []
+        normalized_sources = [self._normalize_source_name(
+            s) for s in sources] if sources else []
         if not normalized_sources:
             normalized_sources = ["tavily", "arxiv", "semanticscholar"]
 
@@ -262,12 +278,13 @@ class RetrievalService:
         results = payload.get("results", [])
         evidences: list[Evidence] = []
         for item in results:
-            content = str(item.get("content", "")).strip()
+            content = self._normalize_text(str(item.get("content", "")))
             if not content:
                 continue
             score = float(item.get("score", 0.6))
             url = str(item.get("url", ""))
-            title = str(item.get("title", "Untitled Web Result"))
+            title = self._normalize_text(
+                str(item.get("title", "Untitled Web Result")))
             evidences.append(
                 Evidence(
                     id=new_id(),
@@ -278,9 +295,10 @@ class RetrievalService:
                     content=content,
                     metadata=EvidenceMetadata(
                         authors=[],
-                        publishDate=str(item.get("published_date") or now_iso()),
+                        publishDate=str(
+                            item.get("published_date") or now_iso()),
                         title=title,
-                        abstract=content[:500],
+                        abstract=self._normalize_text(content[:500]),
                         impactFactor=0,
                         isPeerReviewed=False,
                         relevanceScore=max(0.0, min(score, 1.0)),
@@ -311,7 +329,8 @@ class RetrievalService:
         }
         async with httpx.AsyncClient(timeout=20) as client:
             resp = await retry_async(
-                lambda: client.get("https://export.arxiv.org/api/query", params=params),
+                lambda: client.get(
+                    "https://export.arxiv.org/api/query", params=params),
                 max_attempts=3,
                 base_delay_seconds=0.7,
             )
@@ -324,16 +343,19 @@ class RetrievalService:
         entries = root.findall("atom:entry", ns)
         evidences: list[Evidence] = []
         for idx, entry in enumerate(entries):
-            title = self._read_xml_text(entry, "atom:title", ns)
-            summary = self._read_xml_text(entry, "atom:summary", ns)
+            title = self._normalize_text(
+                self._read_xml_text(entry, "atom:title", ns))
+            summary = self._normalize_text(
+                self._read_xml_text(entry, "atom:summary", ns))
             if not title and not summary:
                 continue
             url = self._read_xml_text(entry, "atom:id", ns)
             if url.startswith("http://"):
-                url = "https://" + url[len("http://") :]
-            published = self._read_xml_text(entry, "atom:published", ns) or now_iso()
+                url = "https://" + url[len("http://"):]
+            published = self._read_xml_text(
+                entry, "atom:published", ns) or now_iso()
             authors = [
-                name.text.strip()
+                self._normalize_text(name.text)
                 for name in entry.findall("atom:author/atom:name", ns)
                 if name.text and name.text.strip()
             ]
@@ -371,7 +393,8 @@ class RetrievalService:
         }
         async with httpx.AsyncClient(timeout=20) as client:
             resp = await retry_async(
-                lambda: client.get("https://api.semanticscholar.org/graph/v1/paper/search", params=params),
+                lambda: client.get(
+                    "https://api.semanticscholar.org/graph/v1/paper/search", params=params),
                 max_attempts=3,
                 base_delay_seconds=0.8,
             )
@@ -382,11 +405,16 @@ class RetrievalService:
         results = payload.get("data", [])
         evidences: list[Evidence] = []
         for idx, item in enumerate(results):
-            abstract = str(item.get("abstract") or "").strip()
-            title = str(item.get("title") or "Semantic Scholar paper").strip()
+            abstract = self._normalize_text(str(item.get("abstract") or ""))
+            title = self._normalize_text(
+                str(item.get("title") or "Semantic Scholar paper"))
             if not abstract and not title:
                 continue
-            authors = [str(author.get("name", "")).strip() for author in item.get("authors", []) if author.get("name")]
+            authors = [
+                self._normalize_text(str(author.get("name", "")))
+                for author in item.get("authors", [])
+                if author.get("name")
+            ]
             year = item.get("year")
             publication_date = str(item.get("publicationDate") or "").strip()
             if not publication_date and isinstance(year, int):
@@ -404,7 +432,8 @@ class RetrievalService:
 
             citation_count = int(item.get("citationCount") or 0)
             rank_bonus = max(0.0, 0.15 - idx * 0.03)
-            score = max(0.45, min(0.95, round(0.52 + min(citation_count, 400) / 1200 + rank_bonus, 3)))
+            score = max(0.45, min(0.95, round(
+                0.52 + min(citation_count, 400) / 1200 + rank_bonus, 3)))
 
             evidences.append(
                 Evidence(
@@ -440,7 +469,8 @@ class RetrievalService:
 
     @classmethod
     def _normalize_source_name(cls, source: str) -> str:
-        lowered = source.strip().lower().replace("-", "").replace("_", "").replace(" ", "")
+        lowered = source.strip().lower().replace(
+            "-", "").replace("_", "").replace(" ", "")
         if lowered in {"arxiv", "arxivorg"}:
             return "arxiv"
         if lowered in {"semanticscholar", "s2"}:
@@ -457,7 +487,36 @@ class RetrievalService:
 
     @staticmethod
     def _clean_text(content: str) -> str:
-        return " ".join(content.split())
+        return RetrievalService._normalize_text(content)
+
+    @classmethod
+    def _normalize_text(cls, content: str) -> str:
+        if not content:
+            return ""
+        text = html.unescape(content)
+        text = cls._UNICODE_ESCAPE_PATTERN.sub(
+            lambda match: chr(int(match.group(1), 16)), text)
+        text = unicodedata.normalize("NFKC", text)
+        text = text.replace("\ufeff", " ").replace("\u200b", " ")
+        text = "".join(
+            " " if unicodedata.category(ch).startswith(
+                "C") and ch not in "\n\t" else ch
+            for ch in text
+        )
+        text = cls._try_fix_mojibake(text)
+        text = re.sub(r"<[^>]+>", " ", text)
+        text = re.sub(r"\s+", " ", text)
+        return text.strip()
+
+    @staticmethod
+    def _try_fix_mojibake(text: str) -> str:
+        if not text or not any(token in text for token in ("Ã", "â", "å", "æ", "ç", "ä")):
+            return text
+        try:
+            repaired = text.encode("latin1").decode("utf-8")
+        except Exception:
+            return text
+        return repaired if sum(1 for ch in repaired if '\u4e00' <= ch <= '\u9fff') >= sum(1 for ch in text if '\u4e00' <= ch <= '\u9fff') else text
 
     @staticmethod
     def _read_xml_text(entry, path: str, ns: dict[str, str]) -> str:
@@ -479,7 +538,8 @@ class RetrievalService:
         # Extract ASCII tokens
         ascii_tokens = re.findall(r"[A-Za-z][A-Za-z0-9\-_]{1,}", cleaned_query)
         stop_tokens = {"and", "or", "review", "analyze", "improve", "evaluate"}
-        picked_ascii = [token for token in ascii_tokens if token.lower() not in stop_tokens]
+        picked_ascii = [
+            token for token in ascii_tokens if token.lower() not in stop_tokens]
 
         # Extract Chinese characters (Unicode CJK range)
         chinese_tokens = re.findall(r"[\u4e00-\u9fff]+", cleaned_query)
@@ -500,6 +560,85 @@ class RetrievalService:
         return fallback if fallback else "research"
 
     @classmethod
+    def _is_garbage_content(cls, content: str, url: str) -> bool:
+        """检测垃圾内容。
+
+        检测以下类型的垃圾内容：
+        1. 代码仓库文件（diff, patch 等）
+        2. 分词器词汇表（+ll +lo +lp...）
+        3. 页面导航元素（下载、页数、引文网络等）
+        4. 二进制/乱码内容
+        5. Excel 等非文本文件
+        """
+        # 1. 检测特殊文件扩展名
+        garbage_extensions = [
+            r'\.diff$', r'\.patch$', r'\.xls$', r'\.xlsx$', r'\.csv$',
+            r'\.pdf$', r'\.zip$', r'\.tar$', r'\.gz$', r'\.rar$',
+            r'\.exe$', r'\.dll$', r'\.so$', r'\.bin$', r'\.dat$',
+            r'\.json$', r'\.xml$', r'\.yaml$', r'\.yml$',
+        ]
+        for pattern in garbage_extensions:
+            if re.search(pattern, url, re.IGNORECASE):
+                return True
+
+        # 2. 检测分词器 token 格式 (+ll +lo +lp... 或 +不减 +不凡...)
+        if re.match(r'^(\+\w+\s*){5,}', content.strip()):
+            return True
+
+        # 3. 检测代码仓库 diff 内容
+        code_patterns = [
+            r'^diff --git',
+            r'^@@\s+-\d+,\d+\s+\+\d+,\d+\s+@@',
+            r'^index\s+[a-f0-9]{7,}',
+            r'^---\s+a/',
+            r'^\+\+\+\s+b/',
+            r'\+\[unused\d+\]',  # 匹配 +[unused12] 这样的标记
+        ]
+        for pattern in code_patterns:
+            if re.search(pattern, content, re.MULTILINE):
+                return True
+
+        # 4. 检测页面导航元素（CNKI 等）
+        navigation_keywords = [
+            '下载：', '页数：', '大小：', '引文网络', '参考文献',
+            '共引文献', '同被引文献', '相关文献推荐', 'CNKI AI阅读',
+            '原版阅读', 'HTML阅读', 'CAJ下载', '在线阅读',
+            '##### 引文网络', '##### 相关文献',
+        ]
+        # 如果内容主要由导航元素组成，判定为垃圾
+        nav_count = sum(1 for kw in navigation_keywords if kw in content)
+        if nav_count >= 3:
+            return True
+
+        if any(pattern.search(content) for pattern in cls._MOJIBAKE_PATTERNS):
+            return True
+
+        if content.count("{") + content.count("}") >= 4 and content.count('"') >= 6:
+            return True
+
+        # 5. 检测二进制/乱码内容（大量非可打印字符）
+        if len(content) > 50:
+            non_printable = sum(1 for c in content if ord(
+                c) > 127 and not ('\u4e00' <= c <= '\u9fff'))
+            if non_printable / len(content) > 0.2:
+                return True
+
+        # 6. 检测 URL 中包含 commit/diff/blob 等路径
+        garbage_url_patterns = [
+            r'/commit/[a-f0-9]+\.diff$',
+            r'/commit/[a-f0-9]+\.patch$',
+            r'/blob/',
+            r'/tree/',
+            r'/raw/',
+            r'download\?etag=',
+        ]
+        for pattern in garbage_url_patterns:
+            if re.search(pattern, url, re.IGNORECASE):
+                return True
+
+        return False
+
+    @classmethod
     def _validate_evidences(cls, evidences: list[Evidence], *, allow_mock: bool) -> list[Evidence]:
         valid: list[Evidence] = []
         for ev in evidences:
@@ -516,9 +655,16 @@ class RetrievalService:
             cleaned = cls._clean_text(ev.content)
             if len(cleaned) < 30:
                 continue
+
+            # 检测垃圾内容
+            if cls._is_garbage_content(cleaned, ev.url):
+                logger.warning(f"过滤垃圾内容: {ev.url[:80]}")
+                continue
+
             ev.content = cleaned
-            if not ev.metadata.title:
-                ev.metadata.title = ev.url
+            ev.metadata.title = cls._normalize_text(
+                ev.metadata.title) or ev.url
+            ev.metadata.abstract = cls._normalize_text(ev.metadata.abstract)
             valid.append(ev)
         return valid
 

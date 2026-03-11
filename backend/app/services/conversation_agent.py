@@ -37,7 +37,8 @@ class ParsedPlan:
 
 
 class ConversationAgent:
-    _FRONT_MATTER_PATTERN = re.compile(r"\A---\s*\n(?P<header>.*?)\n---\s*\n?", re.DOTALL)
+    _FRONT_MATTER_PATTERN = re.compile(
+        r"\A---\s*\n(?P<header>.*?)\n---\s*\n?", re.DOTALL)
     _KV_PATTERN = re.compile(r"^\s*([a-zA-Z_]+)\s*:\s*(.*?)\s*$")
     _PLAN_INTENT_MARKERS = (
         "研究方案",
@@ -138,7 +139,8 @@ class ConversationAgent:
             content=revision.markdown,
             metadata={"version": revision.version},
         )
-        self.repository.set_status(conversation_id, ConversationStatus.PLAN_READY)
+        self.repository.set_status(
+            conversation_id, ConversationStatus.PLAN_READY)
         return self.repository.get_detail(conversation_id)
 
     async def revise_plan(self, *, conversation_id: str, instruction: str) -> tuple[PlanRevision, ConversationMessage]:
@@ -150,7 +152,8 @@ class ConversationAgent:
             raise ValueError("当前会话没有可修订方案。")
 
         has_report = self._has_persisted_report(summary.taskId)
-        mode = self._infer_instruction_mode(has_report=has_report, instruction=instruction)
+        mode = self._infer_instruction_mode(
+            has_report=has_report, instruction=instruction)
         if mode == "RESEARCH":
             revision, _ = await self._apply_plan_revision(
                 conversation_id=conversation_id,
@@ -259,7 +262,8 @@ class ConversationAgent:
                 "报告改写完成，已更新到会话中。",
                 {"taskId": task_id},
             )
-            self.repository.set_status(conversation_id, ConversationStatus.COMPLETED)
+            self.repository.set_status(
+                conversation_id, ConversationStatus.COMPLETED)
         except KeyError:
             return
         except Exception as exc:  # noqa: BLE001
@@ -271,7 +275,8 @@ class ConversationAgent:
                     f"报告改写失败：{exc}",
                     {"taskId": task_id, "error": str(exc)},
                 )
-                self.repository.set_status(conversation_id, ConversationStatus.FAILED)
+                self.repository.set_status(
+                    conversation_id, ConversationStatus.FAILED)
                 self.repository.add_message(
                     conversation_id,
                     message_id=new_id(),
@@ -294,9 +299,11 @@ class ConversationAgent:
         summary: str,
         payload: dict | None = None,
     ) -> None:
-        normalized_task_id = task_id.strip() if task_id.strip() else f"report-revision:{conversation_id}"
+        normalized_task_id = task_id.strip() if task_id.strip(
+        ) else f"report-revision:{conversation_id}"
         progress_value = max(0, min(100, int(progress)))
-        event_payload = {"taskId": normalized_task_id, "phase": phase, "state": state, "progress": progress_value}
+        event_payload = {"taskId": normalized_task_id,
+                         "phase": phase, "state": state, "progress": progress_value}
         if payload:
             event_payload.update(payload)
         event_payload["taskId"] = normalized_task_id
@@ -350,7 +357,8 @@ class ConversationAgent:
             content=revision.markdown,
             metadata={"version": revision.version},
         )
-        self.repository.set_status(conversation_id, ConversationStatus.PLAN_READY)
+        self.repository.set_status(
+            conversation_id, ConversationStatus.PLAN_READY)
         return revision, message
 
     def update_plan(self, *, conversation_id: str, markdown: str) -> PlanRevision:
@@ -370,7 +378,8 @@ class ConversationAgent:
             content=revision.markdown,
             metadata={"version": revision.version},
         )
-        self.repository.set_status(conversation_id, ConversationStatus.PLAN_READY)
+        self.repository.set_status(
+            conversation_id, ConversationStatus.PLAN_READY)
         return revision
 
     def rename_conversation(
@@ -385,7 +394,8 @@ class ConversationAgent:
             raise ValueError("会话标题至少需要 2 个字符。")
         summary = self.repository.update_topic(conversation_id, topic_text)
 
-        current_plan = self.repository.get_current_plan(conversation_id) if sync_current_plan else None
+        current_plan = self.repository.get_current_plan(
+            conversation_id) if sync_current_plan else None
         if current_plan is not None:
             base_config = self.repository.get_config(conversation_id)
             rewritten = self._rewrite_plan_topic(
@@ -431,7 +441,8 @@ class ConversationAgent:
             )
 
         if summary.status == ConversationStatus.DRAFTING_PLAN:
-            self.repository.set_status(conversation_id, ConversationStatus.PLAN_READY)
+            self.repository.set_status(
+                conversation_id, ConversationStatus.PLAN_READY)
         return self.repository.get_detail(conversation_id)
 
     def delete_conversation(self, *, conversation_id: str) -> None:
@@ -459,7 +470,8 @@ class ConversationAgent:
         if current_plan is None:
             raise ValueError("没有可执行方案，请先生成或编辑研究方案。")
         base_config = self.repository.get_config(conversation_id)
-        parsed = self._parse_plan(current_plan.markdown, topic=summary.topic, base_config=base_config)
+        parsed = self._parse_plan(
+            current_plan.markdown, topic=summary.topic, base_config=base_config)
         for warning in parsed.warnings:
             self.repository.add_message(
                 conversation_id,
@@ -468,7 +480,8 @@ class ConversationAgent:
                 kind=MessageKind.ERROR,
                 content=warning,
             )
-        task_description = self._extract_plan_body(current_plan.markdown)[:5000]
+        task_description = self._extract_plan_body(
+            current_plan.markdown)[:5000]
         if len(task_description.strip()) < 3:
             task_description = f"围绕主题“{summary.topic}”执行系统化研究。"
         task = self.task_repository.create_task(
@@ -501,7 +514,8 @@ class ConversationAgent:
         conversation_id = summary.conversationId
 
         if event == "TASK_PROGRESS":
-            phase = str(data.get("phase") or data.get("state") or "UNKNOWN").strip() or "UNKNOWN"
+            phase = str(data.get("phase") or data.get("state")
+                        or "UNKNOWN").strip() or "UNKNOWN"
             state = str(data.get("state") or "UNKNOWN").strip() or "UNKNOWN"
             progress = data.get("progress")
             if isinstance(progress, float):
@@ -522,7 +536,8 @@ class ConversationAgent:
             return
 
         if event == "TASK_COMPLETED":
-            self.repository.set_status(conversation_id, ConversationStatus.COMPLETED)
+            self.repository.set_status(
+                conversation_id, ConversationStatus.COMPLETED)
             report_content = self._load_report(task_id)
             self.repository.add_message(
                 conversation_id,
@@ -535,7 +550,8 @@ class ConversationAgent:
             return
 
         if event in {"TASK_FAILED", "TASK_ABORTED", "ERROR"}:
-            self.repository.set_status(conversation_id, ConversationStatus.FAILED)
+            self.repository.set_status(
+                conversation_id, ConversationStatus.FAILED)
             error_text = str(data.get("error") or "研究执行失败，请检查日志。").strip()
             self.repository.add_message(
                 conversation_id,
@@ -564,12 +580,14 @@ class ConversationAgent:
         conversation_id: str,
         task_id: str,
         instruction: str,
-        progress_callback: Callable[[int, str, str, str, dict | None], None] | None = None,
+        progress_callback: Callable[[int, str, str,
+                                     str, dict | None], None] | None = None,
     ) -> ConversationMessage:
         def emit(progress: int, phase: str, summary: str, payload: dict | None = None) -> None:
             if progress_callback is None:
                 return
-            progress_callback(progress, phase, "REPORT_REVISING", summary, payload)
+            progress_callback(
+                progress, phase, "REPORT_REVISING", summary, payload)
 
         current_report = self._load_report(task_id)
         if not current_report:
@@ -590,7 +608,8 @@ class ConversationAgent:
                 "正在按你的要求改写报告结构与语气。",
                 {"taskId": task_id},
             )
-            llm_revised = self._rewrite_report_with_llm(current_report=current_report, instruction=instruction)
+            llm_revised = self._rewrite_report_with_llm(
+                current_report=current_report, instruction=instruction)
             report_text = llm_revised or self._fallback_revised_report(
                 current_report=current_report,
                 instruction=instruction,
@@ -603,7 +622,8 @@ class ConversationAgent:
             )
             self._persist_report(task_id=task_id, content=report_text)
 
-        should_rebuild = self._matches_any_marker(instruction, self._REPORT_REBUILD_MARKERS)
+        should_rebuild = self._matches_any_marker(
+            instruction, self._REPORT_REBUILD_MARKERS)
         if should_rebuild or not report_text:
             emit(
                 78,
@@ -611,7 +631,8 @@ class ConversationAgent:
                 "正在基于已有证据重建报告内容。",
                 {"taskId": task_id},
             )
-            report_text = self._regenerate_report_from_existing_artifacts(task_id=task_id, instruction=instruction)
+            report_text = self._regenerate_report_from_existing_artifacts(
+                task_id=task_id, instruction=instruction)
             if report_text:
                 emit(
                     90,
@@ -620,7 +641,8 @@ class ConversationAgent:
                     {"taskId": task_id},
                 )
         if not report_text:
-            report_text = self._fallback_revised_report(current_report=current_report, instruction=instruction)
+            report_text = self._fallback_revised_report(
+                current_report=current_report, instruction=instruction)
             self._persist_report(task_id=task_id, content=report_text)
         emit(
             96,
@@ -655,11 +677,17 @@ class ConversationAgent:
             for node in dag.nodes
             if node.taskId != task_id and node.status != NodeStatus.PRUNED
         ]
-        evidences = self.evidence_repository.list(task_id=task_id, limit=1000).items
+        evidences = self.evidence_repository.list(
+            task_id=task_id, limit=1000).items
         revised_description = (
             f"{task.description}\n\n"
             f"用户补充要求：{instruction}\n"
             "请在保持证据可追溯的前提下重写完整报告。"
+        )
+        writing_plan = self.planner.build_writing_plan(
+            title=task.title,
+            description=revised_description,
+            research_sections=sections,
         )
         try:
             md_path, _, _ = self.report_agent.generate_report(
@@ -669,6 +697,7 @@ class ConversationAgent:
                 sections=sections,
                 evidences=evidences,
                 locked_sections=set(),
+                writing_plan=writing_plan,
             )
             self.task_repository.set_report_path(task_id, md_path)
             return Path(md_path).read_text(encoding="utf-8")
@@ -743,7 +772,7 @@ class ConversationAgent:
         match = ConversationAgent._FRONT_MATTER_PATTERN.match(markdown.strip())
         if not match:
             return markdown.strip()
-        return markdown[match.end() :].strip()
+        return markdown[match.end():].strip()
 
     def _parse_plan(self, markdown: str, *, topic: str, base_config: TaskConfig) -> ParsedPlan:
         warnings: list[str] = []
@@ -771,13 +800,16 @@ class ConversationAgent:
             if key == "topic":
                 continue
             if key == "max_depth":
-                config_data["maxDepth"] = self._int_or_default(value, base_config.maxDepth, min_value=1, max_value=8)
+                config_data["maxDepth"] = self._int_or_default(
+                    value, base_config.maxDepth, min_value=1, max_value=8)
                 continue
             if key == "max_nodes":
-                config_data["maxNodes"] = self._int_or_default(value, base_config.maxNodes, min_value=1, max_value=500)
+                config_data["maxNodes"] = self._int_or_default(
+                    value, base_config.maxNodes, min_value=1, max_value=500)
                 continue
             if key == "priority":
-                config_data["priority"] = self._int_or_default(value, base_config.priority, min_value=1, max_value=5)
+                config_data["priority"] = self._int_or_default(
+                    value, base_config.priority, min_value=1, max_value=5)
                 continue
             if key == "search_sources":
                 parsed_sources = self._parse_sources(value)
@@ -801,7 +833,8 @@ class ConversationAgent:
         text = raw.strip()
         if text.startswith("[") and text.endswith("]"):
             text = text[1:-1]
-        parts = [part.strip().strip('"').strip("'") for part in text.split(",")]
+        parts = [part.strip().strip('"').strip("'")
+                 for part in text.split(",")]
         return [part for part in parts if part]
 
     def _generate_initial_plan(self, *, topic: str, config: TaskConfig) -> str:
@@ -817,9 +850,11 @@ class ConversationAgent:
             f"priority={config.priority}, search_sources={config.searchSources}\n"
             "输出语言：中文。"
         )
-        generated = self._chat_complete(system_prompt=prompt, user_prompt=user_input)
+        generated = self._chat_complete(
+            system_prompt=prompt, user_prompt=user_input)
         if generated:
-            normalized = self._ensure_front_matter(generated, topic=topic, config=config)
+            normalized = self._ensure_front_matter(
+                generated, topic=topic, config=config)
             if normalized:
                 return normalized
         return self._fallback_plan(topic=topic, config=config)
@@ -844,9 +879,11 @@ class ConversationAgent:
             f"保底配置：max_depth={config.maxDepth}, max_nodes={config.maxNodes}, "
             f"priority={config.priority}, search_sources={config.searchSources}"
         )
-        generated = self._chat_complete(system_prompt=prompt, user_prompt=user_input)
+        generated = self._chat_complete(
+            system_prompt=prompt, user_prompt=user_input)
         if generated:
-            normalized = self._ensure_front_matter(generated, topic=topic, config=config)
+            normalized = self._ensure_front_matter(
+                generated, topic=topic, config=config)
             if normalized:
                 return normalized
         return self._fallback_revision(current_plan=current_plan, instruction=instruction, topic=topic, config=config)
@@ -924,7 +961,7 @@ class ConversationAgent:
             return self._ensure_front_matter(text, topic=topic, config=config)
 
         header = match.group("header")
-        body = text[match.end() :].strip()
+        body = text[match.end():].strip()
         header_lines = header.splitlines()
         rewritten_lines: list[str] = []
         has_title = False
@@ -1014,7 +1051,8 @@ class ConversationAgent:
         )
 
     def _fallback_revision(self, *, current_plan: str, instruction: str, topic: str, config: TaskConfig) -> str:
-        normalized = self._ensure_front_matter(current_plan, topic=topic, config=config)
+        normalized = self._ensure_front_matter(
+            current_plan, topic=topic, config=config)
         return (
             f"{normalized}\n\n"
             "## 修订记录\n"
@@ -1027,7 +1065,8 @@ class ConversationAgent:
         state = str(data.get("state") or "EXECUTING")
         phase = str(data.get("phase") or "UNKNOWN")
         progress = data.get("progress")
-        progress_text = f"{progress}%" if isinstance(progress, (int, float)) else "--"
+        progress_text = f"{progress}%" if isinstance(
+            progress, (int, float)) else "--"
         node_title = str(data.get("currentNodeTitle") or "").strip()
         section_title = str(data.get("currentSectionTitle") or "").strip()
         query = str(data.get("searchQuery") or "").strip()

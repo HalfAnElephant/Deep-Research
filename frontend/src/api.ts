@@ -243,10 +243,31 @@ export async function exportReferences(conversationId: string): Promise<void> {
   await download(`${API_BASE}/api/v1/conversations/${conversationId}/export/references`, `${conversationId}_references.md`);
 }
 
-export function connectProgressWs(taskId: string, onMessage: (event: MessageEvent<string>) => void): WebSocket {
+export interface WebSocketCallbacks {
+  onMessage: (event: MessageEvent<string>) => void;
+  onError?: (error: Event) => void;
+  onClose?: () => void;
+}
+
+export function connectProgressWs(taskId: string, callbacks: WebSocketCallbacks | ((event: MessageEvent<string>) => void)): WebSocket {
+  // Support both old API (just onMessage callback) and new API (object with callbacks)
+  const onMessage = typeof callbacks === "function" ? callbacks : callbacks.onMessage;
+  const onError = typeof callbacks === "function" ? undefined : callbacks.onError;
+  const onClose = typeof callbacks === "function" ? undefined : callbacks.onClose;
+
   const wsBase = API_BASE.replace("http://", "ws://").replace("https://", "wss://");
   const ws = new WebSocket(`${wsBase}/api/v1/ws/task/${taskId}/progress`);
   ws.onmessage = onMessage;
+
+  ws.onerror = (error) => {
+    console.error("WebSocket 连接错误:", error);
+    onError?.(error);
+  };
+
+  ws.onclose = () => {
+    onClose?.();
+  };
+
   let heartbeatTimer: number | null = null;
   ws.onopen = () => {
     ws.send("subscribe");

@@ -8,6 +8,7 @@ from app.services.agents import ReportAgent, ResearchAgent
 from app.services.analyst import AnalystService
 from app.services.conversation_agent import ConversationAgent
 from app.services.execution_engine import ExecutionEngine
+from app.services.four_agents.checking_agent import CheckingAgent
 from app.services.mcp_executor import MCPExecutor
 from app.services.planner import MasterPlanner
 from app.services.progress_hub import ProgressHub
@@ -25,7 +26,15 @@ analyst_service = AnalystService()
 writer_service = WriterService()
 mcp_executor = MCPExecutor()
 research_agent = ResearchAgent(retrieval_service=retrieval_service, mcp_executor=mcp_executor)
-report_agent = ReportAgent(writer_service=writer_service)
+
+# 创建四 Agent 架构实例
+checking_agent = CheckingAgent()
+
+report_agent = ReportAgent(
+    writer_service=writer_service,
+    checking_agent=checking_agent
+)
+
 execution_engine = ExecutionEngine(
     task_repository,
     planner,
@@ -37,7 +46,9 @@ execution_engine = ExecutionEngine(
     writer_service,
     research_agent,
     report_agent,
+    checking_agent,  # 注入审核 Agent
 )
+
 conversation_agent = ConversationAgent(
     repository=conversation_repository,
     task_repository=task_repository,
@@ -45,4 +56,5 @@ conversation_agent = ConversationAgent(
     evidence_repository=evidence_repository,
     report_agent=report_agent,
 )
+
 execution_engine.set_event_listener(conversation_agent.on_task_event)
