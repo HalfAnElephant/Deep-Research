@@ -205,6 +205,12 @@ export function App() {
   const progressWsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const reconnectAttemptRef = useRef(0);
+  const draftDirtyRef = useRef(false);
+
+  const setDraftDirtyState = useCallback((value: boolean) => {
+    draftDirtyRef.current = value;
+    setDraftDirty(value);
+  }, []);
 
   const activeStatus = activeDetail?.status ?? null;
   const statusLabel = draftMode ? "等待输入研究主题" : activeStatus ? STATUS_LABEL[activeStatus] : "未选择会话";
@@ -290,15 +296,15 @@ export function App() {
       const shouldSync =
         Boolean(options?.forceDraft) ||
         Boolean(options?.syncDraft) ||
-        !draftDirty;
+        !draftDirtyRef.current;
       if (shouldSync) {
         setPlanDraft(currentPlan.markdown);
-        setDraftDirty(false);
+        setDraftDirtyState(false);
       }
     } catch (err) {
       setError(toErrorText(err));
     }
-  }, [draftDirty]);
+  }, [setDraftDirtyState]);
 
   useEffect(() => {
     if (activeStatus !== "RUNNING") return;
@@ -511,7 +517,7 @@ export function App() {
       const detail = await getConversation(recovered.conversationId);
       setActiveDetail(detail);
       setPlanDraft(detail.currentPlan?.markdown ?? "");
-      setDraftDirty(false);
+      setDraftDirtyState(false);
       return detail;
     } catch {
       return null;
@@ -524,7 +530,7 @@ export function App() {
     setActiveDetail(null);
     setComposerText("");
     setPlanDraft("");
-    setDraftDirty(false);
+    setDraftDirtyState(false);
     setDraftMessages([]);
     setPendingAssistantBubble(null);
     setRightSidebarVisible(false);
@@ -597,7 +603,7 @@ export function App() {
         setActiveConversationId(detail.conversationId);
         setActiveDetail(detail);
         setPlanDraft(detail.currentPlan?.markdown ?? "");
-        setDraftDirty(false);
+        setDraftDirtyState(false);
         setDraftMessages([]);
         setPendingAssistantBubble(null);
         await refreshConversations();
@@ -656,7 +662,7 @@ export function App() {
     setError("");
     try {
       await updateConversationPlan(activeConversationId, planDraft);
-      setDraftDirty(false);
+      setDraftDirtyState(false);
       await refreshConversationDetail(activeConversationId, { syncDraft: true });
       await refreshConversations();
     } catch (err) {
@@ -703,7 +709,7 @@ export function App() {
 
   function onApplyPlan(markdown: string) {
     setPlanDraft(markdown);
-    setDraftDirty(true);
+    setDraftDirtyState(true);
     onOpenPlanDrawer();
   }
 
@@ -731,7 +737,7 @@ export function App() {
         setActiveConversationId(null);
         setActiveDetail(null);
         setPlanDraft("");
-        setDraftDirty(false);
+        setDraftDirtyState(false);
         setDraftMessages([]);
         setPendingAssistantBubble((prev) => (prev?.conversationId === conversationId ? null : prev));
         setRightSidebarVisible(false);
@@ -786,7 +792,7 @@ export function App() {
       if (activeConversationId === conversationId) {
         setActiveDetail(detail);
         setPlanDraft(detail.currentPlan?.markdown ?? "");
-        setDraftDirty(false);
+        setDraftDirtyState(false);
       }
       setRenameDialog(null);
       await refreshConversations();
@@ -816,7 +822,7 @@ export function App() {
       setDraftMode(false);
       setComposerText("");
       setPlanDraft("");
-      setDraftDirty(false);
+      setDraftDirtyState(false);
       setDraftMessages([]);
       setPendingAssistantBubble(null);
       setRightSidebarVisible(false);
@@ -911,7 +917,7 @@ export function App() {
         onSelect={(conversationId) => {
           setDraftMode(false);
           setActiveConversationId(conversationId);
-          setDraftDirty(false);
+          setDraftDirtyState(false);
           setDraftMessages([]);
           setPendingAssistantBubble((prev) => (prev?.conversationId === null ? null : prev));
           setMobileSidebarOpen(false);
@@ -1001,7 +1007,7 @@ export function App() {
         onRequestCloseMobile={() => setMobileEditorOpen(false)}
         onChange={(value) => {
           setPlanDraft(value);
-          setDraftDirty(true);
+          setDraftDirtyState(true);
         }}
         onSave={onSavePlan}
         onStart={onStartResearch}
