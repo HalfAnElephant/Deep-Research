@@ -9,6 +9,7 @@ import {
 } from "../hooks";
 import { formatLocalTime } from "../utils/formatTime";
 import { ReportViewer } from "./ReportViewer";
+import { ProgressBar } from "./ProgressIndicator";
 
 interface ChatTimelineProps {
   messages: ConversationMessage[];
@@ -24,6 +25,9 @@ interface ChatTimelineProps {
   onFocusComposer: () => void;
   onDownloadReport: () => void;
   onExportReport?: () => void;
+  streamStatus?: "idle" | "connecting" | "connected" | "reconnecting" | "fallback";
+  lastProgressEventAt?: string | null;
+  idleSeconds?: number;
 }
 
 export function ChatTimeline(props: ChatTimelineProps) {
@@ -40,7 +44,10 @@ export function ChatTimeline(props: ChatTimelineProps) {
     onStartResearch,
     onFocusComposer,
     onDownloadReport,
-    onExportReport
+    onExportReport,
+    streamStatus = "idle",
+    lastProgressEventAt = null,
+    idleSeconds = 0,
   } = props;
 
   // UI state for expanded/collapsed sections
@@ -65,6 +72,10 @@ export function ChatTimeline(props: ChatTimelineProps) {
 
   const canStartResearch =
     activeStatus === "PLAN_READY" || activeStatus === "COMPLETED" || activeStatus === "FAILED";
+  const activeBundle = currentTaskId ? progressBundles.get(currentTaskId) ?? null : null;
+  const activeEntries = activeBundle ? activeBundle.entries.slice(-6).reverse() : [];
+  const currentPhase = activeEntries[0]?.phase ?? "";
+  const idleWarning = idleSeconds >= 20;
 
   // Helper to render progress bundle
   const renderProgressBundle = (bundle: ProgressBundle) => {
@@ -105,8 +116,11 @@ export function ChatTimeline(props: ChatTimelineProps) {
                 {bundle.entries.length === 0 ? (
                   <div className="progress-entry">暂无明细</div>
                 ) : (
-                  bundle.entries.map((entry, index) => (
-                    <div className="progress-entry" key={`${bundle.bundleKey}-${index}`}>
+                  bundle.entries.map((entry) => (
+                    <div
+                      className="progress-entry"
+                      key={`${bundle.bundleKey}-${entry.phase}-${entry.state}-${entry.summary}-${entry.progress ?? "na"}-${entry.detail ?? ""}`}
+                    >
                       <div>{entry.summary}</div>
                       <div className="mono">
                         {entry.state}/{entry.phase} {entry.progress !== null ? `| ${entry.progress}%` : ""}
@@ -124,6 +138,51 @@ export function ChatTimeline(props: ChatTimelineProps) {
 
   return (
     <section className="timeline">
+      {(activeStatus === "RUNNING" || activeBundle) && (
+        <article className="live-progress-rail" aria-live="polite">
+          <header className="live-progress-head">
+            <div>
+              <strong>实时研究进度</strong>
+              <span className={`live-stream-status stream-${streamStatus}`}>
+                {streamStatusLabel(streamStatus)}
+              </span>
+            </div>
+            <span className="mono live-progress-time">
+              {lastProgressEventAt ? `最近更新 ${formatLocalTime(lastProgressEventAt)}` : "等待首个进度事件"}
+            </span>
+          </header>
+          <div className="live-progress-main">
+            <ProgressBar
+              progress={activeBundle?.latestProgress ?? 0}
+              status={activeStatus === "FAILED" ? "failed" : activeStatus === "COMPLETED" ? "completed" : "running"}
+              phase={currentPhase}
+            />
+            <p className="live-progress-summary">{activeBundle?.latestSummary ?? "任务启动中，正在等待执行事件。"}</p>
+            {(idleWarning || streamStatus === "fallback") && (
+              <div className="live-progress-warning">
+                {streamStatus === "fallback"
+                  ? "实时通道暂不可用，已自动切换为轮询更新。"
+                  : `当前阶段已持续 ${idleSeconds} 秒无新进展，系统仍在运行。`}
+              </div>
+            )}
+          </div>
+          {activeEntries.length > 0 && (
+            <div className="live-progress-events">
+              {activeEntries.map((entry) => (
+                    <div
+                      className="live-progress-event"
+                      key={`${entry.phase}-${entry.state}-${entry.summary}-${entry.progress ?? "na"}-${entry.detail ?? ""}`}
+                    >
+                  <span className="event-phase">{entry.phase}</span>
+                  <span className="event-summary">{entry.detail || entry.summary}</span>
+                  <span className="event-progress mono">{entry.progress !== null ? `${entry.progress}%` : "--"}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </article>
+      )}
+
       {visibleMessages.length === 0 ? (
         draftMode ? (
           <article className="message-row row-agent">
@@ -237,7 +296,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
 
       {pendingAssistantText && (
         <article className="message-row row-agent">
-          <div className="message message-assistant message-pending" role="status" aria-live="polite">
+          <div className="message message-assistant message-pending" aria-live="polite">
             <header>
               <span className="message-role">Agent</span>
             </header>
@@ -263,4 +322,19 @@ export function ChatTimeline(props: ChatTimelineProps) {
       )}
     </section>
   );
+}
+
+function streamStatusLabel(status: "idle" | "connecting" | "connected" | "reconnecting" | "fallback"): string {
+  switch (status) {
+    case "connecting":
+      return "连接中";
+    case "connected":
+      return "实时连接正常";
+    case "reconnecting":
+      return "重连中";
+    case "fallback":
+      return "轮询降级";
+    default:
+      return "未连接";
+  }
 }

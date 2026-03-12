@@ -35,6 +35,14 @@ class SectionOutline:
 class WriterService:
     """研究文章写作服务，支持分离导出文章和引用列表。"""
 
+    FRONT_MATTER_PATTERN = re.compile(
+        r"^---\s*\n(?P<header>[\s\S]*?)\n---\s*(?:\n|$)",
+        re.MULTILINE,
+    )
+    MARKDOWN_FENCE_WRAPPER_PATTERN = re.compile(
+        r"^```(?:markdown|md)\s*\n(?P<body>[\s\S]*?)\n```\s*$",
+        re.IGNORECASE,
+    )
     URL_PATTERN = re.compile(r"https?://\S+")
     PLACEHOLDER_TITLE_PATTERN = re.compile(
         r"(?i)(^\[mock\]|result\s+for|synthetic evidence|semantic scholar result|arxiv result|web result)"
@@ -110,9 +118,9 @@ class WriterService:
         else:
             generated_body = report_body
 
-        # 过滤内部标记，确保输出干净
+        # 过滤内部标记与计划/代码围栏污染，确保输出的是文章正文。
         clean_body = self._strip_internal_markers(generated_body)
-        clean_body, _ = self._strip_meta_commentary(clean_body)
+        clean_body, _ = self._sanitize_markdown_output(clean_body)
 
         # 将 [evidence:xxx] 替换为标准引用编号 [1], [2], ...
         clean_body = self._replace_evidence_refs(clean_body, evidence_to_index)
@@ -1125,8 +1133,29 @@ class WriterService:
     @classmethod
     def _sanitize_markdown_output(cls, text: str) -> tuple[str, list[str]]:
         normalized = cls._normalize_markdown_text(text)
+        normalized = cls._clean_export_body(normalized)
         sanitized, suppressed_segments = cls._strip_meta_commentary(normalized)
         return sanitized, suppressed_segments
+
+    @classmethod
+    def _clean_export_body(cls, text: str) -> str:
+        cleaned = text.strip()
+        while True:
+            wrapper = cls.MARKDOWN_FENCE_WRAPPER_PATTERN.match(cleaned)
+            if not wrapper:
+                break
+            cleaned = wrapper.group("body").strip()
+
+        front_matter = cls.FRONT_MATTER_PATTERN.match(cleaned)
+        if front_matter:
+            cleaned = cleaned[front_matter.end():].strip()
+
+        lines = cleaned.splitlines()
+        if lines and re.fullmatch(r"```(?:markdown|md)\s*", lines[0].strip(), re.IGNORECASE):
+            lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+        return "\n".join(lines).strip()
 
     @classmethod
     def _strip_meta_commentary(cls, text: str) -> tuple[str, list[str]]:

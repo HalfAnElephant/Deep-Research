@@ -48,6 +48,8 @@ class ConversationAgent:
         "max_nodes",
         "priority",
         "search_sources",
+        "target_word_count",
+        "字数",
         "任务树",
         "执行步骤",
         "改方案",
@@ -513,7 +515,7 @@ class ConversationAgent:
             return
         conversation_id = summary.conversationId
 
-        if event == "TASK_PROGRESS":
+        if event in {"TASK_PROGRESS", "TASK_HEARTBEAT", "STALL_WARNING"}:
             phase = str(data.get("phase") or data.get("state")
                         or "UNKNOWN").strip() or "UNKNOWN"
             state = str(data.get("state") or "UNKNOWN").strip() or "UNKNOWN"
@@ -836,6 +838,11 @@ class ConversationAgent:
                     config_data["searchSources"] = parsed_sources
                 else:
                     warnings.append("search_sources 为空，已回退默认数据源配置。")
+                continue
+            if key == "target_word_count":
+                config_data["targetWordCount"] = self._int_or_default(
+                    value, base_config.targetWordCount, min_value=1000, max_value=50000)
+                continue
 
         return ParsedPlan(title=parsed_title[:200], config=TaskConfig(**config_data), warnings=warnings)
 
@@ -859,14 +866,15 @@ class ConversationAgent:
     def _generate_initial_plan(self, *, topic: str, config: TaskConfig) -> str:
         prompt = (
             "请为用户生成一个可执行的深度研究方案，输出必须是 Markdown，并且必须包含 front matter。\n"
-            "front matter 字段固定为：title, topic, max_depth, max_nodes, priority, search_sources。\n"
+            "front matter 字段固定为：title, topic, max_depth, max_nodes, priority, search_sources, target_word_count。\n"
             "正文至少包含：研究目标、研究问题拆解、方法与来源、执行步骤、风险与边界、交付标准。\n"
             "严禁输出解释性前言，直接返回完整 Markdown。"
         )
         user_input = (
             f"主题：{topic}\n"
             f"配置建议：max_depth={config.maxDepth}, max_nodes={config.maxNodes}, "
-            f"priority={config.priority}, search_sources={config.searchSources}\n"
+            f"priority={config.priority}, search_sources={config.searchSources}, "
+            f"target_word_count={config.targetWordCount}\n"
             "输出语言：中文。"
         )
         generated = self._chat_complete(
@@ -896,7 +904,8 @@ class ConversationAgent:
             f"用户指令：{instruction}\n\n"
             f"当前方案如下：\n{current_plan}\n\n"
             f"保底配置：max_depth={config.maxDepth}, max_nodes={config.maxNodes}, "
-            f"priority={config.priority}, search_sources={config.searchSources}"
+            f"priority={config.priority}, search_sources={config.searchSources}, "
+            f"target_word_count={config.targetWordCount}"
         )
         generated = self._chat_complete(
             system_prompt=prompt, user_prompt=user_input)
@@ -1032,6 +1041,7 @@ class ConversationAgent:
             f"max_nodes: {config.maxNodes}\n"
             f"priority: {config.priority}\n"
             f"search_sources: [{', '.join(config.searchSources)}]\n"
+            f"target_word_count: {config.targetWordCount}\n"
             "---\n\n"
             f"{text}"
         )
@@ -1046,6 +1056,7 @@ class ConversationAgent:
             f"max_nodes: {config.maxNodes}\n"
             f"priority: {config.priority}\n"
             f"search_sources: [{', '.join(config.searchSources)}]\n"
+            f"target_word_count: {config.targetWordCount}\n"
             "---\n\n"
             "## 研究目标\n"
             "围绕主题建立可验证的结论链路，输出可执行决策建议。\n\n"
@@ -1086,9 +1097,16 @@ class ConversationAgent:
         progress = data.get("progress")
         progress_text = f"{progress}%" if isinstance(
             progress, (int, float)) else "--"
+        detail = str(data.get("detail") or "").strip()
         node_title = str(data.get("currentNodeTitle") or "").strip()
         section_title = str(data.get("currentSectionTitle") or "").strip()
         query = str(data.get("searchQuery") or "").strip()
+        if phase == "HEARTBEAT" and detail:
+            return f"[{state}/HEARTBEAT] {progress_text} {detail}"
+        if phase == "STALL_WARNING" and detail:
+            return f"[{state}/STALL_WARNING] {progress_text} {detail}"
+        if detail:
+            return f"[{state}/{phase}] {progress_text} {detail}"
         if section_title:
             return f"[{state}/{phase}] {progress_text} 正在写作：{section_title}"
         if node_title and query:

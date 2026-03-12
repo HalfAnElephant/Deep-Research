@@ -1,4 +1,4 @@
-import { useCallback, useState, useMemo, useEffect } from "react";
+import { useCallback, useState, useMemo, useEffect, useRef } from "react";
 
 // ============================================================================
 // TypeScript Interfaces
@@ -20,6 +20,8 @@ export interface PlanConfig {
   priority: number;
   /** List of search sources to query */
   search_sources: SearchSource[];
+  /** Target word count for the research report (1000-50000) */
+  target_word_count?: number;
 }
 
 /**
@@ -53,6 +55,7 @@ export const DEFAULT_CONFIG: PlanConfig = {
   max_nodes: 10,
   priority: 5,
   search_sources: ["Web Search", "arXiv", "Semantic Scholar"],
+  target_word_count: 5000,
 };
 
 // ============================================================================
@@ -130,6 +133,14 @@ export function parseYamlFrontmatter(markdown: string): {
         }
         break;
       }
+
+      case "target_word_count": {
+        const numValue = parseInt(valueStr, 10);
+        if (!isNaN(numValue)) {
+          (config as Record<string, unknown>)[key] = numValue;
+        }
+        break;
+      }
     }
   }
 
@@ -174,6 +185,9 @@ export function serializeYamlFrontmatter(
       .join(", ");
     lines.push(`search_sources: [${sourcesStr}]`);
   }
+  if (config.target_word_count !== undefined && config.target_word_count > 0) {
+    lines.push(`target_word_count: ${config.target_word_count}`);
+  }
 
   lines.push("---");
   lines.push("");
@@ -205,6 +219,7 @@ export interface ValidationErrors {
   max_nodes?: string;
   priority?: string;
   search_sources?: string;
+  target_word_count?: string;
 }
 
 /**
@@ -249,6 +264,14 @@ export function validateConfig(config: Partial<PlanConfig>): ValidationErrors {
 
   if (config.search_sources !== undefined && config.search_sources.length === 0) {
     errors.search_sources = "请至少选择一个搜索来源";
+  }
+
+  if (config.target_word_count !== undefined) {
+    if (config.target_word_count < 1000) {
+      errors.target_word_count = "期望字数不能少于1000字";
+    } else if (config.target_word_count > 50000) {
+      errors.target_word_count = "期望字数不能大于50000字";
+    }
   }
 
   return errors;
@@ -298,14 +321,14 @@ export function PlanConfigForm({
   // Update config when markdown changes externally
   useEffect(() => {
     const data = parseYamlFrontmatter(markdown);
-    if (!expanded && data.hasFrontmatter) {
+    if (data.hasFrontmatter) {
       setConfig((prev) => ({
         ...prev,
         ...DEFAULT_CONFIG,
         ...data.config,
       }));
     }
-  }, [markdown, expanded]);
+  }, [markdown]);
 
   // Check if form has unsaved changes
   useEffect(() => {
@@ -376,6 +399,31 @@ export function PlanConfigForm({
     setHasChanges(false);
     setTouched(new Set());
   }, [config, markdown, onMarkdownChange, validateForm]);
+
+  // Debounced auto-sync: automatically save config changes to markdown
+  const autoSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!hasChanges || disabled) return;
+
+    // Clear any existing timer
+    if (autoSyncTimerRef.current) {
+      clearTimeout(autoSyncTimerRef.current);
+    }
+
+    // Set up new timer for auto-sync
+    autoSyncTimerRef.current = setTimeout(() => {
+      if (validateForm()) {
+        handleSave();
+      }
+    }, 800); // 800ms debounce
+
+    return () => {
+      if (autoSyncTimerRef.current) {
+        clearTimeout(autoSyncTimerRef.current);
+      }
+    };
+  }, [config, hasChanges, disabled, validateForm, handleSave]);
 
   // Handle reset
   const handleReset = useCallback(() => {
@@ -448,7 +496,7 @@ export function PlanConfigForm({
             <div className="config-field">
               <label htmlFor="config-title" className="config-label">
                 标题
-                <span className="config-label-hint">（可选）</span>
+                <span className="config-label-hint">（AI生成，可编辑）</span>
               </label>
               <input
                 id="config-title"
@@ -465,7 +513,7 @@ export function PlanConfigForm({
                   }));
                 }}
                 disabled={disabled}
-                placeholder="输入研究方案标题"
+                placeholder="AI将自动生成标题"
                 aria-invalid={!!errors.title}
                 aria-describedby={
                   errors.title ? "config-title-error" : "config-title-hint"
@@ -477,7 +525,7 @@ export function PlanConfigForm({
                 </p>
               ) : (
                 <p id="config-title-hint" className="config-hint">
-                  为您的研究方案起一个简洁的标题
+                  研究方案的标题，AI会根据主题自动生成
                 </p>
               )}
             </div>
@@ -486,7 +534,7 @@ export function PlanConfigForm({
             <div className="config-field">
               <label htmlFor="config-topic" className="config-label">
                 研究主题
-                <span className="config-label-hint">（可选）</span>
+                <span className="config-label-hint">（AI生成，可编辑）</span>
               </label>
               <input
                 id="config-topic"
@@ -503,7 +551,7 @@ export function PlanConfigForm({
                   }));
                 }}
                 disabled={disabled}
-                placeholder="输入研究主题或问题"
+                placeholder="AI将自动生成研究主题"
                 aria-invalid={!!errors.topic}
                 aria-describedby={
                   errors.topic ? "config-topic-error" : "config-topic-hint"
@@ -515,7 +563,7 @@ export function PlanConfigForm({
                 </p>
               ) : (
                 <p id="config-topic-hint" className="config-hint">
-                  描述您想要研究的具体主题
+                  描述研究的核心问题，AI会根据您的需求自动生成
                 </p>
               )}
             </div>
@@ -638,6 +686,48 @@ export function PlanConfigForm({
                   </p>
                 )}
               </div>
+
+              {/* Target Word Count Field */}
+              <div className="config-field config-field-compact">
+                <label htmlFor="config-word-count" className="config-label">
+                  期望字数
+                  <span className="config-value-display">
+                    {(config.target_word_count ?? 5000).toLocaleString()}
+                  </span>
+                </label>
+                <div className="config-slider-wrapper">
+                  <input
+                    id="config-word-count"
+                    type="range"
+                    className="config-slider"
+                    min="1000"
+                    max="50000"
+                    step="1000"
+                    value={config.target_word_count ?? 5000}
+                    onChange={(e) => updateField("target_word_count", parseInt(e.target.value, 10))}
+                    disabled={disabled}
+                    aria-invalid={!!errors.target_word_count}
+                    aria-describedby={
+                      errors.target_word_count ? "config-word-count-error" : "config-word-count-hint"
+                    }
+                  />
+                  <div className="config-slider-marks">
+                    <span>1K</span>
+                    <span>10K</span>
+                    <span>25K</span>
+                    <span>50K</span>
+                  </div>
+                </div>
+                {errors.target_word_count ? (
+                  <p id="config-word-count-error" className="config-error" role="alert">
+                    {errors.target_word_count}
+                  </p>
+                ) : (
+                  <p id="config-word-count-hint" className="config-hint">
+                    最终字数允许 ±20% 浮动
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Search Sources Field */}
@@ -674,16 +764,8 @@ export function PlanConfigForm({
               )}
             </fieldset>
 
-            {/* Form Actions */}
+            {/* Form Actions - Only Reset button remains (auto-sync enabled) */}
             <div className="config-form-actions" role="toolbar" aria-label="表单操作">
-              <button
-                type="submit"
-                className="primary"
-                disabled={disabled || !hasChanges}
-                aria-busy={false}
-              >
-                保存配置
-              </button>
               <button
                 type="button"
                 className="ghost"

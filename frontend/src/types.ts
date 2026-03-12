@@ -111,6 +111,7 @@ export interface ConversationSummary {
 export interface ConversationDetail extends ConversationSummary {
   currentPlan?: PlanRevision | null;
   messages: ConversationMessage[];
+  agentStates?: AgentState[];
 }
 
 export interface RevisePlanResponse {

@@ -56,19 +56,22 @@ search_sources: [arXiv, Semantic Scholar, Tavily]
     parsed = agent._parse_plan(  # noqa: SLF001
         markdown,
         topic="默认主题",
-        base_config=TaskConfig(maxDepth=2, maxNodes=8, priority=3, searchSources=["arXiv"]),
+        base_config=TaskConfig(maxDepth=2, maxNodes=8,
+                               priority=3, searchSources=["arXiv"]),
     )
     assert parsed.title == "自定义标题"
     assert parsed.config.maxDepth == 3
     assert parsed.config.maxNodes == 12
     assert parsed.config.priority == 5
-    assert parsed.config.searchSources == ["arXiv", "Semantic Scholar", "Tavily"]
+    assert parsed.config.searchSources == [
+        "arXiv", "Semantic Scholar", "Tavily"]
     assert parsed.warnings == []
 
 
 def test_parse_front_matter_fallback_when_missing() -> None:
     agent = _build_agent()
-    base = TaskConfig(maxDepth=2, maxNodes=9, priority=4, searchSources=["arXiv"])
+    base = TaskConfig(maxDepth=2, maxNodes=9, priority=4,
+                      searchSources=["arXiv"])
     parsed = agent._parse_plan(  # noqa: SLF001
         "## 没有 front matter",
         topic="默认主题",
@@ -96,7 +99,8 @@ search_sources: [arXiv]
     rewritten = agent._rewrite_plan_topic(  # noqa: SLF001
         markdown,
         topic="更新后的主题",
-        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3, searchSources=["arXiv"]),
+        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3,
+                          searchSources=["arXiv"]),
     )
     assert 'title: "更新后的主题"' in rewritten
     assert 'topic: "更新后的主题"' in rewritten
@@ -109,7 +113,8 @@ def test_rewrite_plan_topic_without_front_matter() -> None:
     rewritten = agent._rewrite_plan_topic(  # noqa: SLF001
         "## 只有正文",
         topic="无头部主题",
-        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3, searchSources=["arXiv"]),
+        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3,
+                          searchSources=["arXiv"]),
     )
     assert rewritten.startswith("---")
     assert "title: 无头部主题" in rewritten
@@ -126,7 +131,8 @@ async def test_revise_plan_creates_new_version_and_keeps_history(monkeypatch: py
         conversation_id=conversation_id,
         topic="多智能体可靠性",
         status=ConversationStatus.PLAN_READY,
-        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3, searchSources=["arXiv"]),
+        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3,
+                          searchSources=["arXiv"]),
     )
     repo.add_plan_revision(
         conversation_id,
@@ -160,7 +166,8 @@ async def test_revise_plan_allows_completed_conversation(monkeypatch: pytest.Mon
         conversation_id=conversation_id,
         topic="完成态继续修订",
         status=ConversationStatus.COMPLETED,
-        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3, searchSources=["arXiv"]),
+        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3,
+                          searchSources=["arXiv"]),
     )
     repo.add_plan_revision(
         conversation_id,
@@ -179,7 +186,8 @@ async def test_revise_plan_allows_completed_conversation(monkeypatch: pytest.Mon
         instruction="请补充风险与局限",
     )
     assert revised_plan.version == 2
-    assert repo.get_summary(conversation_id).status == ConversationStatus.PLAN_READY
+    assert repo.get_summary(
+        conversation_id).status == ConversationStatus.PLAN_READY
 
 
 @pytest.mark.asyncio
@@ -195,7 +203,8 @@ async def test_revise_plan_routes_to_report_revision_when_report_exists(
         conversation_id=conversation_id,
         topic="报告改写测试",
         status=ConversationStatus.COMPLETED,
-        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3, searchSources=["arXiv"]),
+        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3,
+                          searchSources=["arXiv"]),
     )
     plan = repo.add_plan_revision(
         conversation_id,
@@ -206,7 +215,8 @@ async def test_revise_plan_routes_to_report_revision_when_report_exists(
         task_id=new_id(),
         title="报告改写测试任务",
         description="已有报告，继续改写",
-        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3, searchSources=["arXiv"]),
+        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3,
+                          searchSources=["arXiv"]),
     )
     report_path = tmp_path / f"{task.taskId}.md"
     report_path.write_text("# 原始报告\n\n旧内容。", encoding="utf-8")
@@ -234,7 +244,8 @@ async def test_revise_plan_routes_to_report_revision_when_report_exists(
     while time.time() < deadline:
         detail = repo.get_detail(conversation_id)
         final_status = detail.status.value
-        final_messages = [message for message in detail.messages if message.kind == MessageKind.FINAL_REPORT]
+        final_messages = [
+            message for message in detail.messages if message.kind == MessageKind.FINAL_REPORT]
         if final_messages:
             final_report = final_messages[-1].content
         if final_status == ConversationStatus.COMPLETED.value and final_report:
@@ -244,7 +255,8 @@ async def test_revise_plan_routes_to_report_revision_when_report_exists(
     assert final_status == ConversationStatus.COMPLETED.value
     assert "演讲稿版本" in final_report
     assert report_path.read_text(encoding="utf-8").startswith("# 演讲稿版本")
-    progress_messages = [message for message in detail.messages if message.kind == MessageKind.PROGRESS_GROUP]
+    progress_messages = [
+        message for message in detail.messages if message.kind == MessageKind.PROGRESS_GROUP]
     assert len(progress_messages) >= 1
     progress_entries = [
         entry
@@ -252,8 +264,10 @@ async def test_revise_plan_routes_to_report_revision_when_report_exists(
         for entry in (message.metadata.get("entries") if isinstance(message.metadata.get("entries"), list) else [])
         if isinstance(entry, dict)
     ]
-    assert any(entry.get("phase") == "WRITING_DRAFT" for entry in progress_entries)
-    assert any(entry.get("phase") == "REPORT_COMPLETED" for entry in progress_entries)
+    assert any(entry.get("phase") ==
+               "WRITING_DRAFT" for entry in progress_entries)
+    assert any(entry.get("phase") ==
+               "REPORT_COMPLETED" for entry in progress_entries)
 
 
 def test_revise_report_and_record_prefers_current_report_over_rebuild(
@@ -268,7 +282,8 @@ def test_revise_report_and_record_prefers_current_report_over_rebuild(
         conversation_id=conversation_id,
         topic="基于现有报告改写",
         status=ConversationStatus.COMPLETED,
-        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3, searchSources=["arXiv"]),
+        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3,
+                          searchSources=["arXiv"]),
     )
     repo.add_plan_revision(
         conversation_id,
@@ -279,7 +294,8 @@ def test_revise_report_and_record_prefers_current_report_over_rebuild(
         task_id=new_id(),
         title="改写任务",
         description="已有报告",
-        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3, searchSources=["arXiv"]),
+        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3,
+                          searchSources=["arXiv"]),
     )
     report_path = tmp_path / f"{task.taskId}.md"
     report_path.write_text("# 旧报告\n\n保留核心结论。", encoding="utf-8")
@@ -295,8 +311,10 @@ def test_revise_report_and_record_prefers_current_report_over_rebuild(
         _ = kwargs
         return "# 重建版本"
 
-    monkeypatch.setattr(agent, "_regenerate_report_from_existing_artifacts", _fake_rebuild)
-    monkeypatch.setattr(agent, "_rewrite_report_with_llm", lambda **kwargs: "# 改写版本\n\n这是在旧稿基础上的改写。")
+    monkeypatch.setattr(
+        agent, "_regenerate_report_from_existing_artifacts", _fake_rebuild)
+    monkeypatch.setattr(agent, "_rewrite_report_with_llm",
+                        lambda **kwargs: "# 改写版本\n\n这是在旧稿基础上的改写。")
 
     revised_message = agent._revise_report_and_record(  # noqa: SLF001
         conversation_id=conversation_id,
@@ -323,7 +341,8 @@ async def test_revise_plan_restarts_research_when_instruction_requires_new_retri
         conversation_id=conversation_id,
         topic="补充资料并重跑",
         status=ConversationStatus.COMPLETED,
-        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3, searchSources=["arXiv"]),
+        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3,
+                          searchSources=["arXiv"]),
     )
     repo.add_plan_revision(
         conversation_id,
@@ -345,7 +364,8 @@ async def test_revise_plan_restarts_research_when_instruction_requires_new_retri
         task_id=new_id(),
         title="旧任务",
         description="旧任务描述",
-        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3, searchSources=["arXiv"]),
+        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3,
+                          searchSources=["arXiv"]),
     )
     report_path = tmp_path / f"{old_task.taskId}.md"
     report_path.write_text("# 旧报告\n\n旧内容。", encoding="utf-8")
@@ -389,7 +409,8 @@ def test_update_plan_allows_failed_conversation() -> None:
         conversation_id=conversation_id,
         topic="失败态继续编辑",
         status=ConversationStatus.FAILED,
-        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3, searchSources=["arXiv"]),
+        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3,
+                          searchSources=["arXiv"]),
     )
     repo.add_plan_revision(
         conversation_id,
@@ -414,7 +435,8 @@ def test_update_plan_allows_failed_conversation() -> None:
         ),
     )
     assert revision.version == 2
-    assert repo.get_summary(conversation_id).status == ConversationStatus.PLAN_READY
+    assert repo.get_summary(
+        conversation_id).status == ConversationStatus.PLAN_READY
 
 
 @pytest.mark.asyncio
@@ -427,7 +449,8 @@ async def test_start_research_allows_terminal_conversation(initial_status: Conve
         conversation_id=conversation_id,
         topic="终态重跑",
         status=initial_status,
-        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3, searchSources=["arXiv"]),
+        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3,
+                          searchSources=["arXiv"]),
     )
     repo.add_plan_revision(
         conversation_id,
@@ -499,7 +522,8 @@ async def test_on_task_event_groups_progress_by_phase() -> None:
     )
 
     messages = repo.get_detail(conversation_id).messages
-    groups = [message for message in messages if message.kind == MessageKind.PROGRESS_GROUP]
+    groups = [message for message in messages if message.kind ==
+              MessageKind.PROGRESS_GROUP]
     assert len(groups) == 1
     assert groups[0].collapsed is True
     assert groups[0].metadata["taskId"] == task_id
@@ -518,13 +542,15 @@ def test_delete_all_conversations_aborts_running_tasks() -> None:
         conversation_id=conversation_id,
         topic="批量删除测试",
         status=ConversationStatus.RUNNING,
-        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3, searchSources=["arXiv"]),
+        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3,
+                          searchSources=["arXiv"]),
     )
     task = task_repo.create_task(
         task_id=new_id(),
         title="运行中的任务",
         description="测试批量删除时中断任务",
-        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3, searchSources=["arXiv"]),
+        config=TaskConfig(maxDepth=2, maxNodes=8, priority=3,
+                          searchSources=["arXiv"]),
     )
     task_repo.update_status(task.taskId, TaskStatus.EXECUTING)
     repo.set_task_id(conversation_id, task.taskId)
@@ -534,3 +560,29 @@ def test_delete_all_conversations_aborts_running_tasks() -> None:
     assert deleted_count >= 1
     assert task.taskId in engine.aborted_task_ids
     assert repo.list_summaries() == []
+
+
+def test_progress_summary_handles_heartbeat_detail() -> None:
+    payload = {
+        "state": "SYNTHESIZING",
+        "phase": "HEARTBEAT",
+        "progress": 94,
+        "detail": "正在调用 AI 生成内容，请稍候。",
+    }
+    summary = ConversationAgent._progress_summary(payload)  # noqa: SLF001
+    assert "HEARTBEAT" in summary
+    assert "94%" in summary
+    assert "正在调用 AI 生成内容" in summary
+
+
+def test_progress_summary_handles_stall_warning_detail() -> None:
+    payload = {
+        "state": "EXECUTING",
+        "phase": "STALL_WARNING",
+        "progress": 53,
+        "detail": "当前阶段持续 30 秒未出现新进展。",
+    }
+    summary = ConversationAgent._progress_summary(payload)  # noqa: SLF001
+    assert "STALL_WARNING" in summary
+    assert "53%" in summary
+    assert "持续 30 秒" in summary

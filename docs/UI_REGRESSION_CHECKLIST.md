@@ -10,6 +10,14 @@
 - Save plan, start research, and ensure progress group can expand/collapse.
 - Download report after completion.
 
+## Realtime Progress Experience
+
+- During RUNNING status, verify live progress rail is always visible at the top of timeline.
+- Confirm stream status transitions are visible: connecting -> connected, and fallback when realtime channel fails.
+- Validate that latest event time updates continuously and progress summary changes without manual refresh.
+- Simulate long-running stage and confirm warning text appears (task still running, waiting advice visible).
+- Confirm historical progress events are shown as narrative list with phase, summary, and progress percent.
+
 ## Keyboard Accessibility
 
 - Use `Tab` to navigate top-level controls, sidebar menu buttons, composer, and editor actions.

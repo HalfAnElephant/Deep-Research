@@ -9,6 +9,7 @@ export interface ProgressEntry {
   phase: string;
   state: string;
   progress: number | null;
+  detail?: string;
 }
 
 /**
@@ -43,6 +44,7 @@ function toProgressEntries(message: ConversationMessage): ProgressEntry[] {
       phase: typeof value.phase === "string" ? value.phase : "UNKNOWN",
       state: typeof value.state === "string" ? value.state : "UNKNOWN",
       progress: typeof value.progress === "number" ? value.progress : null,
+      detail: typeof value.detail === "string" ? value.detail : undefined,
     });
   }
   return parsed;

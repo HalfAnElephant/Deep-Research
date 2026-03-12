@@ -84,3 +84,21 @@ def test_planner_sanitizes_yaml_polluted_heading() -> None:
     headings = [section.heading for section in writing_plan]
     assert all("```yaml" not in heading for heading in headings)
     assert any("历史演变与民俗本源" in heading for heading in headings)
+
+
+def test_planner_clamps_overlong_polluted_brief() -> None:
+    planner = MasterPlanner()
+    polluted = "max_depth: 2\n```markdown\n" + ("污染文本 " * 800) + "\n```\n收束说明"
+
+    writing_plan = planner.build_writing_plan(
+        title="地府货币体系",
+        description="关注历史演变与民俗本源",
+        research_sections=[
+            ("n1", f"历史演变与民俗本源\n\n{polluted}"),
+        ],
+    )
+
+    briefs = [section.brief for section in writing_plan]
+    assert briefs
+    assert all(len(brief) <= 2000 for brief in briefs)
+    assert all("```" not in brief for brief in briefs)

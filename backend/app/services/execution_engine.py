@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from dataclasses import dataclass, field
 import logging
 from typing import Awaitable, Callable
@@ -31,7 +32,21 @@ class TaskControlState:
     completed_nodes: list[str] = field(default_factory=list)
 
 
+@dataclass
+class RuntimeProgressState:
+    started_mono: float
+    last_progress_mono: float
+    state: str = "READY"
+    phase: str = "INITIALIZING"
+    progress: int = 0
+    detail: str = ""
+    stall_notified: bool = False
+
+
 class ExecutionEngine:
+    HEARTBEAT_INTERVAL_SECONDS = 6
+    STALL_WARNING_SECONDS = 25
+
     def __init__(
         self,
         repository: TaskRepository,
@@ -69,11 +84,42 @@ class ExecutionEngine:
         self.checking_agent = checking_agent
         self.event_listener = event_listener
         self._control: dict[str, TaskControlState] = {}
+        self._runtime_progress: dict[str, RuntimeProgressState] = {}
 
     def set_event_listener(self, listener: Callable[[str, str, dict], Awaitable[None]] | None) -> None:
         self.event_listener = listener
 
     async def _emit_event(self, task_id: str, event: str, payload: dict) -> None:
+        if event == "TASK_PROGRESS":
+            runtime = self._runtime_progress.get(task_id)
+            if runtime is not None:
+                now_mono = asyncio.get_running_loop().time()
+                raw_progress = payload.get("progress")
+                if isinstance(raw_progress, (int, float)):
+                    runtime.progress = max(0, min(100, int(raw_progress)))
+                raw_state = payload.get("state")
+                if isinstance(raw_state, str) and raw_state.strip():
+                    runtime.state = raw_state.strip()
+                raw_phase = payload.get("phase")
+                if isinstance(raw_phase, str) and raw_phase.strip():
+                    runtime.phase = raw_phase.strip()
+                detail = payload.get("detail")
+                if isinstance(detail, str) and detail.strip():
+                    runtime.detail = detail.strip()
+                else:
+                    node_title = payload.get("currentNodeTitle")
+                    section_title = payload.get("currentSectionTitle")
+                    if isinstance(section_title, str) and section_title.strip():
+                        runtime.detail = f"正在写作：{section_title.strip()}"
+                    elif isinstance(node_title, str) and node_title.strip():
+                        runtime.detail = f"正在处理：{node_title.strip()}"
+                runtime.last_progress_mono = now_mono
+                runtime.stall_notified = False
+                payload.setdefault("elapsedMs", int(
+                    (now_mono - runtime.started_mono) * 1000))
+                payload.setdefault("idleMs", 0)
+                payload.setdefault("heartbeat", False)
+
         await self.hub.emit(task_id, event, payload)
         if self.event_listener is not None:
             try:
@@ -81,6 +127,52 @@ class ExecutionEngine:
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "Event listener failed for task=%s event=%s: %s", task_id, event, exc)
+
+    async def _heartbeat_loop(self, task_id: str) -> None:
+        while True:
+            await asyncio.sleep(self.HEARTBEAT_INTERVAL_SECONDS)
+            runtime = self._runtime_progress.get(task_id)
+            if runtime is None:
+                return
+            now_mono = asyncio.get_running_loop().time()
+            idle_seconds = now_mono - runtime.last_progress_mono
+            elapsed_ms = int((now_mono - runtime.started_mono) * 1000)
+            idle_ms = int(idle_seconds * 1000)
+
+            await self._emit_event(
+                task_id,
+                "TASK_HEARTBEAT",
+                {
+                    "taskId": task_id,
+                    "progress": runtime.progress,
+                    "state": runtime.state,
+                    "phase": "HEARTBEAT",
+                    "detail": runtime.detail or "任务执行中，正在等待阶段更新。",
+                    "elapsedMs": elapsed_ms,
+                    "idleMs": idle_ms,
+                    "heartbeat": True,
+                },
+            )
+
+            if idle_seconds >= self.STALL_WARNING_SECONDS and not runtime.stall_notified:
+                runtime.stall_notified = True
+                await self._emit_event(
+                    task_id,
+                    "STALL_WARNING",
+                    {
+                        "taskId": task_id,
+                        "progress": runtime.progress,
+                        "state": runtime.state,
+                        "phase": "STALL_WARNING",
+                        "detail": (
+                            f"当前阶段持续 {int(idle_seconds)} 秒未出现新进展，"
+                            "系统仍在运行，建议继续等待或稍后重试。"
+                        ),
+                        "elapsedMs": elapsed_ms,
+                        "idleMs": idle_ms,
+                        "stall": True,
+                    },
+                )
 
     async def start(self, task_id: str) -> None:
         task = self.repository.get_task(task_id)
@@ -117,6 +209,16 @@ class ExecutionEngine:
         await self.start(task_id)
 
     async def _run_task(self, task_id: str, current_status: TaskStatus) -> None:
+        now_mono = asyncio.get_running_loop().time()
+        self._runtime_progress[task_id] = RuntimeProgressState(
+            started_mono=now_mono,
+            last_progress_mono=now_mono,
+            state=current_status.value,
+            phase="INITIALIZING",
+            progress=0,
+            detail="正在初始化任务执行上下文。",
+        )
+        heartbeat_task = asyncio.create_task(self._heartbeat_loop(task_id))
         try:
             await self._emit_event(task_id, "TASK_STARTED", {"taskId": task_id, "status": current_status.value})
             task = self.repository.get_task(task_id)
@@ -474,6 +576,11 @@ class ExecutionEngine:
             self.repository.update_status(
                 task_id, TaskStatus.FAILED, last_error=str(exc))
             await self._emit_event(task_id, "ERROR", {"taskId": task_id, "error": f"Unhandled error: {exc}"})
+        finally:
+            heartbeat_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await heartbeat_task
+            self._runtime_progress.pop(task_id, None)
 
     async def _emit_suppressed_writer_note(self, *, task_id: str, topic: str, suppressed_segments: list[str]) -> None:
         unique_segments = _dedupe_nonempty_strings(suppressed_segments)

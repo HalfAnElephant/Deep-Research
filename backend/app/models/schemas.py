@@ -60,6 +60,7 @@ class TaskConfig(BaseModel):
         default_factory=lambda: ["Web Search", "arXiv", "Semantic Scholar"]
     )
     priority: int = Field(default=3, ge=1, le=5)
+    targetWordCount: int = Field(default=5000, ge=1000, le=50000)
 
 
 class CreateTaskRequest(BaseModel):

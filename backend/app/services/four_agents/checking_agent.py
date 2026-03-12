@@ -101,7 +101,8 @@ class CheckingAgent(BaseAgent):
     # 乱码和异常字符检测
     GARBAGE_UNICODE_PATTERNS = [
         # 检测大量连续 Unicode 转义
-        (r'\\u[0-9a-fA-F]{4}.*?\\u[0-9a-fA-F]{4}.*?\\u[0-9a-fA-F]{4}', "Unicode 转义序列堆积", "critical"),
+        (r'\\u[0-9a-fA-F]{4}.*?\\u[0-9a-fA-F]{4}.*?\\u[0-9a-fA-F]{4}',
+         "Unicode 转义序列堆积", "critical"),
         # 检测印度语、阿拉伯语等非中文内容在中文文章中
         (r'[\u0900-\u097F]{3,}', "梵文/印地文字符", "critical"),
         (r'[\u0A00-\u0A7F]{3,}', "古木基文字符", "critical"),
@@ -114,6 +115,8 @@ class CheckingAgent(BaseAgent):
     LONGCAT_API_URL = "https://api.longcat.chat/openai/v1/chat/completions"
     LONGCAT_MODEL = "LongCat-Flash-Lite"
     LONGCAT_API_KEY = "ak_2Ks0iy2p02oX0V05UN3Mk7YO38R8"
+    REFERENCE_HEADING_PATTERN = re.compile(
+        r"^##\s+(参考文献|References)\s*$", re.MULTILINE | re.IGNORECASE)
 
     def __init__(self, on_progress=None) -> None:
         super().__init__(on_progress)
@@ -246,7 +249,8 @@ class CheckingAgent(BaseAgent):
 
         # 检测中英文混杂
         for pattern, description, severity in self.MIXED_LANGUAGE_PATTERNS:
-            matches = re.finditer(pattern, content, re.IGNORECASE | re.MULTILINE)
+            matches = re.finditer(
+                pattern, content, re.IGNORECASE | re.MULTILINE)
             for match in matches:
                 issues.append(CheckIssue(
                     severity=severity,
@@ -395,6 +399,7 @@ class CheckingAgent(BaseAgent):
     def _check_structure(self, content: str) -> list[CheckIssue]:
         """检查文章结构。"""
         issues = []
+        body_content = self._strip_reference_section(content)
 
         # 检查标题
         if not content.strip().startswith("# "):
@@ -405,7 +410,7 @@ class CheckingAgent(BaseAgent):
             ))
 
         # 检查章节 - 更智能的章节检测
-        sections = re.findall(r"^##\s+.+$", content, re.MULTILINE)
+        sections = re.findall(r"^##\s+.+$", body_content, re.MULTILINE)
         if len(sections) < 2:
             issues.append(CheckIssue(
                 severity="major",
@@ -432,7 +437,7 @@ class CheckingAgent(BaseAgent):
             ))
 
         # 检查字数
-        word_count = len(content)
+        word_count = len(body_content.strip())
         if word_count < 1000:
             issues.append(CheckIssue(
                 severity="major",
@@ -441,11 +446,13 @@ class CheckingAgent(BaseAgent):
             ))
 
         # 检查章节内容深度
-        section_contents = re.split(r"^##\s+.+$", content, flags=re.MULTILINE)[1:]
+        section_contents = re.split(
+            r"^##\s+.+$", body_content, flags=re.MULTILINE)[1:]
         shallow_sections = []
         for idx, section_content in enumerate(section_contents):
             if len(section_content.strip()) < 100:
-                shallow_sections.append(sections[idx] if idx < len(sections) else f"章节 {idx+1}")
+                shallow_sections.append(
+                    sections[idx] if idx < len(sections) else f"章节 {idx+1}")
 
         if shallow_sections:
             issues.append(CheckIssue(
@@ -455,6 +462,13 @@ class CheckingAgent(BaseAgent):
             ))
 
         return issues
+
+    @classmethod
+    def _strip_reference_section(cls, content: str) -> str:
+        match = cls.REFERENCE_HEADING_PATTERN.search(content)
+        if not match:
+            return content
+        return content[:match.start()].rstrip()
 
     def _check_citations(self, content: str) -> list[CheckIssue]:
         """检查引用格式。"""
@@ -483,7 +497,8 @@ class CheckingAgent(BaseAgent):
 
         # 检查引用密度 - 引用应该均匀分布在文章中
         paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
-        cited_paragraphs = sum(1 for p in paragraphs if re.search(r"\[\d+\]", p))
+        cited_paragraphs = sum(
+            1 for p in paragraphs if re.search(r"\[\d+\]", p))
         if len(paragraphs) > 3 and cited_paragraphs / len(paragraphs) < 0.3:
             issues.append(CheckIssue(
                 severity="minor",

@@ -33,7 +33,8 @@ class ConversationRepository:
                   conversation_id, topic, status, config_json, task_id, created_at, updated_at
                 ) VALUES(?, ?, ?, ?, ?, ?, ?)
                 """,
-                (conversation_id, topic, status.value, config.model_dump_json(), None, ts, ts),
+                (conversation_id, topic, status.value,
+                 config.model_dump_json(), None, ts, ts),
             )
             conn.commit()
         return self.get_summary(conversation_id)
@@ -157,7 +158,8 @@ class ConversationRepository:
 
     def delete_all_conversations(self) -> int:
         with get_connection() as conn:
-            row = conn.execute("SELECT COUNT(*) AS count FROM conversations").fetchone()
+            row = conn.execute(
+                "SELECT COUNT(*) AS count FROM conversations").fetchone()
             deleted_count = int(row["count"]) if row else 0
             conn.execute("DELETE FROM conversation_messages")
             conn.execute("DELETE FROM plan_revisions")
@@ -376,6 +378,7 @@ class ConversationRepository:
                         "state": state,
                         "phase": phase,
                         "progress": progress,
+                        "detail": str(payload.get("detail") or "").strip() if isinstance(payload, dict) else "",
                         "raw": payload,
                     }
                 )
@@ -391,7 +394,8 @@ class ConversationRepository:
                     SET content = ?, metadata_json = ?
                     WHERE message_id = ?
                     """,
-                    (summary, json.dumps(metadata, ensure_ascii=False), row["message_id"]),
+                    (summary, json.dumps(metadata,
+                     ensure_ascii=False), row["message_id"]),
                 )
                 conn.execute(
                     """
@@ -422,6 +426,7 @@ class ConversationRepository:
                         "state": state,
                         "phase": phase,
                         "progress": progress,
+                        "detail": str(payload.get("detail") or "").strip() if isinstance(payload, dict) else "",
                         "raw": payload,
                     }
                 ],

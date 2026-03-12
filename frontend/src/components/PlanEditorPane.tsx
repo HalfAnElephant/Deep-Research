@@ -1,7 +1,7 @@
-import { memo, useState } from "react";
+import { memo, useState, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import type { ConversationStatus } from "../types";
-import { PlanConfigForm } from "./PlanConfigForm";
+import { PlanConfigForm, parseYamlFrontmatter, serializeYamlFrontmatter } from "./PlanConfigForm";
 
 interface PlanEditorPaneProps {
   markdown: string;
@@ -67,9 +67,13 @@ function PlanEditorPaneBase(props: PlanEditorPaneProps) {
   const downloadEnabled = status === "COMPLETED";
   const saveDisabled = saving || !dirty || !markdown.trim();
 
-  // Character and line count for display
-  const lineCount = markdown.split("\n").length;
-  const charCount = markdown.length;
+  // Character and line count for display (based on display content only)
+  const displayContent = useMemo(() => {
+    const { content } = parseYamlFrontmatter(markdown);
+    return content;
+  }, [markdown]);
+  const lineCount = displayContent.split("\n").length;
+  const charCount = displayContent.length;
 
   // State for markdown section collapse
   const [markdownCollapsed, setMarkdownCollapsed] = useState(false);
@@ -126,7 +130,7 @@ function PlanEditorPaneBase(props: PlanEditorPaneProps) {
         <PlanConfigForm
           markdown={markdown}
           onMarkdownChange={onChange}
-          defaultExpanded={false}
+          defaultExpanded={true}
           disabled={saving || starting}
         />
         <div className="editor-action-buttons">
@@ -208,8 +212,13 @@ function PlanEditorPaneBase(props: PlanEditorPaneProps) {
               </div>
             ) : (
               <textarea
-                value={markdown}
-                onChange={(event) => onChange(event.target.value)}
+                value={displayContent}
+                onChange={(event) => {
+                  // Reassemble full markdown with frontmatter
+                  const { config } = parseYamlFrontmatter(markdown);
+                  const newMarkdown = serializeYamlFrontmatter(config, event.target.value);
+                  onChange(newMarkdown);
+                }}
                 placeholder="在此输入研究方案..."
                 aria-label="研究方案编辑"
                 spellCheck={false}

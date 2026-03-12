@@ -120,6 +120,60 @@ def test_writer_strips_meta_commentary_and_yaml_heading(tmp_path) -> None:
     assert suppressed
 
 
+def test_writer_strips_front_matter_and_markdown_wrapper_on_export(tmp_path) -> None:
+    writer = WriterService(output_dir=str(tmp_path))
+    evidence = Evidence(
+        id="e1",
+        taskId="t1",
+        nodeId="n1",
+        sourceType=SourceType.PAPER,
+        url="https://example.org/e1",
+        content="content",
+        metadata=EvidenceMetadata(
+            authors=["Alice"],
+            publishDate="2024-01-01T00:00:00Z",
+            title="Paper A",
+            abstract="",
+            impactFactor=2.0,
+            isPeerReviewed=True,
+            relevanceScore=0.8,
+            citationCount=1,
+        ),
+        score=0.8,
+        extractedData=ExtractedData(),
+    )
+
+    writer.write_report(
+        task_id="t1",
+        task_title="Demo",
+        task_description="请输出研究报告",
+        sections=[("n1", "section content")],
+        evidences=[evidence],
+        report_body=(
+            "```markdown\n"
+            "---\n"
+            "title: 计划标题\n"
+            "topic: 研究主题\n"
+            "max_depth: 3\n"
+            "max_nodes: 8\n"
+            "priority: 3\n"
+            "search_sources: [arXiv]\n"
+            "target_word_count: 5000\n"
+            "---\n\n"
+            "## 引言\n\n"
+            "这是正文内容 [evidence:e1]。\n"
+            "```"
+        ),
+    )
+
+    report = (tmp_path / "t1_article.md").read_text(encoding="utf-8")
+    assert "max_nodes: 8" not in report
+    assert "title: 计划标题" not in report
+    assert "```markdown" not in report
+    assert "## 引言" in report
+    assert "这是正文内容 [1]。" in report
+
+
 def test_generate_draft_collects_suppressed_segments(tmp_path, monkeypatch) -> None:
     writer = WriterService(output_dir=str(tmp_path))
     monkeypatch.setattr(settings, "use_mock_sources", False)

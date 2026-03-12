@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  connectProgressWs,
   createConversation,
   deleteAllConversations,
   deleteConversation,
@@ -19,12 +20,24 @@ import { Dialog } from "./components/Dialog";
 import { ExportModal } from "./components/ExportModal";
 import { PlanEditorPane } from "./components/PlanEditorPane";
 import { AgentStatusPanel } from "./components/AgentStatusPanel";
-import type { ConversationDetail, ConversationMessage, ConversationStatus, ConversationSummary, AgentState, AgentType } from "./types";
+import type {
+  ConversationDetail,
+  ConversationMessage,
+  ConversationStatus,
+  ConversationSummary,
+  AgentState,
+  AgentType,
+  ProgressEvent,
+} from "./types";
 
 const FIRST_MESSAGE_LIMIT = 500;
 const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_CONVERSATION_REFRESH_MS ?? "2500");
 const LEFT_SIDEBAR_KEY = "dr:left-sidebar-visible";
 const RIGHT_SIDEBAR_KEY = "dr:right-sidebar-visible";
+const WS_BASE_BACKOFF_MS = 1200;
+const WS_MAX_RETRY = 4;
+
+type StreamStatus = "idle" | "connecting" | "connected" | "reconnecting" | "fallback";
 
 const DEFAULT_CONFIG = {
   maxDepth: 2,
@@ -57,6 +70,81 @@ function readStoredFlag(key: string, fallback: boolean): boolean {
   if (raw === "1") return true;
   if (raw === "0") return false;
   return fallback;
+}
+
+function isProgressEventKind(event: string): boolean {
+  return event === "TASK_PROGRESS" || event === "TASK_HEARTBEAT" || event === "STALL_WARNING";
+}
+
+function summarizeRealtimeEvent(data: Record<string, unknown>, event: string): string {
+  const state = typeof data.state === "string" ? data.state : "RUNNING";
+  const phase = typeof data.phase === "string" ? data.phase : event;
+  const detail = typeof data.detail === "string" ? data.detail.trim() : "";
+  const nodeTitle = typeof data.currentNodeTitle === "string" ? data.currentNodeTitle.trim() : "";
+  const sectionTitle = typeof data.currentSectionTitle === "string" ? data.currentSectionTitle.trim() : "";
+  const rawProgress = data.progress;
+  const progressText = typeof rawProgress === "number" ? `${Math.max(0, Math.min(100, Math.round(rawProgress)))}%` : "--";
+  if (event === "STALL_WARNING" && detail) {
+    return `[${state}/STALL_WARNING] ${progressText} ${detail}`;
+  }
+  if (detail) {
+    return `[${state}/${phase}] ${progressText} ${detail}`;
+  }
+  if (sectionTitle) {
+    return `[${state}/${phase}] ${progressText} 正在写作：${sectionTitle}`;
+  }
+  if (nodeTitle) {
+    return `[${state}/${phase}] ${progressText} 节点：${nodeTitle}`;
+  }
+  return `[${state}/${phase}] ${progressText}`;
+}
+
+function deriveAgentStatesFromMessages(messages: ConversationMessage[]): AgentState[] {
+  const base: AgentState[] = [
+    { agentType: "IDEATION", status: "IDLE", progress: 0, currentActivity: "等待任务开始" },
+    { agentType: "PLANNING", status: "IDLE", progress: 0, currentActivity: "等待任务开始" },
+    { agentType: "WRITING", status: "IDLE", progress: 0, currentActivity: "等待任务开始" },
+    { agentType: "CHECKING", status: "IDLE", progress: 0, currentActivity: "等待任务开始" },
+  ];
+  const latestProgress = [...messages]
+    .reverse()
+    .find((message) => message.kind === "PROGRESS_GROUP");
+  if (!latestProgress) return base;
+
+  const entries = Array.isArray(latestProgress.metadata.entries) ? latestProgress.metadata.entries : [];
+  const latest = entries.length > 0 ? entries[entries.length - 1] as Record<string, unknown> : latestProgress.metadata;
+  const phase = typeof latest.phase === "string" ? latest.phase.toUpperCase() : "";
+  const state = typeof latest.state === "string" ? latest.state.toUpperCase() : "RUNNING";
+  const detail = typeof latest.detail === "string" ? latest.detail : latestProgress.content;
+  const progress = typeof latest.progress === "number" ? Math.max(0, Math.min(100, Math.round(latest.progress))) : 0;
+
+  const runningAgent: AgentType =
+    phase.includes("WRITE") || phase.includes("SYNTH") || phase.includes("FINAL")
+      ? "WRITING"
+      : phase.includes("REVIEW") || phase.includes("CHECK")
+        ? "CHECKING"
+        : phase.includes("PLAN") || phase.includes("BUILD")
+          ? "PLANNING"
+          : "IDEATION";
+
+  const updated = base.map((agent) => {
+    if (agent.agentType === runningAgent) {
+      return {
+        ...agent,
+        status: state === "FAILED" ? "FAILED" : state === "COMPLETED" ? "COMPLETED" : "RUNNING",
+        progress,
+        currentActivity: detail || "处理中",
+      };
+    }
+    if (agent.agentType === "IDEATION" && runningAgent !== "IDEATION") {
+      return { ...agent, status: "COMPLETED", progress: 100, currentActivity: "阶段完成" };
+    }
+    if (agent.agentType === "PLANNING" && (runningAgent === "WRITING" || runningAgent === "CHECKING")) {
+      return { ...agent, status: "COMPLETED", progress: 100, currentActivity: "阶段完成" };
+    }
+    return agent;
+  });
+  return updated;
 }
 
 interface PendingAssistantBubble {
@@ -110,8 +198,14 @@ export function App() {
   const [mobileEditorOpen, setMobileEditorOpen] = useState(false);
   const [leftSidebarVisible, setLeftSidebarVisible] = useState(() => readStoredFlag(LEFT_SIDEBAR_KEY, true));
   const [rightSidebarVisible, setRightSidebarVisible] = useState(() => readStoredFlag(RIGHT_SIDEBAR_KEY, false));
+  const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
+  const [lastProgressEventAt, setLastProgressEventAt] = useState<string | null>(null);
+  const [streamClock, setStreamClock] = useState(() => Date.now());
 
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const progressWsRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const reconnectAttemptRef = useRef(0);
 
   const activeStatus = activeDetail?.status ?? null;
   const statusLabel = draftMode ? "等待输入研究主题" : activeStatus ? STATUS_LABEL[activeStatus] : "未选择会话";
@@ -134,43 +228,22 @@ export function App() {
     return pendingAssistantBubble.conversationId === activeConversationId ? pendingAssistantBubble.content : null;
   }, [pendingAssistantBubble, draftMode, activeConversationId]);
 
-  useEffect(() => {
-    void refreshConversations({ autoSelectFirst: true });
-  }, []);
+  const effectiveAgentStates = useMemo(() => {
+    if (!activeDetail) return [] as AgentState[];
+    if (activeDetail.agentStates && activeDetail.agentStates.length > 0) {
+      return activeDetail.agentStates;
+    }
+    return deriveAgentStatesFromMessages(activeDetail.messages);
+  }, [activeDetail]);
 
-  useEffect(() => {
-    if (!activeConversationId) return;
-    void refreshConversationDetail(activeConversationId, { syncDraft: true });
-  }, [activeConversationId]);
+  const idleSeconds = useMemo(() => {
+    if (!lastProgressEventAt) return 0;
+    const delta = streamClock - Date.parse(lastProgressEventAt);
+    if (!Number.isFinite(delta) || delta < 0) return 0;
+    return Math.floor(delta / 1000);
+  }, [lastProgressEventAt, streamClock]);
 
-  useEffect(() => {
-    if (!activeConversationId || (activeStatus !== "RUNNING" && activeStatus !== "DRAFTING_PLAN")) return;
-    const timer = window.setInterval(() => {
-      void refreshConversationDetail(activeConversationId, { syncDraft: false });
-      void refreshConversations();
-    }, REFRESH_INTERVAL_MS);
-    return () => window.clearInterval(timer);
-  }, [activeConversationId, activeStatus]);
-
-  useEffect(() => {
-    window.localStorage.setItem(LEFT_SIDEBAR_KEY, leftSidebarVisible ? "1" : "0");
-  }, [leftSidebarVisible]);
-
-  useEffect(() => {
-    window.localStorage.setItem(RIGHT_SIDEBAR_KEY, rightSidebarVisible ? "1" : "0");
-  }, [rightSidebarVisible]);
-
-  useEffect(() => {
-    const drawerOpen = mobileSidebarOpen || mobileEditorOpen;
-    if (!drawerOpen) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [mobileSidebarOpen, mobileEditorOpen]);
-
-  async function refreshConversations(options?: { autoSelectFirst?: boolean }) {
+  const refreshConversations = useCallback(async (options?: { autoSelectFirst?: boolean }) => {
     setRefreshingList(true);
     try {
       const items = await listConversations();
@@ -188,12 +261,12 @@ export function App() {
     } finally {
       setRefreshingList(false);
     }
-  }
+  }, [activeConversationId, draftMode]);
 
-  async function refreshConversationDetail(
+  const refreshConversationDetail = useCallback(async (
     conversationId: string,
     options?: { syncDraft?: boolean; forceDraft?: boolean }
-  ) {
+  ) => {
     try {
       const detail = await getConversation(conversationId);
       setActiveDetail(detail);
@@ -228,7 +301,202 @@ export function App() {
     } catch (err) {
       setError(toErrorText(err));
     }
-  }
+  }, [draftDirty, planVersion]);
+
+  useEffect(() => {
+    if (activeStatus !== "RUNNING") return;
+    const timer = window.setInterval(() => {
+      setStreamClock(Date.now());
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [activeStatus]);
+
+  useEffect(() => {
+    void refreshConversations({ autoSelectFirst: true });
+  }, [refreshConversations]);
+
+  useEffect(() => {
+    if (!activeConversationId) return;
+    void refreshConversationDetail(activeConversationId, { syncDraft: true });
+  }, [activeConversationId, refreshConversationDetail]);
+
+  useEffect(() => {
+    if (!activeConversationId || (activeStatus !== "RUNNING" && activeStatus !== "DRAFTING_PLAN")) return;
+    const shouldPollRunning = activeStatus === "RUNNING" && streamStatus === "fallback";
+    const shouldPollDrafting = activeStatus === "DRAFTING_PLAN";
+    if (!shouldPollRunning && !shouldPollDrafting) return;
+    const timer = window.setInterval(() => {
+      void refreshConversationDetail(activeConversationId, { syncDraft: false });
+      void refreshConversations();
+    }, REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [activeConversationId, activeStatus, streamStatus, refreshConversationDetail, refreshConversations]);
+
+  useEffect(() => {
+    if (!activeConversationId || !activeDetail?.taskId || activeStatus !== "RUNNING") {
+      setStreamStatus((prev) => (prev === "idle" ? prev : "idle"));
+      if (progressWsRef.current) {
+        progressWsRef.current.close();
+        progressWsRef.current = null;
+      }
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      reconnectAttemptRef.current = 0;
+      return;
+    }
+
+    const taskId = activeDetail.taskId;
+    let disposed = false;
+
+    const closeCurrentSocket = () => {
+      if (progressWsRef.current) {
+        progressWsRef.current.close();
+        progressWsRef.current = null;
+      }
+    };
+
+    const applyRealtimeProgress = (eventName: string, payload: Record<string, unknown>, timestamp: string) => {
+      const summary = summarizeRealtimeEvent(payload, eventName);
+      const phase = typeof payload.phase === "string" ? payload.phase : eventName;
+      const state = typeof payload.state === "string" ? payload.state : "RUNNING";
+      const progress = typeof payload.progress === "number" ? Math.max(0, Math.min(100, Math.round(payload.progress))) : null;
+      const detail = typeof payload.detail === "string" ? payload.detail : "";
+      const message: ConversationMessage = {
+        messageId: `rt-${eventName.toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        conversationId: activeConversationId,
+        role: "system",
+        kind: "PROGRESS_GROUP",
+        content: summary,
+        collapsed: true,
+        createdAt: timestamp,
+        metadata: {
+          taskId,
+          phase,
+          state,
+          latestProgress: progress,
+          latestSummary: summary,
+          entries: [
+            {
+              summary,
+              phase,
+              state,
+              progress,
+              detail,
+              raw: payload,
+            },
+          ],
+        },
+      };
+      setActiveDetail((prev) => {
+        if (!prev || prev.conversationId !== activeConversationId) return prev;
+        const previousMessages = prev.messages;
+        const dedupeHit = previousMessages.length > 0 ? previousMessages[previousMessages.length - 1] : null;
+        if (
+          dedupeHit &&
+          dedupeHit.kind === "PROGRESS_GROUP" &&
+          dedupeHit.content === message.content &&
+          dedupeHit.metadata.phase === message.metadata.phase
+        ) {
+          return prev;
+        }
+        const nextMessages = [...previousMessages, message].slice(-320);
+        return {
+          ...prev,
+          messages: nextMessages,
+          updatedAt: timestamp,
+        };
+      });
+      if (eventName === "STALL_WARNING") {
+        setPendingAssistantBubble({
+          conversationId: activeConversationId,
+          content: detail || "当前阶段耗时较长，系统仍在处理中。",
+        });
+      }
+    };
+
+    const scheduleReconnect = () => {
+      if (disposed) return;
+      reconnectAttemptRef.current += 1;
+      if (reconnectAttemptRef.current > WS_MAX_RETRY) {
+        setStreamStatus("fallback");
+        return;
+      }
+      setStreamStatus("reconnecting");
+      const delay = WS_BASE_BACKOFF_MS * reconnectAttemptRef.current;
+      reconnectTimerRef.current = window.setTimeout(() => {
+        reconnectTimerRef.current = null;
+        connect();
+      }, delay);
+    };
+
+    const connect = () => {
+      if (disposed) return;
+      closeCurrentSocket();
+      setStreamStatus(reconnectAttemptRef.current > 0 ? "reconnecting" : "connecting");
+      const socket = connectProgressWs(taskId, {
+        onMessage: (messageEvent) => {
+          let parsed: ProgressEvent | null = null;
+          try {
+            parsed = JSON.parse(messageEvent.data) as ProgressEvent;
+          } catch {
+            return;
+          }
+          if (!parsed || !parsed.event || typeof parsed.data !== "object" || parsed.data === null) return;
+          setStreamStatus("connected");
+          reconnectAttemptRef.current = 0;
+          setLastProgressEventAt(parsed.timestamp ?? new Date().toISOString());
+          const payload = parsed.data as Record<string, unknown>;
+          if (isProgressEventKind(parsed.event)) {
+            applyRealtimeProgress(parsed.event, payload, parsed.timestamp ?? new Date().toISOString());
+          }
+          if (parsed.event === "TASK_COMPLETED" || parsed.event === "ERROR") {
+            setPendingAssistantBubble(null);
+            void refreshConversationDetail(activeConversationId, { syncDraft: false });
+            void refreshConversations();
+          }
+        },
+        onError: () => {
+          setStreamStatus("reconnecting");
+        },
+        onClose: () => {
+          if (disposed) return;
+          scheduleReconnect();
+        },
+      });
+      progressWsRef.current = socket;
+    };
+
+    connect();
+
+    return () => {
+      disposed = true;
+      closeCurrentSocket();
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+    };
+  }, [activeConversationId, activeDetail?.taskId, activeStatus, refreshConversationDetail, refreshConversations]);
+
+  useEffect(() => {
+    window.localStorage.setItem(LEFT_SIDEBAR_KEY, leftSidebarVisible ? "1" : "0");
+  }, [leftSidebarVisible]);
+
+  useEffect(() => {
+    window.localStorage.setItem(RIGHT_SIDEBAR_KEY, rightSidebarVisible ? "1" : "0");
+  }, [rightSidebarVisible]);
+
+  useEffect(() => {
+    const drawerOpen = mobileSidebarOpen || mobileEditorOpen;
+    if (!drawerOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileSidebarOpen, mobileEditorOpen]);
 
   async function recoverDraftConversation(
     topic: string,
@@ -692,10 +960,10 @@ export function App() {
           </div>
         </header>
 
-        {activeStatus === "RUNNING" && activeDetail?.agentStates && activeDetail.agentStates.length > 0 && (
+        {activeStatus === "RUNNING" && effectiveAgentStates.length > 0 && (
           <AgentStatusPanel
-            agents={activeDetail.agentStates}
-            currentPhase={getCurrentAgentPhase(activeDetail.agentStates)}
+            agents={effectiveAgentStates}
+            currentPhase={getCurrentAgentPhase(effectiveAgentStates)}
           />
         )}
 
@@ -713,6 +981,9 @@ export function App() {
           downloadingReport={downloading}
           onDownloadReport={onDownloadReport}
           onExportReport={() => setShowExportModal(true)}
+          streamStatus={streamStatus}
+          lastProgressEventAt={lastProgressEventAt}
+          idleSeconds={idleSeconds}
         />
 
         <Composer

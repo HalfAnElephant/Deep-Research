@@ -234,7 +234,28 @@ class MasterPlanner:
         ) if parts and parts[0].strip() else ""
         heading = MasterPlanner._sanitize_section_heading(heading)
         detail = parts[1].strip() if len(parts) > 1 else raw_text.strip()
+        detail = MasterPlanner._sanitize_section_brief(detail)
         return heading, detail
+
+    @staticmethod
+    def _sanitize_section_brief(raw_brief: str, max_length: int = 2000) -> str:
+        brief = raw_brief.replace("\r\n", "\n").replace("\r", "\n").strip()
+        if not brief:
+            return ""
+
+        # Remove fenced code blocks that often leak from malformed LLM output.
+        brief = re.sub(r"```[\s\S]*?```", " ", brief)
+        brief = brief.replace("```", " ")
+        brief = re.sub(r"[ \t]+", " ", brief)
+        brief = re.sub(r"\n{3,}", "\n\n", brief).strip()
+
+        if len(brief) <= max_length:
+            return brief
+
+        truncated = brief[:max_length].rstrip()
+        if len(truncated) >= 3:
+            truncated = truncated[:-3].rstrip() + "..."
+        return truncated
 
     @staticmethod
     def _normalize_report_label(raw_label: str, title: str) -> str:
