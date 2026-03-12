@@ -12,6 +12,7 @@ interface PlanEditorPaneProps {
   status: ConversationStatus | null;
   onRequestCloseMobile: () => void;
   onChange: (value: string) => void;
+  onReset: () => void;
   onSave: () => void;
   onStart: () => void;
   onDownload: () => void;
@@ -57,6 +58,7 @@ function PlanEditorPaneBase(props: PlanEditorPaneProps) {
     status,
     onRequestCloseMobile,
     onChange,
+    onReset,
     onSave,
     onStart,
     onDownload
@@ -65,12 +67,18 @@ function PlanEditorPaneBase(props: PlanEditorPaneProps) {
   const startDisabled = !canStart(status) || starting || saving || !markdown.trim();
   const downloadEnabled = status === "COMPLETED";
   const saveDisabled = saving || !dirty || !markdown.trim();
+  const parsedMarkdown = parseYamlFrontmatter(markdown);
+  const planBodyMarkdown = parsedMarkdown.content;
 
   const handleConfigMarkdownChange = (nextMarkdown: string) => {
-    // Keep only structured YAML config and drop free-form markdown body.
     const { config } = parseYamlFrontmatter(nextMarkdown);
-    const normalizedMarkdown = serializeYamlFrontmatter(config, "");
-    onChange(normalizedMarkdown);
+    const mergedMarkdown = serializeYamlFrontmatter(config, planBodyMarkdown);
+    onChange(mergedMarkdown);
+  };
+
+  const handlePlanBodyChange = (nextBody: string) => {
+    const mergedMarkdown = serializeYamlFrontmatter(parsedMarkdown.config, nextBody);
+    onChange(mergedMarkdown);
   };
 
   return (
@@ -94,13 +102,16 @@ function PlanEditorPaneBase(props: PlanEditorPaneProps) {
         </div>
       </header>
       <div className="editor-actions" role="toolbar" aria-label="编辑器操作">
-        <PlanConfigForm
-          markdown={markdown}
-          onMarkdownChange={handleConfigMarkdownChange}
-          defaultExpanded={true}
-          disabled={saving || starting}
-        />
         <div className="editor-action-buttons">
+          <button
+            className="ghost"
+            type="button"
+            onClick={onReset}
+            disabled={saving || starting || !dirty}
+            aria-label={dirty ? "重置到已保存草稿" : "没有可重置的改动"}
+          >
+            重置
+          </button>
           <button
             className="primary"
             type="button"
@@ -138,8 +149,24 @@ function PlanEditorPaneBase(props: PlanEditorPaneProps) {
             {downloading ? "下载中..." : "下载报告"}
           </button>
         </div>
+        <PlanConfigForm
+          markdown={markdown}
+          onMarkdownChange={handleConfigMarkdownChange}
+          defaultExpanded={true}
+          disabled={saving || starting}
+          showResetButton={false}
+        />
       </div>
-      <div className="editor-body" />
+      <div className="editor-body">
+        <textarea
+          aria-label="研究方案正文 Markdown 编辑器"
+          value={planBodyMarkdown}
+          onChange={(event) => handlePlanBodyChange(event.target.value)}
+          disabled={saving || starting}
+          placeholder="在这里直接编辑研究方案正文（Markdown 文本）。"
+          spellCheck={false}
+        />
+      </div>
     </section>
   );
 }

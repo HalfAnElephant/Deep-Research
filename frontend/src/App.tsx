@@ -1009,6 +1009,10 @@ export function App() {
           setPlanDraft(value);
           setDraftDirtyState(true);
         }}
+        onReset={() => {
+          setPlanDraft(activeDetail?.currentPlan?.markdown ?? "");
+          setDraftDirtyState(false);
+        }}
         onSave={onSavePlan}
         onStart={onStartResearch}
         onDownload={onDownloadReport}

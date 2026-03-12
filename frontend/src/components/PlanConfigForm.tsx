@@ -292,6 +292,8 @@ export interface PlanConfigFormProps {
   disabled?: boolean;
   /** Additional CSS class name */
   className?: string;
+  /** Show reset button in footer actions */
+  showResetButton?: boolean;
 }
 
 // ============================================================================
@@ -304,6 +306,7 @@ export function PlanConfigForm({
   defaultExpanded = true,
   disabled = false,
   className = "",
+  showResetButton = true,
 }: PlanConfigFormProps) {
   // Parse initial config from markdown
   const initialData = useMemo(() => parseYamlFrontmatter(markdown), [markdown]);
@@ -726,17 +729,18 @@ export function PlanConfigForm({
               )}
             </fieldset>
 
-            {/* Form Actions - Only Reset button remains (auto-sync enabled) */}
-            <div className="config-form-actions" role="toolbar" aria-label="表单操作">
-              <button
-                type="button"
-                className="ghost"
-                onClick={handleReset}
-                disabled={disabled || !hasChanges}
-              >
-                重置
-              </button>
-            </div>
+            {showResetButton && (
+              <div className="config-form-actions" role="toolbar" aria-label="表单操作">
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={handleReset}
+                  disabled={disabled || !hasChanges}
+                >
+                  重置
+                </button>
+              </div>
+            )}
           </form>
         </div>
       )}
