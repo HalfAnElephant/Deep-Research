@@ -5,6 +5,9 @@ import json
 from app.core.database import get_connection
 from app.core.utils import now_iso
 from app.models.schemas import (
+    AgentStateRecord,
+    AgentStatus,
+    AgentType,
     ConversationDetail,
     ConversationMessage,
     ConversationStatus,
@@ -13,6 +16,14 @@ from app.models.schemas import (
     MessageRole,
     PlanRevision,
     TaskConfig,
+)
+
+
+_AGENT_ORDER: tuple[AgentType, ...] = (
+    AgentType.IDEATION,
+    AgentType.PLANNING,
+    AgentType.WRITING,
+    AgentType.CHECKING,
 )
 
 
@@ -434,8 +445,125 @@ class ConversationRepository:
             collapsed=True,
         )
 
+    def _default_agent_states(self) -> list[AgentStateRecord]:
+        return [
+            AgentStateRecord(
+                agentType=agent_type,
+                status=AgentStatus.IDLE,
+                progress=0,
+                currentActivity="等待任务开始",
+            )
+            for agent_type in _AGENT_ORDER
+        ]
+
+    def _phase_to_agent_type(self, phase: str) -> AgentType:
+        phase_upper = phase.upper()
+        if any(token in phase_upper for token in ("CHECK", "REVIEW")):
+            return AgentType.CHECKING
+        if any(token in phase_upper for token in ("WRIT", "SYNTH", "FINAL", "PERSIST", "MATERIAL")):
+            return AgentType.WRITING
+        if any(token in phase_upper for token in ("PLAN", "BUILD")):
+            return AgentType.PLANNING
+        return AgentType.IDEATION
+
+    def _normalize_agent_status(self, raw: str) -> AgentStatus:
+        value = (raw or "").upper().strip()
+        if "FAIL" in value or "ERROR" in value or "ABORT" in value:
+            return AgentStatus.FAILED
+        if value in {"COMPLETED", "DONE", "SUCCESS", "PASSED", "REVIEW_PASSED"}:
+            return AgentStatus.COMPLETED
+        if value in {
+            "RUNNING",
+            "EXECUTING",
+            "PLANNING",
+            "REVIEWING",
+            "SYNTHESIZING",
+            "FINALIZING",
+            "REPORT_REVISING",
+        }:
+            return AgentStatus.RUNNING
+        return AgentStatus.IDLE
+
+    def _clamp_progress(self, value: object, *, fallback: int = 0) -> int:
+        if isinstance(value, float):
+            value = int(value)
+        if isinstance(value, int):
+            return max(0, min(100, value))
+        return fallback
+
+    def _derive_agent_states_from_messages(self, messages: list[ConversationMessage]) -> list[AgentStateRecord]:
+        states = {
+            record.agentType: record for record in self._default_agent_states()}
+        order_index = {agent_type: idx for idx,
+                       agent_type in enumerate(_AGENT_ORDER)}
+
+        for message in messages:
+            if message.kind != MessageKind.PROGRESS_GROUP:
+                continue
+            metadata = message.metadata if isinstance(
+                message.metadata, dict) else {}
+            raw_entries = metadata.get("entries")
+            entries = raw_entries if isinstance(
+                raw_entries, list) else [metadata]
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                raw_payload = entry.get("raw")
+                payload = raw_payload if isinstance(raw_payload, dict) else {}
+
+                raw_agent_type = payload.get("agentType")
+                if isinstance(raw_agent_type, str) and raw_agent_type.strip() in AgentType.__members__:
+                    agent_type = AgentType[raw_agent_type.strip()]
+                elif isinstance(raw_agent_type, str) and raw_agent_type.strip() in {a.value for a in _AGENT_ORDER}:
+                    agent_type = AgentType(raw_agent_type.strip())
+                else:
+                    phase = str(entry.get("phase")
+                                or payload.get("phase") or "")
+                    if not phase:
+                        continue
+                    if phase.upper() in {"HEARTBEAT", "STALL_WARNING"}:
+                        phase = str(payload.get("currentPhase")
+                                    or payload.get("phase") or phase)
+                    agent_type = self._phase_to_agent_type(phase)
+
+                status_raw = str(entry.get("state") or payload.get(
+                    "status") or payload.get("state") or "")
+                status = self._normalize_agent_status(status_raw)
+                progress = self._clamp_progress(
+                    entry.get("progress"), fallback=states[agent_type].progress)
+                detail = str(entry.get("detail") or payload.get(
+                    "currentActivity") or payload.get("detail") or message.content or "").strip()
+                timestamp = message.createdAt
+
+                current = states[agent_type]
+                current.status = status
+                current.progress = progress
+                current.currentActivity = detail or current.currentActivity or "处理中"
+                if status == AgentStatus.RUNNING and not current.startedAt:
+                    current.startedAt = timestamp
+                if status == AgentStatus.COMPLETED:
+                    current.progress = 100
+                    current.completedAt = timestamp
+                    current.currentActivity = "阶段完成"
+                if status == AgentStatus.FAILED:
+                    current.error = detail or "执行失败"
+
+                current_index = order_index[agent_type]
+                if status in {AgentStatus.RUNNING, AgentStatus.COMPLETED}:
+                    for prior_type in _AGENT_ORDER[:current_index]:
+                        prior = states[prior_type]
+                        if prior.status != AgentStatus.FAILED:
+                            prior.status = AgentStatus.COMPLETED
+                            prior.progress = 100
+                            prior.currentActivity = "阶段完成"
+                            if not prior.completedAt:
+                                prior.completedAt = timestamp
+
+        return [states[agent_type] for agent_type in _AGENT_ORDER]
+
     def get_detail(self, conversation_id: str) -> ConversationDetail:
         summary = self.get_summary(conversation_id)
+        messages = self.list_messages(conversation_id)
         return ConversationDetail(
             conversationId=summary.conversationId,
             topic=summary.topic,
@@ -444,5 +572,6 @@ class ConversationRepository:
             createdAt=summary.createdAt,
             updatedAt=summary.updatedAt,
             currentPlan=self.get_current_plan(conversation_id),
-            messages=self.list_messages(conversation_id),
+            messages=messages,
+            agentStates=self._derive_agent_states_from_messages(messages),
         )

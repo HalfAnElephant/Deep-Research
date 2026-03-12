@@ -221,6 +221,7 @@ class WriterService:
         blueprint: ReportBlueprint,
         draft_body: str,
         feedback_issues: list[str],
+        targeted_sections: list[str] | None = None,
         writing_plan: list[WritingSectionPlan] | None = None,
     ) -> str:
         draft = self.rewrite_draft(
@@ -231,6 +232,7 @@ class WriterService:
             blueprint=blueprint,
             draft_body=draft_body,
             feedback_issues=feedback_issues,
+            targeted_sections=targeted_sections,
             writing_plan=writing_plan,
         )
         return draft.body
@@ -245,6 +247,7 @@ class WriterService:
         blueprint: ReportBlueprint,
         draft_body: str,
         feedback_issues: list[str],
+        targeted_sections: list[str] | None = None,
         writing_plan: list[WritingSectionPlan] | None = None,
     ) -> ReportDraft:
         outlines = self._build_section_outlines(
@@ -267,15 +270,27 @@ class WriterService:
         cleaned_evidences = self._prepare_evidence_for_chinese_output(
             evidences)
         existing_sections = self._parse_existing_sections(draft_body)
+        targeted_set = {heading.strip() for heading in
+                        (targeted_sections or []) if heading and heading.strip()}
         regenerate_all = any(
             keyword in "；".join(feedback_issues)
             for keyword in ("章节过少", "章节深度不足", "章节展开不足", "正文过短", "证据覆盖不足")
         )
+        if not existing_sections:
+            regenerate_all = True
+        elif targeted_set and not regenerate_all:
+            regenerate_all = all(
+                heading not in existing_sections for heading in targeted_set)
 
         rebuilt_sections: list[SectionDraft] = []
         for index, outline in enumerate(outlines):
             section_body = existing_sections.get(outline.heading, "").strip()
-            if regenerate_all or len(section_body) < 80:
+            should_regenerate = (
+                regenerate_all
+                or len(section_body) < 80
+                or (not regenerate_all and bool(targeted_set) and outline.heading in targeted_set)
+            )
+            if should_regenerate:
                 section_body = self._generate_single_section_with_retries(
                     task_title=task_title,
                     task_description=task_description,
@@ -309,8 +324,7 @@ class WriterService:
                     usedEvidenceIds=[ev.id for ev in self._select_section_evidences(
                         cleaned_evidences, outline, index)[:outline.required_evidence_count]],
                     status=status,
-                    attempts=1 if regenerate_all or len(
-                        existing_sections.get(outline.heading, "").strip()) < 80 else 0,
+                    attempts=1 if should_regenerate else 0,
                     issues=["已移除写作过程说明。"] if suppressed_segments else [],
                 )
             )

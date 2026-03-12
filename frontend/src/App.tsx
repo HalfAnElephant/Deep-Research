@@ -59,9 +59,10 @@ function toErrorText(err: unknown): string {
   return String(err);
 }
 
-function getCurrentAgentPhase(agents: AgentState[]): AgentType | null {
-  const running = agents.find(a => a.status === "RUNNING");
-  return running ? running.agentType : null;
+function getActiveAgentPhases(agents: AgentState[]): AgentType[] {
+  return agents
+    .filter((agent) => agent.status === "RUNNING")
+    .map((agent) => agent.agentType);
 }
 
 function readStoredFlag(key: string, fallback: boolean): boolean {
@@ -80,6 +81,7 @@ function summarizeRealtimeEvent(data: Record<string, unknown>, event: string): s
   const state = typeof data.state === "string" ? data.state : "RUNNING";
   const phase = typeof data.phase === "string" ? data.phase : event;
   const detail = typeof data.detail === "string" ? data.detail.trim() : "";
+  const writingContent = typeof data.currentWritingContent === "string" ? data.currentWritingContent.trim() : "";
   const nodeTitle = typeof data.currentNodeTitle === "string" ? data.currentNodeTitle.trim() : "";
   const sectionTitle = typeof data.currentSectionTitle === "string" ? data.currentSectionTitle.trim() : "";
   const rawProgress = data.progress;
@@ -89,6 +91,9 @@ function summarizeRealtimeEvent(data: Record<string, unknown>, event: string): s
   }
   if (detail) {
     return `[${state}/${phase}] ${progressText} ${detail}`;
+  }
+  if (writingContent) {
+    return `[${state}/${phase}] ${progressText} 写作内容：${writingContent}`;
   }
   if (sectionTitle) {
     return `[${state}/${phase}] ${progressText} 正在写作：${sectionTitle}`;
@@ -113,13 +118,33 @@ function deriveAgentStatesFromMessages(messages: ConversationMessage[]): AgentSt
 
   const entries = Array.isArray(latestProgress.metadata.entries) ? latestProgress.metadata.entries : [];
   const latest = entries.length > 0 ? entries[entries.length - 1] as Record<string, unknown> : latestProgress.metadata;
+  const latestRaw = (latest.raw && typeof latest.raw === "object") ? latest.raw as Record<string, unknown> : {};
+
+  if (typeof latestRaw.agentType === "string") {
+    const normalizedType = latestRaw.agentType.toUpperCase() as AgentType;
+    if (base.some((agent) => agent.agentType === normalizedType)) {
+      const normalizedStatus = typeof latestRaw.status === "string" ? latestRaw.status.toUpperCase() : "RUNNING";
+      return base.map((agent) => {
+        if (agent.agentType !== normalizedType) return agent;
+        return {
+          ...agent,
+          status: normalizedStatus === "FAILED" ? "FAILED" : normalizedStatus === "COMPLETED" ? "COMPLETED" : "RUNNING",
+          progress: typeof latestRaw.progress === "number" ? Math.max(0, Math.min(100, Math.round(latestRaw.progress))) : agent.progress,
+          currentActivity: typeof latestRaw.currentActivity === "string" && latestRaw.currentActivity.trim()
+            ? latestRaw.currentActivity
+            : "处理中",
+        };
+      });
+    }
+  }
+
   const phase = typeof latest.phase === "string" ? latest.phase.toUpperCase() : "";
   const state = typeof latest.state === "string" ? latest.state.toUpperCase() : "RUNNING";
   const detail = typeof latest.detail === "string" ? latest.detail : latestProgress.content;
   const progress = typeof latest.progress === "number" ? Math.max(0, Math.min(100, Math.round(latest.progress))) : 0;
 
   const runningAgent: AgentType =
-    phase.includes("WRITE") || phase.includes("SYNTH") || phase.includes("FINAL")
+    phase.includes("WRIT") || phase.includes("SYNTH") || phase.includes("FINAL")
       ? "WRITING"
       : phase.includes("REVIEW") || phase.includes("CHECK")
         ? "CHECKING"
@@ -140,6 +165,12 @@ function deriveAgentStatesFromMessages(messages: ConversationMessage[]): AgentSt
       return { ...agent, status: "COMPLETED", progress: 100, currentActivity: "阶段完成" };
     }
     if (agent.agentType === "PLANNING" && (runningAgent === "WRITING" || runningAgent === "CHECKING")) {
+      return { ...agent, status: "COMPLETED", progress: 100, currentActivity: "阶段完成" };
+    }
+    if (agent.agentType === "WRITING" && runningAgent === "CHECKING") {
+      return { ...agent, status: "COMPLETED", progress: 100, currentActivity: "阶段完成" };
+    }
+    if (agent.agentType === "CHECKING" && state === "COMPLETED") {
       return { ...agent, status: "COMPLETED", progress: 100, currentActivity: "阶段完成" };
     }
     return agent;
@@ -419,6 +450,90 @@ export function App() {
       }
     };
 
+    const applyRealtimeAgentStatus = (payload: Record<string, unknown>, timestamp: string) => {
+      const rawType = typeof payload.agentType === "string" ? payload.agentType.toUpperCase() : "";
+      const rawStatus = typeof payload.status === "string" ? payload.status.toUpperCase() : "IDLE";
+      if (!rawType) return;
+      if (!["IDEATION", "PLANNING", "WRITING", "CHECKING"].includes(rawType)) return;
+
+      const nextStatus: AgentState["status"] =
+        rawStatus === "FAILED"
+          ? "FAILED"
+          : rawStatus === "COMPLETED"
+            ? "COMPLETED"
+            : rawStatus === "WAITING_INPUT"
+              ? "WAITING_INPUT"
+              : rawStatus === "RUNNING"
+                ? "RUNNING"
+                : "IDLE";
+
+      const nextProgress = typeof payload.progress === "number"
+        ? Math.max(0, Math.min(100, Math.round(payload.progress)))
+        : 0;
+
+      const activity = typeof payload.currentActivity === "string" && payload.currentActivity.trim()
+        ? payload.currentActivity
+        : nextStatus === "COMPLETED"
+          ? "阶段完成"
+          : "处理中";
+
+      setActiveDetail((prev) => {
+        if (!prev || prev.conversationId !== activeConversationId) return prev;
+        const existing = Array.isArray(prev.agentStates) && prev.agentStates.length > 0
+          ? [...prev.agentStates]
+          : deriveAgentStatesFromMessages(prev.messages);
+
+        const normalized = ["IDEATION", "PLANNING", "WRITING", "CHECKING"].map((type) => {
+          return existing.find((agent) => agent.agentType === type) ?? {
+            agentType: type as AgentType,
+            status: "IDLE" as const,
+            progress: 0,
+            currentActivity: "等待任务开始",
+          };
+        });
+
+        const nextStates = normalized.map((agent) => {
+          if (agent.agentType !== rawType) return agent;
+          const startedAt = nextStatus === "RUNNING" ? (agent.startedAt ?? timestamp) : agent.startedAt;
+          const completedAt = nextStatus === "COMPLETED" ? timestamp : agent.completedAt;
+          const error = nextStatus === "FAILED" ? activity : agent.error;
+          return {
+            ...agent,
+            status: nextStatus,
+            progress: nextStatus === "COMPLETED" ? 100 : nextProgress,
+            currentActivity: activity,
+            startedAt,
+            completedAt,
+            error,
+          };
+        });
+
+        const order: AgentType[] = ["IDEATION", "PLANNING", "WRITING", "CHECKING"];
+        const rawTypeIndex = order.indexOf(rawType as AgentType);
+        if (rawTypeIndex > 0 && (nextStatus === "RUNNING" || nextStatus === "COMPLETED")) {
+          for (const priorType of order.slice(0, rawTypeIndex)) {
+            const priorIndex = nextStates.findIndex((agent) => agent.agentType === priorType);
+            if (priorIndex < 0) continue;
+            const prior = nextStates[priorIndex];
+            if (prior.status === "FAILED") continue;
+            nextStates[priorIndex] = {
+              ...prior,
+              status: "COMPLETED",
+              progress: 100,
+              currentActivity: "阶段完成",
+              completedAt: prior.completedAt ?? timestamp,
+            };
+          }
+        }
+
+        return {
+          ...prev,
+          agentStates: nextStates,
+          updatedAt: timestamp,
+        };
+      });
+    };
+
     const scheduleReconnect = () => {
       if (disposed) return;
       reconnectAttemptRef.current += 1;
@@ -453,6 +568,9 @@ export function App() {
           const payload = parsed.data as Record<string, unknown>;
           if (isProgressEventKind(parsed.event)) {
             applyRealtimeProgress(parsed.event, payload, parsed.timestamp ?? new Date().toISOString());
+          }
+          if (parsed.event === "AGENT_STATUS") {
+            applyRealtimeAgentStatus(payload, parsed.timestamp ?? new Date().toISOString());
           }
           if (parsed.event === "TASK_COMPLETED" || parsed.event === "ERROR") {
             setPendingAssistantBubble(null);
@@ -960,7 +1078,7 @@ export function App() {
         {activeStatus === "RUNNING" && effectiveAgentStates.length > 0 && (
           <AgentStatusPanel
             agents={effectiveAgentStates}
-            currentPhase={getCurrentAgentPhase(effectiveAgentStates)}
+            activePhases={getActiveAgentPhases(effectiveAgentStates)}
           />
         )}
 

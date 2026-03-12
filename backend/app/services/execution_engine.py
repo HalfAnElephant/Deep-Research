@@ -94,6 +94,135 @@ class ExecutionEngine:
         self._control: dict[str, TaskControlState] = {}
         self._runtime_progress: dict[str, RuntimeProgressState] = {}
         self._node_runtime: dict[str, dict[str, DagNodeRuntimeState]] = {}
+        self._last_agent_state: dict[str, dict[str, tuple[str, int, str]]] = {}
+
+    def _phase_to_agent_type(self, phase: str) -> str:
+        phase_upper = (phase or "").upper()
+        if "CHECK" in phase_upper or "REVIEW" in phase_upper:
+            return "CHECKING"
+        if any(token in phase_upper for token in ("WRIT", "SYNTH", "FINAL", "PERSIST", "MATERIAL")):
+            return "WRITING"
+        if "PLAN" in phase_upper or "BUILD" in phase_upper:
+            return "PLANNING"
+        return "IDEATION"
+
+    def _normalize_agent_status(self, raw_status: str) -> str:
+        value = (raw_status or "").upper().strip()
+        if "FAIL" in value or "ERROR" in value or "ABORT" in value:
+            return "FAILED"
+        if value in {"COMPLETED", "DONE", "SUCCESS", "PASSED", "REVIEW_PASSED"}:
+            return "COMPLETED"
+        if value in {
+            "RUNNING",
+            "EXECUTING",
+            "PLANNING",
+            "REVIEWING",
+            "SYNTHESIZING",
+            "FINALIZING",
+            "REPORT_REVISING",
+        }:
+            return "RUNNING"
+        return "IDLE"
+
+    def _build_writing_preview(self, section_text: str) -> str:
+        lines = [line.strip()
+                 for line in section_text.splitlines() if line.strip()]
+        if not lines:
+            return ""
+        content_lines = lines[1:] if len(lines) > 1 else lines
+        preview = " ".join(content_lines)
+        if len(preview) > 180:
+            preview = f"{preview[:180]}..."
+        return preview
+
+    async def _emit_agent_status(self, task_id: str, payload: dict[str, Any]) -> None:
+        agent_type = str(payload.get("agentType") or "").strip()
+        if not agent_type:
+            return
+        status = str(payload.get("status") or "IDLE").strip().upper()
+        progress_raw = payload.get("progress")
+        progress = int(progress_raw) if isinstance(
+            progress_raw, (int, float)) else 0
+        progress = max(0, min(100, progress))
+        activity = str(payload.get("currentActivity") or "").strip()
+
+        task_cache = self._last_agent_state.setdefault(task_id, {})
+        previous = task_cache.get(agent_type)
+        current_signature = (status, progress, activity)
+        if previous == current_signature:
+            return
+        task_cache[agent_type] = current_signature
+
+        await self.hub.emit(task_id, "AGENT_STATUS", payload)
+        if self.event_listener is not None:
+            try:
+                await self.event_listener(task_id, "AGENT_STATUS", payload)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Event listener failed for task=%s event=%s: %s", task_id, "AGENT_STATUS", exc)
+
+    async def _emit_agent_status_from_task_event(self, task_id: str, event: str, payload: dict[str, Any]) -> None:
+        if event not in {"TASK_PROGRESS", "TASK_HEARTBEAT", "STALL_WARNING", "TASK_COMPLETED", "TASK_FAILED", "TASK_ABORTED", "ERROR"}:
+            return
+
+        if event == "TASK_COMPLETED":
+            for agent_type in ("IDEATION", "PLANNING", "WRITING", "CHECKING"):
+                await self._emit_agent_status(
+                    task_id,
+                    {
+                        "taskId": task_id,
+                        "agentType": agent_type,
+                        "status": "COMPLETED",
+                        "progress": 100,
+                        "currentActivity": "阶段完成",
+                        "phase": "TASK_COMPLETED",
+                        "updatedAt": now_iso(),
+                    },
+                )
+            return
+
+        runtime = self._runtime_progress.get(task_id)
+        phase = str(payload.get("phase") or "").strip()
+        if not phase and runtime is not None:
+            phase = runtime.phase
+        if phase.upper() in {"HEARTBEAT", "STALL_WARNING"}:
+            phase = str(payload.get("currentPhase") or payload.get(
+                "phase") or (runtime.phase if runtime else "")).strip()
+        if not phase:
+            phase = "UNKNOWN"
+
+        raw_state = str(payload.get("state") or (
+            runtime.state if runtime else "RUNNING")).strip() or "RUNNING"
+        status = self._normalize_agent_status(raw_state)
+        if event == "STALL_WARNING" and status == "IDLE":
+            status = "RUNNING"
+        if event in {"TASK_FAILED", "TASK_ABORTED", "ERROR"}:
+            status = "FAILED"
+
+        progress_raw = payload.get("progress")
+        progress = int(progress_raw) if isinstance(progress_raw, (int, float)) else (
+            runtime.progress if runtime is not None else 0)
+        progress = max(0, min(100, int(progress)))
+        detail = str(
+            payload.get("currentWritingContent")
+            or payload.get("detail")
+            or payload.get("currentSectionTitle")
+            or payload.get("currentNodeTitle")
+            or ""
+        ).strip()
+
+        await self._emit_agent_status(
+            task_id,
+            {
+                "taskId": task_id,
+                "agentType": self._phase_to_agent_type(phase),
+                "status": status,
+                "progress": progress,
+                "currentActivity": detail or f"处理中 ({phase})",
+                "phase": phase,
+                "updatedAt": now_iso(),
+            },
+        )
 
     def _ensure_dag_node_runtime(self, task_id: str) -> None:
         runtime = self._node_runtime.setdefault(task_id, {})
@@ -224,6 +353,8 @@ class ExecutionEngine:
                 logger.warning(
                     "Event listener failed for task=%s event=%s: %s", task_id, event, exc)
 
+        await self._emit_agent_status_from_task_event(task_id, event, payload)
+
     async def _heartbeat_loop(self, task_id: str) -> None:
         while True:
             await asyncio.sleep(self.HEARTBEAT_INTERVAL_SECONDS)
@@ -244,6 +375,7 @@ class ExecutionEngine:
                     "state": runtime.state,
                     "phase": "HEARTBEAT",
                     "detail": runtime.detail or "任务执行中，正在等待阶段更新。",
+                    "currentPhase": runtime.phase,
                     "elapsedMs": elapsed_ms,
                     "idleMs": idle_ms,
                     "heartbeat": True,
@@ -264,6 +396,7 @@ class ExecutionEngine:
                             f"当前阶段持续 {int(idle_seconds)} 秒未出现新进展，"
                             "系统仍在运行，建议继续等待或稍后重试。"
                         ),
+                        "currentPhase": runtime.phase,
                         "elapsedMs": elapsed_ms,
                         "idleMs": idle_ms,
                         "stall": True,
@@ -483,6 +616,7 @@ class ExecutionEngine:
             for section_idx, (_, section_text) in enumerate(sections, start=1):
                 section_title = section_text.splitlines(
                 )[0].strip() if section_text else ""
+                writing_preview = self._build_writing_preview(section_text)
                 write_progress = 90 + int((section_idx / total_sections) * 6)
                 await self._emit_event(
                     task_id,
@@ -493,6 +627,7 @@ class ExecutionEngine:
                         "state": "SYNTHESIZING",
                         "phase": "WRITING_SECTION",
                         "currentSectionTitle": section_title or f"Section {section_idx}",
+                        "currentWritingContent": writing_preview,
                     },
                 )
 
@@ -683,6 +818,7 @@ class ExecutionEngine:
                 await heartbeat_task
             self._runtime_progress.pop(task_id, None)
             self._node_runtime.pop(task_id, None)
+            self._last_agent_state.pop(task_id, None)
 
     async def _emit_suppressed_writer_note(self, *, task_id: str, topic: str, suppressed_segments: list[str]) -> None:
         unique_segments = _dedupe_nonempty_strings(suppressed_segments)

@@ -515,6 +515,29 @@ class ConversationAgent:
             return
         conversation_id = summary.conversationId
 
+        if event == "AGENT_STATUS":
+            agent_type = str(data.get("agentType")
+                             or "UNKNOWN").strip() or "UNKNOWN"
+            status = str(data.get("status") or "RUNNING").strip() or "RUNNING"
+            progress = data.get("progress")
+            if isinstance(progress, float):
+                progress = int(progress)
+            if not isinstance(progress, int):
+                progress = None
+            activity = str(data.get("currentActivity")
+                           or "状态更新").strip() or "状态更新"
+            self.repository.append_progress_entry(
+                conversation_id,
+                task_id=task_id,
+                message_id=new_id(),
+                phase="AGENT_STATUS",
+                state=status,
+                summary=f"{agent_type} {status}: {activity}",
+                progress=progress,
+                payload={**data, "event": event, "taskId": task_id},
+            )
+            return
+
         if event in {"TASK_PROGRESS", "TASK_HEARTBEAT", "STALL_WARNING"}:
             phase = str(data.get("phase") or data.get("state")
                         or "UNKNOWN").strip() or "UNKNOWN"

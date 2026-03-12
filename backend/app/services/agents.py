@@ -99,8 +99,29 @@ class ReportAgent:
         suppressed_segments = list(draft.suppressedSegments)
         draft_body = draft.body
         if not draft_body.strip():
-            issues = "；".join(draft.issues[:3])
-            raise ValueError(f"LLM 未生成可用报告正文，已停止输出模板化兜底内容。{issues}")
+            recovery_feedback = ReportReviewResult(
+                approved=False,
+                issues=draft.issues or ["未生成任何可用章节。"],
+            )
+            recovered = self.revision_agent.revise(
+                draft_body="",
+                feedback=recovery_feedback,
+                task_title=task_title,
+                task_description=task_description,
+                sections=sections,
+                evidences=evidences,
+                blueprint=blueprint,
+                writing_plan=writing_plan,
+            )
+            suppressed_segments.extend(recovered.suppressedSegments)
+            if recovered.body.strip():
+                draft = recovered
+                draft_body = recovered.body
+            else:
+                issues = "；".join((draft.issues or recovered.issues)[:3])
+                raise ValueError(
+                    f"LLM 未生成可用报告正文，且自动重写失败，已停止输出模板化兜底内容。{issues}"
+                )
 
         review_result = self.review_agent.review(
             body=draft_body, blueprint=blueprint, evidences=evidences)
@@ -407,17 +428,18 @@ class ReportReviewAgent:
         if not stripped:
             return ReportReviewResult(approved=False, issues=["正文为空。"])
 
+        section_contents = self._section_contents(body)
+        targeted_sections: list[str] = self._find_problem_sections(
+            section_contents)
+
         if any(pattern.search(body) for pattern in self.TRACE_PATTERNS):
             issues.append("包含中间过程痕迹（如 Trace Section 或过程标签）。")
         if any(pattern.search(body) for pattern in self.PLACEHOLDER_PATTERNS):
             issues.append("包含占位检索文本或写作过程说明，降低内容可信度。")
-
-        section_contents = self._section_contents(body)
         if len(section_contents) < 3:
             issues.append("文章章节过少，至少需要三个明确章节。")
         shallow_sections: list[str] = []
         sparse_sections: list[str] = []
-        targeted_sections: list[str] = []
         for title, content in section_contents.items():
             content = section_contents.get(title, "").strip()
             if not content:
@@ -448,8 +470,17 @@ class ReportReviewAgent:
         return ReportReviewResult(
             approved=not issues,
             issues=issues,
-            targeted_sections=sorted(set(targeted_sections)),
+            targeted_sections=sorted(set(targeted_sections)) or None,
         )
+
+    def _find_problem_sections(self, section_contents: dict[str, str]) -> list[str]:
+        problematic: list[str] = []
+        combined_patterns = self.TRACE_PATTERNS + self.PLACEHOLDER_PATTERNS
+        for title, content in section_contents.items():
+            section_text = f"## {title}\n{content}"
+            if any(pattern.search(section_text) for pattern in combined_patterns):
+                problematic.append(title)
+        return problematic
 
     @classmethod
     def _section_contents(cls, body: str) -> dict[str, str]:
@@ -540,6 +571,7 @@ class ReportRevisionAgent:
                     blueprint=blueprint,
                     draft_body=cleaned,
                     feedback_issues=feedback.issues,
+                    targeted_sections=feedback.targeted_sections,
                     writing_plan=writing_plan,
                 )
             rewritten = self.writer_service.rewrite_body(
@@ -550,6 +582,7 @@ class ReportRevisionAgent:
                 blueprint=blueprint,
                 draft_body=cleaned,
                 feedback_issues=feedback.issues,
+                targeted_sections=feedback.targeted_sections,
             )
             return ReportDraft(
                 body=rewritten,

@@ -73,6 +73,36 @@ def test_report_review_agent_detects_meta_commentary() -> None:
     assert any("写作过程说明" in issue or "占位检索文本" in issue for issue in result.issues)
 
 
+def test_report_review_agent_marks_targeted_problem_sections() -> None:
+    reviewer = ReportReviewAgent()
+    blueprint = ReportBlueprint(
+        output_format="研究报告",
+        objective="测试",
+        tone="客观",
+        section_titles=["引言", "分析", "结论"],
+    )
+    body = """## 引言
+
+本节给出正常背景说明 [evidence:e1]。
+
+## 分析
+
+arXiv result for challenge identification
+
+## 结论
+
+结论总结并给出建议 [evidence:e1]。
+"""
+    result = reviewer.review(
+        body=body,
+        blueprint=blueprint,
+        evidences=[_build_evidence("e1")],
+    )
+    assert not result.approved
+    assert result.targeted_sections is not None
+    assert "分析" in result.targeted_sections
+
+
 def test_report_agent_reports_suppressed_segments_via_callback(tmp_path, monkeypatch) -> None:
     from app.services.writer import WriterService
     from app.services.agents import ReportReviewResult
@@ -230,6 +260,40 @@ def test_report_agent_fails_without_template_fallback() -> None:
         assert "停止输出模板化兜底内容" in str(exc)
     else:
         raise AssertionError("expected ValueError when body generation fails")
+
+
+def test_report_agent_recovers_from_empty_initial_draft_with_rewrite() -> None:
+    class _RecoveringWriter(_StubWriter):
+        def __init__(self) -> None:
+            super().__init__()
+            self.generate_calls = 0
+
+        def generate_body(self, **kwargs) -> str:  # noqa: ANN003
+            _ = kwargs
+            self.generate_calls += 1
+            if self.generate_calls == 1:
+                return ""
+            return super().generate_body(**kwargs)
+
+    writer = _RecoveringWriter()
+    report_agent = ReportAgent(writer_service=writer, max_review_rounds=2)
+    evidences = [_build_evidence("e1"), _build_evidence("e2")]
+
+    report_agent.generate_report(
+        task_id="t1",
+        task_title="多智能体工程可靠性评估",
+        task_description="请输出研究报告。",
+        sections=[
+            ("s1", "引言与问题界定\n\n说明研究范围"),
+            ("s2", "证据与争议\n\n比较主要分歧"),
+            ("s3", "综合分析\n\n整合证据链"),
+        ],
+        evidences=evidences,
+        locked_sections=set(),
+    )
+
+    assert writer.rewrite_called
+    assert writer.final_body.strip()
 
 
 def test_report_agent_auto_rewrites_when_sections_too_few() -> None:
