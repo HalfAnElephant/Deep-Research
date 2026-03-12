@@ -1126,6 +1126,96 @@ button.ghost:hover:not(:disabled) {
   gap: 6px;
 }
 
+.live-progress-dag {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line-subtle);
+  padding-top: 10px;
+}
+
+.live-progress-dag-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.live-progress-dag-head strong {
+  font-size: 13px;
+}
+
+.live-progress-dag-summary {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.live-progress-dag-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.live-progress-dag-column {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-soft) 50%, var(--card));
+  padding: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.live-progress-dag-column-head {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.live-progress-dag-column-body {
+  display: grid;
+  gap: 6px;
+}
+
+.dag-node {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.dag-node-running {
+  border-color: var(--phase-executing);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--phase-executing) 18%, transparent);
+}
+
+.dag-node-completed {
+  border-color: var(--success);
+  background: color-mix(in srgb, var(--success-light) 35%, var(--card));
+}
+
+.dag-node-failed {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger-light) 40%, var(--card));
+}
+
+.dag-node-title {
+  font-size: 12px;
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+.dag-node-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
 .live-progress-event {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -1159,6 +1249,21 @@ button.ghost:hover:not(:disabled) {
 @media (prefers-color-scheme: dark) {
   .timeline {
     background: linear-gradient(180deg, rgba(30, 41, 59, 0.5), transparent);
+  }
+}
+
+@media (max-width: 768px) {
+  .live-progress-head {
+    flex-direction: column;
+  }
+
+  .live-progress-dag-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .live-progress-dag-grid {
+    grid-template-columns: 1fr;
   }
 }
 

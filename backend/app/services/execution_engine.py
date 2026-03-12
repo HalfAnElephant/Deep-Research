@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 from dataclasses import dataclass, field
 import logging
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
 
 from app.core.utils import now_iso
 from app.models.schemas import NodeStatus, TaskStatus
@@ -41,6 +41,14 @@ class RuntimeProgressState:
     progress: int = 0
     detail: str = ""
     stall_notified: bool = False
+
+
+@dataclass
+class DagNodeRuntimeState:
+    first_started_mono: float | None = None
+    last_started_mono: float | None = None
+    completed_mono: float | None = None
+    attempts: int = 0
 
 
 class ExecutionEngine:
@@ -85,11 +93,99 @@ class ExecutionEngine:
         self.event_listener = event_listener
         self._control: dict[str, TaskControlState] = {}
         self._runtime_progress: dict[str, RuntimeProgressState] = {}
+        self._node_runtime: dict[str, dict[str, DagNodeRuntimeState]] = {}
+
+    def _ensure_dag_node_runtime(self, task_id: str) -> None:
+        runtime = self._node_runtime.setdefault(task_id, {})
+        try:
+            dag = self.repository.get_dag(task_id)
+        except Exception:
+            return
+        for node in dag.nodes:
+            if node.taskId == task_id:
+                continue
+            runtime.setdefault(node.taskId, DagNodeRuntimeState())
+
+    def _record_node_start(self, task_id: str, node_id: str, now_mono: float) -> None:
+        self._ensure_dag_node_runtime(task_id)
+        node_runtime = self._node_runtime.setdefault(
+            task_id, {}).setdefault(node_id, DagNodeRuntimeState())
+        if node_runtime.first_started_mono is None:
+            node_runtime.first_started_mono = now_mono
+        node_runtime.last_started_mono = now_mono
+        node_runtime.completed_mono = None
+        node_runtime.attempts += 1
+
+    def _record_node_completed(self, task_id: str, node_id: str, now_mono: float) -> None:
+        self._ensure_dag_node_runtime(task_id)
+        node_runtime = self._node_runtime.setdefault(
+            task_id, {}).setdefault(node_id, DagNodeRuntimeState())
+        if node_runtime.first_started_mono is None:
+            node_runtime.first_started_mono = now_mono
+            node_runtime.attempts = max(1, node_runtime.attempts)
+        node_runtime.completed_mono = now_mono
+
+    def _attach_dag_snapshot(self, task_id: str, payload: dict[str, Any]) -> None:
+        self._ensure_dag_node_runtime(task_id)
+        runtime = self._runtime_progress.get(task_id)
+        try:
+            dag = self.repository.get_dag(task_id)
+        except Exception:
+            payload.setdefault("dagNodes", [])
+            payload.setdefault("dagSummary", {
+                               "total": 0, "pending": 0, "running": 0, "completed": 0, "failed": 0})
+            return
+
+        now_mono = asyncio.get_running_loop().time()
+        dag_nodes: list[dict[str, Any]] = []
+        summary = {"total": 0, "pending": 0,
+                   "running": 0, "completed": 0, "failed": 0}
+
+        for node in dag.nodes:
+            if node.taskId == task_id:
+                continue
+            summary["total"] += 1
+            status_value = node.status.value
+            status_key = status_value.lower()
+            if status_key in summary:
+                summary[status_key] += 1
+
+            node_runtime = self._node_runtime.get(task_id, {}).get(node.taskId)
+            elapsed_ms = 0
+            retry_count = 0
+            if node_runtime is not None:
+                retry_count = max(0, node_runtime.attempts - 1)
+                if node_runtime.first_started_mono is not None:
+                    end_mono = node_runtime.completed_mono
+                    if end_mono is None and status_value == "RUNNING":
+                        end_mono = now_mono
+                    if end_mono is None and runtime is not None:
+                        end_mono = now_mono
+                    if end_mono is not None:
+                        elapsed_ms = max(
+                            0, int((end_mono - node_runtime.first_started_mono) * 1000))
+
+            dag_nodes.append(
+                {
+                    "nodeId": node.taskId,
+                    "title": node.title,
+                    "status": status_value,
+                    "searchDepth": node.metadata.searchDepth,
+                    "dependencies": node.dependencies,
+                    "elapsedMs": elapsed_ms,
+                    "retryCount": retry_count,
+                }
+            )
+
+        payload.setdefault("dagNodes", dag_nodes)
+        payload.setdefault("dagSummary", summary)
 
     def set_event_listener(self, listener: Callable[[str, str, dict], Awaitable[None]] | None) -> None:
         self.event_listener = listener
 
     async def _emit_event(self, task_id: str, event: str, payload: dict) -> None:
+        if event in {"TASK_PROGRESS", "TASK_HEARTBEAT", "STALL_WARNING"}:
+            self._attach_dag_snapshot(task_id, payload)
         if event == "TASK_PROGRESS":
             runtime = self._runtime_progress.get(task_id)
             if runtime is not None:
@@ -250,6 +346,7 @@ class ExecutionEngine:
             dag = self.repository.get_dag(task_id)
             executable_nodes = [n for n in dag.nodes if n.taskId !=
                                 task_id and n.status != NodeStatus.PRUNED]
+            self._ensure_dag_node_runtime(task_id)
             snapshot = self.repository.load_snapshot(task_id)
             if snapshot:
                 control = self._control.setdefault(task_id, TaskControlState())
@@ -265,6 +362,8 @@ class ExecutionEngine:
                 if control.aborted:
                     await self._emit_event(task_id, "ERROR", {"taskId": task_id, "error": "Task aborted by user"})
                     return
+                now_mono = asyncio.get_running_loop().time()
+                self._record_node_start(task_id, node.taskId, now_mono)
                 self.repository.update_node_status(
                     task_id, node.taskId, NodeStatus.RUNNING, node.metadata.infoGainScore)
                 await asyncio.sleep(0.2)
@@ -299,6 +398,8 @@ class ExecutionEngine:
                     )
                 self.repository.update_node_status(
                     task_id, node.taskId, NodeStatus.COMPLETED, node.metadata.infoGainScore)
+                self._record_node_completed(
+                    task_id, node.taskId, asyncio.get_running_loop().time())
                 control.completed_nodes.append(node.taskId)
                 progress = 20 + int((idx / total) * 60)
                 await self._emit_event(
@@ -581,6 +682,7 @@ class ExecutionEngine:
             with contextlib.suppress(asyncio.CancelledError):
                 await heartbeat_task
             self._runtime_progress.pop(task_id, None)
+            self._node_runtime.pop(task_id, None)
 
     async def _emit_suppressed_writer_note(self, *, task_id: str, topic: str, suppressed_segments: list[str]) -> None:
         unique_segments = _dedupe_nonempty_strings(suppressed_segments)

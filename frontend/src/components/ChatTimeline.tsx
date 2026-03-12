@@ -74,8 +74,15 @@ export function ChatTimeline(props: ChatTimelineProps) {
     activeStatus === "PLAN_READY" || activeStatus === "COMPLETED" || activeStatus === "FAILED";
   const activeBundle = currentTaskId ? progressBundles.get(currentTaskId) ?? null : null;
   const activeEntries = activeBundle ? activeBundle.entries.slice(-6).reverse() : [];
+  const latestDagNodes = activeBundle
+    ? [...activeBundle.entries]
+        .reverse()
+        .find((entry) => Array.isArray(entry.dagNodes) && entry.dagNodes.length > 0)?.dagNodes ?? []
+    : [];
   const currentPhase = activeEntries[0]?.phase ?? "";
   const idleWarning = idleSeconds >= 20;
+  const dagColumns = groupDagNodesByDepth(latestDagNodes);
+  const dagSummary = summarizeDagNodes(latestDagNodes);
 
   // Helper to render progress bundle
   const renderProgressBundle = (bundle: ProgressBundle) => {
@@ -178,6 +185,40 @@ export function ChatTimeline(props: ChatTimelineProps) {
                   <span className="event-progress mono">{entry.progress !== null ? `${entry.progress}%` : "--"}</span>
                 </div>
               ))}
+            </div>
+          )}
+          {latestDagNodes.length > 0 && (
+            <div className="live-progress-dag">
+              <div className="live-progress-dag-head">
+                <strong>任务 DAG 实时视图</strong>
+                <span className="mono live-progress-dag-summary">
+                  总计 {dagSummary.total} | 运行中 {dagSummary.running} | 已完成 {dagSummary.completed} | 失败 {dagSummary.failed}
+                </span>
+              </div>
+              <div className="live-progress-dag-grid">
+                {dagColumns.map((column) => (
+                  <section key={`dag-depth-${column.depth}`} className="live-progress-dag-column">
+                    <header className="live-progress-dag-column-head">
+                      深度 {column.depth}
+                    </header>
+                    <div className="live-progress-dag-column-body">
+                      {column.nodes.map((node) => (
+                        <article
+                          key={node.nodeId}
+                          className={`dag-node dag-node-${node.status.toLowerCase()}`}
+                        >
+                          <div className="dag-node-title">{node.title}</div>
+                          <div className="dag-node-meta mono">
+                            <span>{statusLabel(node.status)}</span>
+                            <span>耗时 {formatElapsed(node.elapsedMs)}</span>
+                            <span>重试 {node.retryCount}</span>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
             </div>
           )}
         </article>
@@ -322,6 +363,52 @@ export function ChatTimeline(props: ChatTimelineProps) {
       )}
     </section>
   );
+}
+
+function formatElapsed(elapsedMs: number): string {
+  const seconds = Math.max(0, Math.floor(elapsedMs / 1000));
+  const mins = Math.floor(seconds / 60);
+  const remain = seconds % 60;
+  if (mins <= 0) return `${seconds}s`;
+  return `${mins}m ${remain}s`;
+}
+
+function statusLabel(status: string): string {
+  switch (status) {
+    case "RUNNING":
+      return "进行中";
+    case "COMPLETED":
+      return "已完成";
+    case "FAILED":
+      return "失败";
+    case "SUSPENDED":
+      return "暂停";
+    default:
+      return "待处理";
+  }
+}
+
+function summarizeDagNodes(nodes: Array<{ status: string }>) {
+  const summary = { total: nodes.length, running: 0, completed: 0, failed: 0 };
+  for (const node of nodes) {
+    if (node.status === "RUNNING") summary.running += 1;
+    if (node.status === "COMPLETED") summary.completed += 1;
+    if (node.status === "FAILED") summary.failed += 1;
+  }
+  return summary;
+}
+
+function groupDagNodesByDepth<T extends { searchDepth: number }>(nodes: T[]): Array<{ depth: number; nodes: T[] }> {
+  const grouped = new Map<number, T[]>();
+  for (const node of nodes) {
+    const depth = Number.isFinite(node.searchDepth) ? node.searchDepth : 0;
+    const bucket = grouped.get(depth) ?? [];
+    bucket.push(node);
+    grouped.set(depth, bucket);
+  }
+  return Array.from(grouped.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([depth, depthNodes]) => ({ depth, nodes: depthNodes }));
 }
 
 function streamStatusLabel(status: "idle" | "connecting" | "connected" | "reconnecting" | "fallback"): string {

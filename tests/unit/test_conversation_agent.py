@@ -531,6 +531,61 @@ async def test_on_task_event_groups_progress_by_phase() -> None:
     assert len(groups[0].metadata["entries"]) == 2
 
 
+@pytest.mark.asyncio
+async def test_on_task_event_keeps_dag_nodes_payload() -> None:
+    init_db()
+    repo = ConversationRepository()
+    conversation_id = new_id()
+    repo.create_conversation(
+        conversation_id=conversation_id,
+        topic="DAG 进度可视化测试",
+        status=ConversationStatus.RUNNING,
+        config=TaskConfig(),
+    )
+    repo.add_plan_revision(
+        conversation_id,
+        author=MessageRole.ASSISTANT,
+        markdown="---\ntitle: test\ntopic: test\nmax_depth: 2\nmax_nodes: 8\npriority: 3\nsearch_sources: [arXiv]\n---\n",
+    )
+    task_id = new_id()
+    repo.set_task_id(conversation_id, task_id)
+    agent = _build_agent()
+
+    dag_nodes = [
+        {
+            "nodeId": "node-a",
+            "title": "检索背景",
+            "status": "RUNNING",
+            "searchDepth": 1,
+            "dependencies": [],
+            "elapsedMs": 4200,
+            "retryCount": 1,
+        }
+    ]
+
+    await agent.on_task_event(
+        task_id=task_id,
+        event="TASK_PROGRESS",
+        data={
+            "state": "EXECUTING",
+            "phase": "SEARCHING",
+            "progress": 35,
+            "detail": "正在检索节点",
+            "dagNodes": dag_nodes,
+        },
+    )
+
+    messages = repo.get_detail(conversation_id).messages
+    groups = [message for message in messages if message.kind ==
+              MessageKind.PROGRESS_GROUP]
+    assert len(groups) == 1
+    entries = groups[0].metadata.get("entries")
+    assert isinstance(entries, list) and len(entries) == 1
+    raw = entries[0].get("raw")
+    assert isinstance(raw, dict)
+    assert raw.get("dagNodes") == dag_nodes
+
+
 def test_delete_all_conversations_aborts_running_tasks() -> None:
     init_db()
     repo = ConversationRepository()

@@ -178,7 +178,6 @@ export function App() {
 
   const [composerText, setComposerText] = useState("");
   const [planDraft, setPlanDraft] = useState("");
-  const [planVersion, setPlanVersion] = useState(0);
   const [draftDirty, setDraftDirty] = useState(false);
 
   const [sending, setSending] = useState(false);
@@ -291,17 +290,15 @@ export function App() {
       const shouldSync =
         Boolean(options?.forceDraft) ||
         Boolean(options?.syncDraft) ||
-        !draftDirty ||
-        currentPlan.version !== planVersion;
+        !draftDirty;
       if (shouldSync) {
         setPlanDraft(currentPlan.markdown);
-        setPlanVersion(currentPlan.version);
         setDraftDirty(false);
       }
     } catch (err) {
       setError(toErrorText(err));
     }
-  }, [draftDirty, planVersion]);
+  }, [draftDirty]);
 
   useEffect(() => {
     if (activeStatus !== "RUNNING") return;
@@ -514,7 +511,6 @@ export function App() {
       const detail = await getConversation(recovered.conversationId);
       setActiveDetail(detail);
       setPlanDraft(detail.currentPlan?.markdown ?? "");
-      setPlanVersion(detail.currentPlan?.version ?? 0);
       setDraftDirty(false);
       return detail;
     } catch {
@@ -528,7 +524,6 @@ export function App() {
     setActiveDetail(null);
     setComposerText("");
     setPlanDraft("");
-    setPlanVersion(0);
     setDraftDirty(false);
     setDraftMessages([]);
     setPendingAssistantBubble(null);
@@ -602,7 +597,6 @@ export function App() {
         setActiveConversationId(detail.conversationId);
         setActiveDetail(detail);
         setPlanDraft(detail.currentPlan?.markdown ?? "");
-        setPlanVersion(detail.currentPlan?.version ?? 0);
         setDraftDirty(false);
         setDraftMessages([]);
         setPendingAssistantBubble(null);
@@ -737,7 +731,6 @@ export function App() {
         setActiveConversationId(null);
         setActiveDetail(null);
         setPlanDraft("");
-        setPlanVersion(0);
         setDraftDirty(false);
         setDraftMessages([]);
         setPendingAssistantBubble((prev) => (prev?.conversationId === conversationId ? null : prev));
@@ -793,7 +786,6 @@ export function App() {
       if (activeConversationId === conversationId) {
         setActiveDetail(detail);
         setPlanDraft(detail.currentPlan?.markdown ?? "");
-        setPlanVersion(detail.currentPlan?.version ?? 0);
         setDraftDirty(false);
       }
       setRenameDialog(null);
@@ -824,7 +816,6 @@ export function App() {
       setDraftMode(false);
       setComposerText("");
       setPlanDraft("");
-      setPlanVersion(0);
       setDraftDirty(false);
       setDraftMessages([]);
       setPendingAssistantBubble(null);

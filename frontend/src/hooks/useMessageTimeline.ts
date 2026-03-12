@@ -10,6 +10,41 @@ export interface ProgressEntry {
   state: string;
   progress: number | null;
   detail?: string;
+  dagNodes?: DagNodeLiveState[];
+}
+
+export interface DagNodeLiveState {
+  nodeId: string;
+  title: string;
+  status: string;
+  searchDepth: number;
+  dependencies: string[];
+  elapsedMs: number;
+  retryCount: number;
+}
+
+function toDagNodeLiveStates(value: unknown): DagNodeLiveState[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const parsed: DagNodeLiveState[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const nodeId = typeof record.nodeId === "string" ? record.nodeId : "";
+    const title = typeof record.title === "string" ? record.title : "";
+    if (!nodeId || !title) continue;
+    parsed.push({
+      nodeId,
+      title,
+      status: typeof record.status === "string" ? record.status : "PENDING",
+      searchDepth: typeof record.searchDepth === "number" ? record.searchDepth : 0,
+      dependencies: Array.isArray(record.dependencies)
+        ? record.dependencies.filter((dep): dep is string => typeof dep === "string")
+        : [],
+      elapsedMs: typeof record.elapsedMs === "number" ? Math.max(0, record.elapsedMs) : 0,
+      retryCount: typeof record.retryCount === "number" ? Math.max(0, Math.floor(record.retryCount)) : 0,
+    });
+  }
+  return parsed.length > 0 ? parsed : undefined;
 }
 
 /**
@@ -39,12 +74,15 @@ function toProgressEntries(message: ConversationMessage): ProgressEntry[] {
   for (const item of rawEntries) {
     if (!item || typeof item !== "object") continue;
     const value = item as Record<string, unknown>;
+    const raw = value.raw;
+    const rawRecord = raw && typeof raw === "object" ? raw as Record<string, unknown> : null;
     parsed.push({
       summary: typeof value.summary === "string" ? value.summary : "进度更新",
       phase: typeof value.phase === "string" ? value.phase : "UNKNOWN",
       state: typeof value.state === "string" ? value.state : "UNKNOWN",
       progress: typeof value.progress === "number" ? value.progress : null,
       detail: typeof value.detail === "string" ? value.detail : undefined,
+      dagNodes: toDagNodeLiveStates(value.dagNodes) ?? toDagNodeLiveStates(rawRecord?.dagNodes),
     });
   }
   return parsed;

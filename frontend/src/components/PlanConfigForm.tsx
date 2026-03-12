@@ -320,6 +320,12 @@ export function PlanConfigForm({
 
   // Update config when markdown changes externally
   useEffect(() => {
+    // Keep local edits stable: do not overwrite form state with external markdown
+    // while the user has unsaved local changes.
+    if (hasChanges) {
+      return;
+    }
+
     const data = parseYamlFrontmatter(markdown);
     if (data.hasFrontmatter) {
       setConfig((prev) => ({
@@ -328,7 +334,7 @@ export function PlanConfigForm({
         ...data.config,
       }));
     }
-  }, [markdown]);
+  }, [markdown, hasChanges]);
 
   // Check if form has unsaved changes
   useEffect(() => {
