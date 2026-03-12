@@ -19,6 +19,13 @@ from app.models.schemas import (
 )
 
 
+class ConversationConstants:
+    """Constants for conversation repository operations."""
+
+    MESSAGE_HISTORY_LIMIT = 8
+    MAX_ENTRIES_TO_KEEP = 50
+
+
 _AGENT_ORDER: tuple[AgentType, ...] = (
     AgentType.IDEATION,
     AgentType.PLANNING,
@@ -355,9 +362,9 @@ class ConversationRepository:
                 SELECT * FROM conversation_messages
                 WHERE conversation_id = ? AND kind = ?
                 ORDER BY created_at DESC
-                LIMIT 8
+                LIMIT ?
                 """,
-                (conversation_id, MessageKind.PROGRESS_GROUP.value),
+                (conversation_id, MessageKind.PROGRESS_GROUP.value, ConversationConstants.MESSAGE_HISTORY_LIMIT),
             ).fetchall()
 
             for row in rows:
@@ -393,7 +400,7 @@ class ConversationRepository:
                         "raw": payload,
                     }
                 )
-                metadata["entries"] = entries[-50:]
+                metadata["entries"] = entries[-ConversationConstants.MAX_ENTRIES_TO_KEEP:]
                 metadata["phase"] = phase
                 metadata["state"] = state
                 metadata["latestProgress"] = progress

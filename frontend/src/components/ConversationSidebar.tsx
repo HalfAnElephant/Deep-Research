@@ -1,23 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ConversationStatus, ConversationSummary } from "../types";
+import { STATUS_LABEL, STATUS_DESCRIPTION } from "../constants";
 import { useMenuState } from "../hooks";
 import { formatLocalTime } from "../utils/formatTime";
-
-const STATUS_LABEL: Record<ConversationStatus, string> = {
-  DRAFTING_PLAN: "草稿中",
-  PLAN_READY: "待执行",
-  RUNNING: "运行中",
-  COMPLETED: "已完成",
-  FAILED: "失败"
-};
-
-const STATUS_DESCRIPTION: Record<ConversationStatus, string> = {
-  DRAFTING_PLAN: "Agent 正在生成研究方案",
-  PLAN_READY: "方案已就绪，可以开始研究",
-  RUNNING: "研究任务正在执行中",
-  COMPLETED: "研究已完成",
-  FAILED: "执行失败，请重试"
-};
 
 /**
  * 根据会话主题生成合适的emoji

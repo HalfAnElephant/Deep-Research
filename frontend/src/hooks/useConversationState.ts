@@ -1,18 +1,11 @@
 import { useState, useCallback, useMemo } from "react";
+import { STATUS_LABEL } from "../constants";
 import type {
   ConversationDetail,
   ConversationMessage,
   ConversationStatus,
   ConversationSummary,
 } from "../types";
-
-const STATUS_LABEL: Record<ConversationStatus, string> = {
-  DRAFTING_PLAN: "草稿生成中",
-  PLAN_READY: "方案可执行",
-  RUNNING: "处理中",
-  COMPLETED: "研究完成",
-  FAILED: "执行失败",
-};
 
 interface PendingAssistantBubble {
   conversationId: string | null;

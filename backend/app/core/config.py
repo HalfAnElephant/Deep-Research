@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     google_cse_cx: str = ""
 
     # LongCat API (用于用户交互，不用于文章生成)
-    longcat_api_key: str = "ak_2Ks0iy2p02oX0V05UN3Mk7YO38R8R"
+    longcat_api_key: str = ""
     longcat_base_url: str = "https://api.longcat.chat/openai/v1"
     longcat_model: str = "LongCat-Flash-Lite"
 

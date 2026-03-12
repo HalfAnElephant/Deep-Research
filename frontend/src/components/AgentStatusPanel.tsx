@@ -1,13 +1,11 @@
 /** Agent 状态面板组件 - 显示四个智能体的工作状态 */
 
-import type { AgentState } from "../types";
+import type { AgentState, AgentType } from "../types";
 
 interface AgentStatusPanelProps {
   agents: AgentState[];
   activePhases: AgentType[];
 }
-
-export type AgentType = "IDEATION" | "PLANNING" | "WRITING" | "CHECKING";
 
 interface AgentConfig {
   label: string;

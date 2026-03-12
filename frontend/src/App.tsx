@@ -20,6 +20,7 @@ import { Dialog } from "./components/Dialog";
 import { ExportModal } from "./components/ExportModal";
 import { PlanEditorPane } from "./components/PlanEditorPane";
 import { AgentStatusPanel } from "./components/AgentStatusPanel";
+import { APP_CONFIG, STATUS_LABEL } from "./constants";
 import type {
   ConversationDetail,
   ConversationMessage,
@@ -30,12 +31,12 @@ import type {
   ProgressEvent,
 } from "./types";
 
-const FIRST_MESSAGE_LIMIT = 500;
+const FIRST_MESSAGE_LIMIT = APP_CONFIG.FIRST_MESSAGE_LIMIT;
 const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_CONVERSATION_REFRESH_MS ?? "2500");
-const LEFT_SIDEBAR_KEY = "dr:left-sidebar-visible";
-const RIGHT_SIDEBAR_KEY = "dr:right-sidebar-visible";
-const WS_BASE_BACKOFF_MS = 1200;
-const WS_MAX_RETRY = 4;
+const LEFT_SIDEBAR_KEY = APP_CONFIG.LEFT_SIDEBAR_KEY;
+const RIGHT_SIDEBAR_KEY = APP_CONFIG.RIGHT_SIDEBAR_KEY;
+const WS_BASE_BACKOFF_MS = APP_CONFIG.WS_BASE_BACKOFF_MS;
+const WS_MAX_RETRY = APP_CONFIG.WS_MAX_RETRY;
 
 type StreamStatus = "idle" | "connecting" | "connected" | "reconnecting" | "fallback";
 
@@ -44,14 +45,6 @@ const DEFAULT_CONFIG = {
   maxNodes: 8,
   searchSources: ["Web Search", "arXiv", "Semantic Scholar"],
   priority: 4
-};
-
-const STATUS_LABEL: Record<ConversationStatus, string> = {
-  DRAFTING_PLAN: "草稿生成中",
-  PLAN_READY: "方案可执行",
-  RUNNING: "处理中",
-  COMPLETED: "研究完成",
-  FAILED: "执行失败"
 };
 
 function toErrorText(err: unknown): string {

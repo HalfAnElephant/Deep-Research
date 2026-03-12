@@ -16,6 +16,9 @@ export { Tooltip, type TooltipProps } from "./Tooltip";
 export { Avatar, type AvatarProps } from "./Avatar";
 export { Dropdown, type DropdownProps, type DropdownItem } from "./Dropdown";
 
+// Icons
+export * from "./icons";
+
 // Existing Components
 export { IconButton, type IconButtonProps } from "./IconButton";
 export { EmptyState, type EmptyStateProps } from "./EmptyState";
@@ -30,3 +33,6 @@ export { PlanEditorPane, type PlanEditorPaneProps } from "./PlanEditorPane";
 export { AgentStatusPanel, type AgentStatusPanelProps } from "./AgentStatusPanel";
 export { ExportModal, type ExportModalProps } from "./ExportModal";
 export { ReportViewer, type ReportViewerProps } from "./ReportViewer";
+
+// Re-export types for backward compatibility
+export type { PlanConfig, SearchSource } from "../utils/yamlFrontmatter";

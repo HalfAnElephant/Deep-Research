@@ -1,6 +1,7 @@
 import { memo } from "react";
 import type { ConversationStatus } from "../types";
-import { PlanConfigForm, parseYamlFrontmatter, serializeYamlFrontmatter } from "./PlanConfigForm";
+import { PlanConfigForm } from "./PlanConfigForm";
+import { parseYamlFrontmatter, serializeYamlFrontmatter } from "../utils/yamlFrontmatter";
 
 interface PlanEditorPaneProps {
   markdown: string;
