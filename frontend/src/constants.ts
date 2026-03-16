@@ -43,6 +43,6 @@ export const APP_CONFIG = {
 export const DEFAULT_TASK_CONFIG = {
   maxDepth: 2,
   maxNodes: 8,
-  searchSources: ["Web Search", "arXiv", "Semantic Scholar"],
+  searchSources: ["Web Search", "arXiv", "Semantic Scholar", "OpenAlex"],
   priority: 4,
 } as const;

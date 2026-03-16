@@ -17,7 +17,7 @@ from app.core.config import settings
 from app.core.utils import now_iso
 from app.core.utils import new_id
 from app.models.schemas import Evidence, EvidenceMetadata, ExtractedData, SourceType
-from app.services.retry import retry_async
+from app.services.retry import retry_async, RetryableError
 
 logger = logging.getLogger(__name__)
 
@@ -215,6 +215,54 @@ class RetrievalService:
                         ),
                     )
                 )
+                continue
+            if source == "googlescholar":
+                provider_calls.append(
+                    (
+                        source,
+                        asyncio.create_task(
+                            self._safe_provider_call(
+                                source,
+                                self._retrieve_from_google_scholar,
+                                task_id=task_id,
+                                node_id=node_id,
+                                query=query,
+                            )
+                        ),
+                    )
+                )
+                continue
+            if source == "pubmed":
+                provider_calls.append(
+                    (
+                        source,
+                        asyncio.create_task(
+                            self._safe_provider_call(
+                                source,
+                                self._retrieve_from_pubmed,
+                                task_id=task_id,
+                                node_id=node_id,
+                                query=query,
+                            )
+                        ),
+                    )
+                )
+                continue
+            if source == "openalex":
+                provider_calls.append(
+                    (
+                        source,
+                        asyncio.create_task(
+                            self._safe_provider_call(
+                                source,
+                                self._retrieve_from_openalex,
+                                task_id=task_id,
+                                node_id=node_id,
+                                query=query,
+                            )
+                        ),
+                    )
+                )
 
         if not provider_calls and settings.tavily_api_key:
             provider_calls.append(
@@ -327,14 +375,23 @@ class RetrievalService:
             "sortBy": "relevance",
             "sortOrder": "descending",
         }
-        async with httpx.AsyncClient(timeout=20) as client:
-            resp = await retry_async(
-                lambda: client.get(
-                    "https://export.arxiv.org/api/query", params=params),
-                max_attempts=3,
-                base_delay_seconds=0.7,
-            )
+        # arXiv has strict rate limiting: 1 request per 3 seconds recommended
+        # Using longer delays and fewer attempts
+        async with httpx.AsyncClient(timeout=30) as client:
+            try:
+                resp = await retry_async(
+                    lambda: client.get(
+                        "https://export.arxiv.org/api/query", params=params),
+                    max_attempts=2,
+                    base_delay_seconds=3.0,  # arXiv recommends 3 seconds between requests
+                )
+            except RetryableError as exc:
+                logger.warning("arXiv API failed after retries: %s", exc)
+                return []
             assert isinstance(resp, httpx.Response)
+            if resp.status_code == 429:
+                logger.warning("arXiv rate limit hit (429), returning empty results")
+                return []
             resp.raise_for_status()
             payload = resp.text
 
@@ -467,6 +524,443 @@ class RetrievalService:
             )
         return evidences
 
+    async def _retrieve_from_pubmed(self, *, task_id: str, node_id: str, query: str) -> list[Evidence]:
+        """Search PubMed using NCBI E-utilities API (free, no API key required)."""
+        # Step 1: Search for PMIDs
+        search_query = self._keyword_query_for_paper_apis(query)
+        search_params = {
+            "db": "pubmed",
+            "term": search_query,
+            "retmode": "json",
+            "retmax": 5,
+            "sort": "relevance",
+        }
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            search_resp = await retry_async(
+                lambda: client.get(
+                    "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+                    params=search_params,
+                ),
+                max_attempts=3,
+                base_delay_seconds=0.5,
+            )
+            assert isinstance(search_resp, httpx.Response)
+            search_resp.raise_for_status()
+            search_data = search_resp.json()
+
+        pmids = search_data.get("esearchresult", {}).get("idlist", [])
+        if not pmids:
+            return []
+
+        # Step 2: Fetch article details using ESummary
+        summary_params = {
+            "db": "pubmed",
+            "id": ",".join(pmids),
+            "retmode": "json",
+        }
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            summary_resp = await retry_async(
+                lambda: client.get(
+                    "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi",
+                    params=summary_params,
+                ),
+                max_attempts=3,
+                base_delay_seconds=0.5,
+            )
+            assert isinstance(summary_resp, httpx.Response)
+            summary_resp.raise_for_status()
+            summary_data = summary_resp.json()
+
+        result = summary_data.get("result", {})
+        evidences: list[Evidence] = []
+
+        for idx, pmid in enumerate(pmids):
+            article = result.get(pmid, {})
+            if not article:
+                continue
+
+            title = self._normalize_text(str(article.get("title", "")))
+            # PubMed ESummary doesn't return abstract directly, use title as fallback
+            abstract = title  # We'll try to fetch abstracts in a follow-up if needed
+
+            # Extract authors
+            author_list = article.get("authors", [])
+            authors = [str(a.get("name", "")) for a in author_list if a.get("name")]
+
+            # Extract publication date
+            pub_date_parts = []
+            if article.get("pubdate"):
+                pub_date_parts.append(str(article["pubdate"]))
+            publication_date = "-".join(pub_date_parts) if pub_date_parts else now_iso()
+
+            # Build URL
+            url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
+
+            # Calculate relevance score
+            rank_score = max(0.45, round(0.9 - idx * 0.08, 3))
+
+            evidences.append(
+                Evidence(
+                    id=new_id(),
+                    taskId=task_id,
+                    nodeId=node_id,
+                    sourceType=SourceType.PAPER,
+                    url=url,
+                    content=title,
+                    metadata=EvidenceMetadata(
+                        authors=authors,
+                        publishDate=publication_date,
+                        title=title or "PubMed Article",
+                        abstract=title[:500] if title else "",
+                        impactFactor=0,
+                        isPeerReviewed=True,
+                        relevanceScore=rank_score,
+                        citationCount=0,
+                    ),
+                    score=rank_score,
+                    extractedData=ExtractedData(),
+                )
+            )
+
+        return evidences
+
+    async def _retrieve_from_openalex(self, *, task_id: str, node_id: str, query: str) -> list[Evidence]:
+        """Search OpenAlex API for scholarly works (free, no API key required).
+
+        OpenAlex API docs: https://docs.openalex.org/
+        """
+        search_query = self._keyword_query_for_paper_apis(query)
+
+        # Build OpenAlex search URL
+        # Use search filter for relevance scoring
+        encoded_query = search_query.replace(" ", "%20")
+        url = f"https://api.openalex.org/works?search={encoded_query}&per-page=5&sort=relevance_score:desc"
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await retry_async(
+                lambda: client.get(url),
+                max_attempts=3,
+                base_delay_seconds=0.5,
+            )
+            assert isinstance(resp, httpx.Response)
+            resp.raise_for_status()
+            data = resp.json()
+
+        results = data.get("results", [])
+        evidences: list[Evidence] = []
+
+        for idx, item in enumerate(results[:5]):
+            # Extract title
+            title = self._normalize_text(str(item.get("display_name") or ""))
+            if not title:
+                continue
+
+            # Extract abstract (OpenAlex stores abstract as inverted index, use title as fallback)
+            abstract = title
+            abstract_inverted = item.get("abstract_inverted_index")
+            if abstract_inverted and isinstance(abstract_inverted, dict):
+                # Reconstruct abstract from inverted index
+                word_positions = []
+                for word, positions in abstract_inverted.items():
+                    for pos in positions:
+                        word_positions.append((pos, word))
+                if word_positions:
+                    word_positions.sort(key=lambda x: x[0])
+                    abstract = self._normalize_text(" ".join(word for _, word in word_positions))
+
+            # Extract authors
+            authors = []
+            authorships = item.get("authorships", [])
+            for auth in authorships:
+                author_info = auth.get("author", {})
+                name = author_info.get("display_name", "")
+                if name:
+                    authors.append(self._normalize_text(name))
+
+            # Extract publication date
+            pub_date = item.get("publication_date", "")
+            if pub_date:
+                # Ensure ISO format
+                if "T" not in pub_date:
+                    pub_date = f"{pub_date}T00:00:00Z"
+            else:
+                pub_date = now_iso()
+
+            # Extract OpenAlex ID as URL
+            openalex_id = item.get("id", "")
+            if openalex_id:
+                url = openalex_id
+            else:
+                # Fallback to search URL
+                url = f"https://openalex.org/works/{item.get('ids', {}).get('doi', '')}"
+
+            # Get DOI if available for better linking
+            doi = item.get("doi", "")
+            if doi:
+                url = doi
+
+            # Extract citation count
+            cited_by_count = int(item.get("cited_by_count") or 0)
+
+            # Calculate relevance score with citation bonus
+            rank_score = max(0.45, round(0.9 - idx * 0.08, 3))
+            if cited_by_count:
+                citation_bonus = min(cited_by_count, 500) / 1500
+                rank_score = min(0.95, rank_score + citation_bonus)
+
+            # Extract concepts/topics for relevance
+            concepts = item.get("concepts", [])
+            concept_names = [c.get("display_name", "") for c in concepts[:3]]
+
+            # Determine if peer-reviewed
+            is_peer_reviewed = item.get("is_retracted") is False and item.get("type") in ["article", "review", "preprint"]
+
+            evidences.append(
+                Evidence(
+                    id=new_id(),
+                    taskId=task_id,
+                    nodeId=node_id,
+                    sourceType=SourceType.PAPER,
+                    url=url,
+                    content=abstract or title,
+                    metadata=EvidenceMetadata(
+                        authors=authors,
+                        publishDate=pub_date,
+                        title=title,
+                        abstract=(abstract or title)[:500],
+                        impactFactor=0,
+                        isPeerReviewed=is_peer_reviewed,
+                        relevanceScore=rank_score,
+                        citationCount=cited_by_count,
+                    ),
+                    score=rank_score,
+                    extractedData=ExtractedData(
+                        numericalValues=[
+                            {
+                                "value": float(cited_by_count),
+                                "unit": "citations",
+                                "context": "openalex_cited_by_count",
+                            }
+                        ] if cited_by_count else [],
+                    ),
+                )
+            )
+
+        return evidences
+
+    async def _retrieve_from_google_scholar(self, *, task_id: str, node_id: str, query: str) -> list[Evidence]:
+        """Search Google Scholar using SerpAPI or Serper if configured, otherwise return empty."""
+        # Prefer SerpAPI if available, then Serper
+        if settings.serpapi_api_key:
+            return await self._retrieve_from_serpapi(task_id, node_id, query)
+        if settings.serper_api_key:
+            return await self._retrieve_from_serper(task_id, node_id, query)
+
+        # No Google Scholar API configured
+        logger.warning("Google Scholar search requested but no API key configured (SerpAPI or Serper)")
+        return []
+
+    async def _retrieve_from_serpapi(self, task_id: str, node_id: str, query: str) -> list[Evidence]:
+        """Search using SerpAPI Google Scholar endpoint."""
+        params = {
+            "api_key": settings.serpapi_api_key,
+            "engine": "google_scholar",
+            "q": query,
+            "num": 5,
+        }
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await retry_async(
+                lambda: client.get(
+                    "https://serpapi.com/search",
+                    params=params,
+                ),
+                max_attempts=2,
+                base_delay_seconds=1.0,
+            )
+            assert isinstance(resp, httpx.Response)
+            resp.raise_for_status()
+            data = resp.json()
+
+        results = data.get("organic_results", [])
+        evidences: list[Evidence] = []
+
+        for idx, item in enumerate(results[:5]):
+            title = self._normalize_text(str(item.get("title", "")))
+            snippet = self._normalize_text(str(item.get("snippet", "")))
+            if not title and not snippet:
+                continue
+
+            # Extract publication info
+            publication_info = item.get("publication_info", {})
+            authors = []
+            if publication_info.get("authors"):
+                for author in publication_info["authors"]:
+                    name = author.get("name", "")
+                    if name:
+                        authors.append(name)
+
+            # Extract year
+            summary = publication_info.get("summary", "")
+            year_match = re.search(r"\b(19\d{2}|20\d{2})\b", summary)
+            year = int(year_match.group(1)) if year_match else None
+            publication_date = f"{year}-01-01T00:00:00Z" if year else now_iso()
+
+            # Get URL - prefer PDF link, then result link
+            url = ""
+            if item.get("resources"):
+                for resource in item["resources"]:
+                    if resource.get("file_format") == "PDF":
+                        url = resource.get("link", "")
+                        break
+            if not url:
+                url = item.get("link", "")
+            if not url and item.get("displayed_link"):
+                # Extract URL from displayed_link if it's a proper URL
+                displayed = item["displayed_link"]
+                if displayed.startswith("http"):
+                    url = displayed
+
+            if not url:
+                url = f"https://scholar.google.com/scholar?q={query.replace(' ', '+')}"
+
+            # Calculate score
+            rank_score = max(0.45, round(0.88 - idx * 0.08, 3))
+            cited_by = item.get("inline_links", {}).get("cited_by", {}).get("total", 0)
+            if cited_by:
+                citation_bonus = min(int(cited_by), 500) / 1500
+                rank_score = min(0.95, rank_score + citation_bonus)
+
+            evidences.append(
+                Evidence(
+                    id=new_id(),
+                    taskId=task_id,
+                    nodeId=node_id,
+                    sourceType=SourceType.PAPER,
+                    url=url,
+                    content=snippet or title,
+                    metadata=EvidenceMetadata(
+                        authors=authors,
+                        publishDate=publication_date,
+                        title=title or "Google Scholar Result",
+                        abstract=(snippet or title)[:500],
+                        impactFactor=0,
+                        isPeerReviewed=False,
+                        relevanceScore=rank_score,
+                        citationCount=int(cited_by) if cited_by else 0,
+                    ),
+                    score=rank_score,
+                    extractedData=ExtractedData(
+                        numericalValues=[
+                            {
+                                "value": int(cited_by) if cited_by else 0,
+                                "unit": "citations",
+                                "context": "google_scholar_cited_by",
+                            }
+                        ]
+                    ) if cited_by else ExtractedData(),
+                )
+            )
+
+        return evidences
+
+    async def _retrieve_from_serper(self, task_id: str, node_id: str, query: str) -> list[Evidence]:
+        """Search using Serper Google Scholar endpoint."""
+        headers = {
+            "X-API-KEY": settings.serper_api_key,
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "q": query,
+            "num": 5,
+        }
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await retry_async(
+                lambda: client.post(
+                    "https://google.serper.dev/scholar",
+                    headers=headers,
+                    json=payload,
+                ),
+                max_attempts=2,
+                base_delay_seconds=1.0,
+            )
+            assert isinstance(resp, httpx.Response)
+            resp.raise_for_status()
+            data = resp.json()
+
+        results = data.get("organic", [])
+        evidences: list[Evidence] = []
+
+        for idx, item in enumerate(results[:5]):
+            title = self._normalize_text(str(item.get("title", "")))
+            snippet = self._normalize_text(str(item.get("snippet", "")))
+            if not title and not snippet:
+                continue
+
+            # Extract authors and year from citation info
+            authors = []
+            year = None
+            publication_info = item.get("publicationInfo", "")
+            if publication_info:
+                # Parse "Author1, Author2 - Year - Journal" format
+                parts = publication_info.split(" - ")
+                if len(parts) >= 2:
+                    author_part = parts[0]
+                    authors = [a.strip() for a in author_part.split(",") if a.strip()]
+                    year_match = re.search(r"\b(19\d{2}|20\d{2})\b", parts[1])
+                    if year_match:
+                        year = int(year_match.group(1))
+
+            publication_date = f"{year}-01-01T00:00:00Z" if year else now_iso()
+
+            # Get URL
+            url = item.get("link", "")
+            if not url:
+                url = f"https://scholar.google.com/scholar?q={query.replace(' ', '+')}"
+
+            # Calculate score
+            rank_score = max(0.45, round(0.88 - idx * 0.08, 3))
+            cited_by = item.get("citedBy", 0)
+            if cited_by:
+                citation_bonus = min(int(cited_by), 500) / 1500
+                rank_score = min(0.95, rank_score + citation_bonus)
+
+            evidences.append(
+                Evidence(
+                    id=new_id(),
+                    taskId=task_id,
+                    nodeId=node_id,
+                    sourceType=SourceType.PAPER,
+                    url=url,
+                    content=snippet or title,
+                    metadata=EvidenceMetadata(
+                        authors=authors,
+                        publishDate=publication_date,
+                        title=title or "Google Scholar Result",
+                        abstract=(snippet or title)[:500],
+                        impactFactor=0,
+                        isPeerReviewed=False,
+                        relevanceScore=rank_score,
+                        citationCount=int(cited_by) if cited_by else 0,
+                    ),
+                    score=rank_score,
+                    extractedData=ExtractedData(
+                        numericalValues=[
+                            {
+                                "value": int(cited_by) if cited_by else 0,
+                                "unit": "citations",
+                                "context": "google_scholar_cited_by",
+                            }
+                        ]
+                    ) if cited_by else ExtractedData(),
+                )
+            )
+
+        return evidences
+
     @classmethod
     def _normalize_source_name(cls, source: str) -> str:
         lowered = source.strip().lower().replace(
@@ -477,6 +971,12 @@ class RetrievalService:
             return "semanticscholar"
         if lowered in {"tavily", "websearch", "web", "tavilysearch"}:
             return "tavily"
+        if lowered in {"googlescholar", "scholar", "google"}:
+            return "googlescholar"
+        if lowered in {"pubmed", "ncbi", "pubmedncbi"}:
+            return "pubmed"
+        if lowered in {"openalex"}:
+            return "openalex"
         return lowered
 
     @classmethod
