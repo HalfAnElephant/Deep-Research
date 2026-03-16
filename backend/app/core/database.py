@@ -55,8 +55,13 @@ CREATE TABLE IF NOT EXISTS evidences (
   metadata_json TEXT NOT NULL,
   score REAL NOT NULL,
   extracted_data_json TEXT NOT NULL,
+  favorited INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_evidences_task_id ON evidences(task_id);
+CREATE INDEX IF NOT EXISTS idx_evidences_favorited ON evidences(favorited);
+CREATE INDEX IF NOT EXISTS idx_evidences_source_type ON evidences(source_type);
 
 CREATE TABLE IF NOT EXISTS conflicts (
   conflict_id TEXT PRIMARY KEY,

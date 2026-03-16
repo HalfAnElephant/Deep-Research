@@ -295,6 +295,7 @@ class Evidence(BaseModel):
     metadata: EvidenceMetadata
     score: float = Field(ge=0, le=1)
     extractedData: ExtractedData = Field(default_factory=ExtractedData)
+    favorited: bool = Field(default=False)
 
 
 class EvidenceListResponse(BaseModel):

@@ -18,6 +18,57 @@ interface RequestOptions {
   timeoutMs?: number;
 }
 
+// Library types
+export interface LibraryItem extends Evidence {
+  favorited: boolean;
+}
+
+export interface LibraryResponse {
+  items: LibraryItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface LibraryFilters {
+  page?: number;
+  page_size?: number;
+  source_type?: string;
+  search?: string;
+  date_from?: string;
+  date_to?: string;
+  min_score?: number;
+  favorited_only?: boolean;
+  sort_by?: string;
+  sort_order?: string;
+}
+
+export interface TrendAnalysis {
+  timeRange: { from: string; to: string };
+  timeSeries: Array<{ date: string; count: number }>;
+  sourceDistribution: Record<string, number>;
+  scoreDistribution: Record<string, number>;
+  totalItems: number;
+  favoritedItems: number;
+}
+
+export interface KeywordAnalysis {
+  totalDocuments: number;
+  analyzedDocuments: number;
+  topKeywords: Array<{ word: string; count: number }>;
+  topPhrases: Array<{ phrase: string; count: number }>;
+  vocabularySize: number;
+}
+
+export interface LibrarySummary {
+  totalEvidences: number;
+  favoritedEvidences: number;
+  sourceDistribution: Record<string, number>;
+  scoreDistribution: Record<string, number>;
+  lastUpdated: string;
+}
+
 function parseErrorMessage(rawText: string, statusCode: number): string {
   const text = rawText.trim();
   if (!text) return `Request failed: ${statusCode}`;
@@ -284,4 +335,42 @@ export function connectProgressWs(taskId: string, callbacks: WebSocketCallbacks 
     }
   });
   return ws;
+}
+
+// Library API functions
+export async function getLibraryItems(filters?: LibraryFilters): Promise<LibraryResponse> {
+  const params = new URLSearchParams();
+  if (filters) {
+    if (filters.page) params.append("page", String(filters.page));
+    if (filters.page_size) params.append("page_size", String(filters.page_size));
+    if (filters.source_type) params.append("sourceType", filters.source_type);
+    if (filters.search) params.append("search", filters.search);
+    if (filters.date_from) params.append("dateFrom", filters.date_from);
+    if (filters.date_to) params.append("dateTo", filters.date_to);
+    if (filters.min_score !== undefined) params.append("minScore", String(filters.min_score));
+    if (filters.favorited_only) params.append("favoritedOnly", "true");
+    if (filters.sort_by) params.append("sortBy", filters.sort_by);
+    if (filters.sort_order) params.append("sortOrder", filters.sort_order);
+  }
+  const queryString = params.toString();
+  const url = `${API_BASE}/api/v1/library${queryString ? `?${queryString}` : ""}`;
+  return json<LibraryResponse>(url);
+}
+
+export async function toggleFavorite(evidenceId: string): Promise<LibraryItem> {
+  return json<LibraryItem>(`${API_BASE}/api/v1/library/${evidenceId}/favorite`, {
+    method: "POST",
+  });
+}
+
+export async function getLibraryTrends(days: number = 90): Promise<TrendAnalysis> {
+  return json<TrendAnalysis>(`${API_BASE}/api/v1/library/trends?days=${days}`);
+}
+
+export async function getLibraryKeywords(topN: number = 50): Promise<KeywordAnalysis> {
+  return json<KeywordAnalysis>(`${API_BASE}/api/v1/library/keywords?top_n=${topN}`);
+}
+
+export async function getLibrarySummary(): Promise<LibrarySummary> {
+  return json<LibrarySummary>(`${API_BASE}/api/v1/library/summary`);
 }

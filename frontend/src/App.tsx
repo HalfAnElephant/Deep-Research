@@ -13,21 +13,22 @@ import {
   runConversation,
   updateConversationPlan
 } from "./api";
+import { AgentStatusPanel } from "./components/AgentStatusPanel";
 import { ChatTimeline } from "./components/ChatTimeline";
 import { Composer } from "./components/Composer";
 import { ConversationSidebar } from "./components/ConversationSidebar";
 import { Dialog } from "./components/Dialog";
 import { ExportModal } from "./components/ExportModal";
+import { LibraryPage } from "./components/LibraryPage";
 import { PlanEditorPane } from "./components/PlanEditorPane";
-import { AgentStatusPanel } from "./components/AgentStatusPanel";
 import { APP_CONFIG, STATUS_LABEL } from "./constants";
 import type {
+  AgentState,
+  AgentType,
   ConversationDetail,
   ConversationMessage,
   ConversationStatus,
   ConversationSummary,
-  AgentState,
-  AgentType,
   ProgressEvent,
 } from "./types";
 
@@ -224,6 +225,7 @@ export function App() {
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
   const [lastProgressEventAt, setLastProgressEventAt] = useState<string | null>(null);
   const [streamClock, setStreamClock] = useState(() => Date.now());
+  const [showLibrary, setShowLibrary] = useState(false);
 
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const progressWsRef = useRef<WebSocket | null>(null);
@@ -1061,6 +1063,14 @@ export function App() {
             >
               草稿
             </button>
+            <button
+              className="ghost"
+              type="button"
+              onClick={() => setShowLibrary(true)}
+              title="打开文献库"
+            >
+              文献库
+            </button>
           </div>
           <div className="chat-title">
             <h1>{activeSummary?.topic ?? (draftMode ? "新研究" : "深度研究工作台")}</h1>
@@ -1219,6 +1229,12 @@ export function App() {
           conversationId={activeConversationId}
           onClose={() => setShowExportModal(false)}
         />
+      )}
+
+      {showLibrary && (
+        <div className="library-overlay">
+          <LibraryPage onClose={() => setShowLibrary(false)} />
+        </div>
       )}
 
       {error && <div className="error-banner">{error}</div>}
