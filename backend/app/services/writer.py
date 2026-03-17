@@ -56,7 +56,7 @@ class WriterService:
         r"|(\[locked\])"
     )
     UNICODE_ESCAPE_PATTERN = re.compile(r"\\u([0-9a-fA-F]{4})")
-    ARTICLE_TITLE_BLACKLIST = re.compile(r"(?i)(深度研究方案|研究计划|执行步骤|风险与边界|交付标准)")
+    ARTICLE_TITLE_BLACKLIST = re.compile(r"(?i)(研究计划|执行步骤|风险与边界|交付标准)")
     GARBLED_PATTERNS = (
         re.compile(r"\\u[0-9a-fA-F]{4}"),
         re.compile(r"publishsource|srsltid|download\?etag=", re.IGNORECASE),
@@ -357,7 +357,7 @@ class WriterService:
             "请为以下研究文章拟定一个自然、具体、像人类学者会使用的中文标题。\n"
             "要求：\n"
             "1. 标题必须紧扣研究主题和正文内容，不得虚构世界观或戏谑化表达。\n"
-            "2. 不得出现“深度研究方案”“研究计划”“执行步骤”等计划性措辞。\n"
+            “2. 不得出现”研究计划””执行步骤”等计划性措辞。\n”
             "3. 控制在 18 到 36 个中文字符，必要时可带副标题。\n"
             "4. 只输出标题本身，不要解释。\n\n"
             f"原始主题：{task_title}\n"

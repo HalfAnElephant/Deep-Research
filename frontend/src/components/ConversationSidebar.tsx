@@ -412,7 +412,7 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
 
       <div className="sidebar-head">
         <div className="sidebar-head-main">
-          <h2>Deep Research</h2>
+          <h2>Research Flow</h2>
           <p>多会话研究空间</p>
         </div>
         {showMobileClose && (

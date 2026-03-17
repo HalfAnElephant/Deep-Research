@@ -50,7 +50,7 @@ export function EmptyState(props: EmptyStateProps) {
         </div>
 
         <div className="empty-state-content">
-          <h2 className="empty-state-title">欢迎使用深度研究工作台</h2>
+          <h2 className="empty-state-title">欢迎使用 Research Flow</h2>
           <p className="empty-state-description">
             输入研究主题，AI 将为您生成详细的研究方案，并进行深度分析和报告生成。
           </p>

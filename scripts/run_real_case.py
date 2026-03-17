@@ -17,7 +17,7 @@ from app.main import app
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run one real Deep Research case and generate a report.")
+    parser = argparse.ArgumentParser(description="Run one real Research Flow case and generate a report.")
     parser.add_argument(
         "--title",
         default="2026年AI Agent在软件工程中的应用现状与挑战",
