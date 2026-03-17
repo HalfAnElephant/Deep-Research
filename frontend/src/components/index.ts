@@ -36,3 +36,7 @@ export { ReportViewer, type ReportViewerProps } from "./ReportViewer";
 
 // Re-export types for backward compatibility
 export type { PlanConfig, SearchSource } from "../utils/yamlFrontmatter";
+
+// DAG Editor Components
+export { DAGEditor, type DAGEditorProps } from "./DAGEditor";
+export { DAGEditorModal, type DAGEditorModalProps } from "./DAGEditorModal";
