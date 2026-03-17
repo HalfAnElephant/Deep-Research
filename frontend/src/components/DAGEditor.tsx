@@ -71,6 +71,18 @@ export function DAGEditor({
   const [edgeCreationStep, setEdgeCreationStep] = useState<EdgeCreationStep>("idle");
   const [edgeSource, setEdgeSource] = useState<string | null>(null);
 
+  // Refs for edge creation state to avoid effect re-runs
+  const edgeCreationStepRef = useRef(edgeCreationStep);
+  const edgeSourceRef = useRef(edgeSource);
+
+  useEffect(() => {
+    edgeCreationStepRef.current = edgeCreationStep;
+  }, [edgeCreationStep]);
+
+  useEffect(() => {
+    edgeSourceRef.current = edgeSource;
+  }, [edgeSource]);
+
   // Stable callback refs to avoid effect re-runs
   const onNodeSelectRef = useRef(onNodeSelect);
   const onEdgeAddRef = useRef(onEdgeAdd);
@@ -177,17 +189,20 @@ export function DAGEditor({
     cy.on("tap", "node", (evt) => {
       const node = evt.target;
 
-      // Handle edge creation flow
-      if (edgeCreationStep === "source") {
+      // Handle edge creation flow - use refs to get current state
+      const currentStep = edgeCreationStepRef.current;
+      const currentSource = edgeSourceRef.current;
+
+      if (currentStep === "source") {
         setEdgeSource(node.id());
         setEdgeCreationStep("target");
         return;
       }
 
-      if (edgeCreationStep === "target" && edgeSource) {
+      if (currentStep === "target" && currentSource) {
         // Prevent self-loops
-        if (edgeSource !== node.id()) {
-          onEdgeAddRef.current?.(edgeSource, node.id());
+        if (currentSource !== node.id()) {
+          onEdgeAddRef.current?.(currentSource, node.id());
         }
         setEdgeCreationStep("idle");
         setEdgeSource(null);
@@ -201,8 +216,8 @@ export function DAGEditor({
     // Handle canvas click (deselect)
     cy.on("tap", (evt) => {
       if (evt.target === cy) {
-        // Cancel edge creation if clicking on canvas
-        if (edgeCreationStep !== "idle") {
+        // Cancel edge creation if clicking on canvas - use ref
+        if (edgeCreationStepRef.current !== "idle") {
           setEdgeCreationStep("idle");
           setEdgeSource(null);
         }
@@ -218,7 +233,7 @@ export function DAGEditor({
     return () => {
       cy.destroy();
     };
-  }, [mode, edgeCreationStep, edgeSource]);
+  }, [mode]);
 
   /**
    * Update elements when nodes/edges change
