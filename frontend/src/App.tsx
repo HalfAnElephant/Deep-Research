@@ -21,7 +21,6 @@ import { Dialog } from "./components/Dialog";
 import { ExportModal } from "./components/ExportModal";
 import { LibraryPage } from "./components/LibraryPage";
 import { PlanEditorPane } from "./components/PlanEditorPane";
-import { WorkflowNavigator } from "./components/WorkflowNavigator";
 import { APP_CONFIG, STATUS_LABEL } from "./constants";
 import type {
   AgentState,
@@ -1089,19 +1088,7 @@ export function App() {
           </div>
         </header>
 
-        <WorkflowNavigator
-          status={activeStatus}
-          currentPhase={currentPhase}
-          onStepClick={(stepId) => {
-            // Navigate to different views based on step
-            if (stepId === "planning") {
-              setRightSidebarVisible(true);
-            } else if (stepId === "search") {
-              setShowLibrary(true);
-            }
-          }}
-        />
-
+        
         {activeStatus === "RUNNING" && effectiveAgentStates.length > 0 && (
           <AgentStatusPanel
             agents={effectiveAgentStates}
