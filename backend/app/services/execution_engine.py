@@ -811,7 +811,10 @@ class ExecutionEngine:
         except Exception as exc:  # noqa: BLE001
             self.repository.update_status(
                 task_id, TaskStatus.FAILED, last_error=str(exc))
-            await self._emit_event(task_id, "ERROR", {"taskId": task_id, "error": f"Unhandled error: {exc}"})
+            error_detail = str(exc)
+            if "'sqlite3.Row' object has no attribute 'get'" in error_detail:
+                error_detail = "数据库查询格式错误，请联系开发者修复"
+            await self._emit_event(task_id, "ERROR", {"taskId": task_id, "error": error_detail})
         finally:
             heartbeat_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

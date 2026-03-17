@@ -187,6 +187,13 @@ class EvidenceRepository:
 
     @staticmethod
     def _row_to_evidence(row) -> Evidence:
+        # Handle favorited column - sqlite3.Row doesn't have .get() method
+        favorited = False
+        try:
+            favorited = bool(row["favorited"])
+        except (KeyError, IndexError):
+            pass
+
         return Evidence(
             id=row["evidence_id"],
             taskId=row["task_id"],
@@ -197,5 +204,5 @@ class EvidenceRepository:
             metadata=EvidenceMetadata.model_validate_json(row["metadata_json"]),
             score=float(row["score"]),
             extractedData=ExtractedData.model_validate(json.loads(row["extracted_data_json"])),
-            favorited=bool(row.get("favorited", 0)),
+            favorited=favorited,
         )
