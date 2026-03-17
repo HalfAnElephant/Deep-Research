@@ -5,11 +5,14 @@ import {
   useMessageTimeline,
   isPlanMessageKind,
   roleLabel,
-  type ProgressBundle
+  type ProgressBundle,
+  type DagNodeLiveState,
 } from "../hooks";
 import { formatLocalTime } from "../utils/formatTime";
 import { ReportViewer } from "./ReportViewer";
 import { ProgressBar } from "./ProgressIndicator";
+import { DAGEditorModal } from "./DAGEditorModal";
+import type { DAGGraph, TaskNode, DAGEdge } from "../hooks/useDAGEditor";
 
 interface ChatTimelineProps {
   messages: ConversationMessage[];
@@ -55,6 +58,34 @@ export function ChatTimeline(props: ChatTimelineProps) {
   const [expandedReport, setExpandedReport] = useState<Record<string, boolean>>({});
   const [closedReport, setClosedReport] = useState<Record<string, boolean>>({});
   const [showHistoryRounds, setShowHistoryRounds] = useState(true);
+
+  // DAG Editor modal state
+  const [isDAGEditorOpen, setIsDAGEditorOpen] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+
+  // DAG save handler
+  const handleSaveDAG = async (dag: DAGGraph) => {
+    if (!editingTaskId) return;
+
+    try {
+      const response = await fetch(`/api/v1/tasks/${editingTaskId}/dag`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dag),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save DAG");
+      }
+
+      // Close modal
+      setIsDAGEditorOpen(false);
+      setEditingTaskId(null);
+    } catch (error) {
+      console.error("Failed to save DAG:", error);
+      // TODO: Show error to user via toast or alert
+    }
+  };
 
   // Use the custom hook for timeline calculations
   const {
@@ -281,6 +312,18 @@ export function ChatTimeline(props: ChatTimelineProps) {
                     >
                       打开草稿抽屉
                     </button>
+                    {isLatestPlan && currentTaskId && latestDagNodes.length > 0 && (
+                      <button
+                        className="ghost"
+                        type="button"
+                        onClick={() => {
+                          setEditingTaskId(currentTaskId);
+                          setIsDAGEditorOpen(true);
+                        }}
+                      >
+                        Edit DAG
+                      </button>
+                    )}
                     {isLatestPlan && (
                       <div className="plan-actions">
                         <button
@@ -361,6 +404,20 @@ export function ChatTimeline(props: ChatTimelineProps) {
           </div>
         </article>
       )}
+
+      {/* DAG Editor Modal */}
+      {isDAGEditorOpen && editingTaskId && (
+        <DAGEditorModal
+          taskId={editingTaskId}
+          dag={convertToDAGGraph(latestDagNodes, editingTaskId)}
+          isOpen={isDAGEditorOpen}
+          onClose={() => {
+            setIsDAGEditorOpen(false);
+            setEditingTaskId(null);
+          }}
+          onSave={handleSaveDAG}
+        />
+      )}
     </section>
   );
 }
@@ -424,4 +481,36 @@ function streamStatusLabel(status: "idle" | "connecting" | "connected" | "reconn
     default:
       return "未连接";
   }
+}
+
+/**
+ * Convert DagNodeLiveState array to DAGGraph format for the editor.
+ * Derives edges from node dependencies.
+ */
+function convertToDAGGraph(nodes: DagNodeLiveState[], taskId: string): DAGGraph {
+  const taskNodes: TaskNode[] = nodes.map((node) => ({
+    nodeId: node.nodeId,
+    taskId: taskId,
+    title: node.title,
+    status: node.status as TaskNode["status"],
+    priority: 0,
+    searchDepth: node.searchDepth,
+    infoGainScore: 0,
+    elapsedMs: node.elapsedMs,
+    retryCount: node.retryCount,
+  }));
+
+  // Derive edges from dependencies
+  const edges: DAGEdge[] = [];
+  for (const node of nodes) {
+    for (const depId of node.dependencies) {
+      edges.push({
+        id: `edge-${depId}-${node.nodeId}`,
+        source: depId,
+        target: node.nodeId,
+      });
+    }
+  }
+
+  return { nodes: taskNodes, edges };
 }

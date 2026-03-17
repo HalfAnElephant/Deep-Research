@@ -12,6 +12,7 @@ export {
   roleLabel,
   type ProgressEntry,
   type ProgressBundle,
+  type DagNodeLiveState,
   type UseMessageTimelineOptions,
   type UseMessageTimelineResult,
 } from "./useMessageTimeline";
