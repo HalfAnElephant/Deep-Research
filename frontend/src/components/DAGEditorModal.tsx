@@ -1,5 +1,3 @@
-import { useState } from "react";
-import { DAGEditor } from "./DAGEditor";
 import {
   useDAGEditor,
   type DAGGraph,
@@ -7,6 +5,7 @@ import {
   type DAGEditorMode,
   type TaskNodeStatus,
 } from "../hooks/useDAGEditor";
+import { DAGEditor } from "./DAGEditor";
 
 export interface DAGEditorModalProps {
   taskId: string;
@@ -128,8 +127,6 @@ export function DAGEditorModal({
   onClose,
   onSave,
 }: DAGEditorModalProps) {
-  const [mode, setMode] = useState<DAGEditorMode>("simple");
-
   const {
     state,
     undo,
@@ -142,8 +139,12 @@ export function DAGEditorModal({
     selectNode,
     addEdge,
     deleteEdge,
+    setMode,
     exportDag,
   } = useDAGEditor(dag);
+
+  // Use hook's mode state instead of local state
+  const mode = state.mode;
 
   if (!isOpen) return null;
 
