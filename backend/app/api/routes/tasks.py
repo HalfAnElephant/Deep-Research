@@ -5,17 +5,20 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 
+from app.api.schemas.dag import DAGUpdateRequest, DAGValidationResponse
 from app.core.utils import new_id
 from app.deps import conflict_repository, execution_engine, progress_hub, task_repository
 from app.models.schemas import (
     ConflictRecord,
     CreateTaskRequest,
+    DAGGraph,
     DeleteResponse,
     StateResponse,
     TaskResponse,
     TaskStatus,
     UpdateTaskRequest,
 )
+from app.services.dag_validator import DAGValidator
 
 router = APIRouter(prefix="/api/v1")
 
@@ -68,6 +71,41 @@ def get_task_dag(task_id: str) -> dict:
         return task_repository.get_dag(task_id, allow_empty=True).model_dump(by_alias=True)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+
+
+@router.put("/tasks/{task_id}/dag", response_model=DAGValidationResponse)
+def update_task_dag(task_id: str, request: DAGUpdateRequest) -> DAGValidationResponse:
+    """Update the DAG for a task. Only allowed when task status is PLANNING."""
+    try:
+        task = task_repository.get_task(task_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+
+    # Validate task status - DAG can only be updated during PLANNING phase
+    if task.status != TaskStatus.PLANNING:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot update DAG: task status is {task.status.value}, expected PLANNING",
+        )
+
+    # Convert nodes and edges to dictionaries for validation
+    nodes = [n.model_dump(by_alias=True) for n in request.nodes]
+    edges = [e.model_dump(by_alias=True) for e in request.edges]
+
+    # Validate DAG structure
+    errors = DAGValidator.validate(nodes, edges)
+
+    if errors:
+        return DAGValidationResponse(valid=False, errors=errors)
+
+    # Update DAG in repository
+    dag = DAGGraph(nodes=request.nodes, edges=request.edges)
+    task_repository.save_dag(task_id, dag)
+
+    # Compute execution order for valid DAG
+    execution_order = DAGValidator.compute_execution_order(nodes, edges)
+
+    return DAGValidationResponse(valid=True, executionOrder=execution_order)
 
 
 @router.get("/tasks/{task_id}/conflicts", response_model=list[ConflictRecord])
