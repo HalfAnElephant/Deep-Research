@@ -1,0 +1,501 @@
+/**
+ * ============================================================================
+ * DAG EDITOR COMPONENT STYLES
+ * ============================================================================
+ *
+ * Styles for the DAG (Directed Acyclic Graph) editor component including:
+ * - Full-screen modal overlay
+ * - Canvas and Cytoscape.js visualization
+ * - Node and edge styling
+ * - Mode toggle controls
+ * - Node detail panel
+ * - Toolbar buttons
+ *
+ * TABLE OF CONTENTS
+ * -----------------
+ * 1. DAG Editor Modal (Full-screen overlay)
+ * 2. DAG Editor Canvas
+ * 3. Node Styling
+ * 4. Edge Styling
+ * 5. Mode Toggle Buttons
+ * 6. Node Detail Panel
+ * 7. Toolbar Buttons
+ * 8. Reduced Motion Support
+ *
+ * ============================================================================
+ */
+
+/* ============================================================================
+ * 1. DAG EDITOR MODAL (Full-screen overlay)
+ * ============================================================================
+ *
+ * Full-screen modal that contains the DAG editor interface.
+ */
+
+.dag-editor-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  animation: dialog-fade-in var(--duration-normal) var(--ease-out);
+}
+
+.dag-editor-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+}
+
+.dag-editor-modal-title {
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
+  color: var(--ink);
+  margin: 0;
+}
+
+.dag-editor-modal-toolbar {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.dag-editor-modal-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ============================================================================
+ * 2. DAG EDITOR CANVAS
+ * ============================================================================
+ *
+ * Container for the Cytoscape.js graph visualization.
+ */
+
+.dag-editor-canvas {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-soft);
+}
+
+.dag-editor-canvas .cy {
+  width: 100%;
+  height: 100%;
+}
+
+/* Canvas background grid pattern */
+.dag-editor-canvas::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle, var(--line) 1px, transparent 1px);
+  background-size: 20px 20px;
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+/* ============================================================================
+ * 3. NODE STYLING
+ * ============================================================================
+ *
+ * Color coding for different node statuses using CSS custom properties.
+ */
+
+.dag-node-status-pending {
+  --node-color: var(--primary);
+}
+
+.dag-node-status-running {
+  --node-color: var(--warning);
+}
+
+.dag-node-status-completed {
+  --node-color: var(--success);
+}
+
+.dag-node-status-failed {
+  --node-color: var(--danger);
+}
+
+.dag-node-status-pruned {
+  --node-color: var(--muted);
+}
+
+/* Node base styles (applied by Cytoscape.js) */
+.dag-editor-canvas .cy-node {
+  background: var(--node-color);
+  border-color: var(--node-color);
+  border-width: 2px;
+  transition: all var(--transition-normal);
+}
+
+.dag-editor-canvas .cy-node.selected {
+  border-color: var(--ink);
+  border-width: 3px;
+  box-shadow: 0 0 0 4px var(--node-color), var(--shadow-md);
+}
+
+.dag-editor-canvas .cy-node:active {
+  box-shadow: 0 0 0 2px var(--node-color);
+}
+
+/* Node label styles */
+.dag-editor-canvas .cy-node-label {
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  text-shadow: none;
+}
+
+/* Running node animation */
+.dag-node-status-running .cy-node {
+  animation: node-pulse 2s ease-in-out infinite;
+}
+
+@keyframes node-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(245, 158, 11, 0);
+  }
+}
+
+/* ============================================================================
+ * 4. EDGE STYLING
+ * ============================================================================
+ *
+ * Styles for connections between nodes.
+ */
+
+.dag-editor-canvas .cy-edge {
+  line-color: var(--line);
+  line-width: 2px;
+  curve-style: bezier;
+  target-arrow-shape: triangle;
+  target-arrow-color: var(--line);
+  transition: all var(--transition-normal);
+}
+
+.dag-editor-canvas .cy-edge.selected {
+  line-color: var(--primary);
+  line-width: 3px;
+  target-arrow-color: var(--primary);
+}
+
+.dag-editor-canvas .cy-edge:active {
+  line-color: var(--primary-hover);
+}
+
+/* Edge label styles */
+.dag-editor-canvas .cy-edge-label {
+  color: var(--ink-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  background: var(--card);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  text-shadow: none;
+}
+
+/* ============================================================================
+ * 5. MODE TOGGLE BUTTONS
+ * ============================================================================
+ *
+ * Toggle between different interaction modes (view, edit, layout).
+ */
+
+.dag-mode-toggle {
+  display: flex;
+  gap: var(--space-1);
+  background: var(--bg-soft);
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+}
+
+.dag-mode-toggle-btn {
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: transparent;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.dag-mode-toggle-btn:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  color: var(--ink);
+  transform: translateY(-1px);
+}
+
+.dag-mode-toggle-btn.active {
+  background: var(--card);
+  color: var(--primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.dag-mode-toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dag-mode-toggle-btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--card),
+    0 0 0 4px var(--primary);
+}
+
+/* ============================================================================
+ * 6. NODE DETAIL PANEL
+ * ============================================================================
+ *
+ * Side panel showing details of the selected node.
+ */
+
+.dag-node-detail-panel {
+  width: 320px;
+  border-left: 1px solid var(--line);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  overflow-y: auto;
+  background: var(--card);
+}
+
+.dag-node-detail-panel-header {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--ink);
+  margin: 0;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.dag-node-detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.dag-node-detail-field label {
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  color: var(--ink-secondary);
+}
+
+.dag-node-detail-field input,
+.dag-node-detail-field textarea,
+.dag-node-detail-field select {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  transition: all var(--transition-fast);
+}
+
+.dag-node-detail-field input:focus,
+.dag-node-detail-field textarea:focus,
+.dag-node-detail-field select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow:
+    0 0 0 2px var(--card),
+    0 0 0 4px var(--primary);
+}
+
+.dag-node-detail-field textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.dag-node-detail-field select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--space-2) center;
+  background-size: 1rem;
+  padding-right: var(--space-8);
+}
+
+.dag-node-detail-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+/* Empty state for detail panel */
+.dag-node-detail-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--muted);
+  text-align: center;
+  gap: var(--space-2);
+}
+
+.dag-node-detail-empty-icon {
+  font-size: var(--text-2xl);
+  opacity: 0.5;
+}
+
+.dag-node-detail-empty-text {
+  font-size: var(--text-sm);
+}
+
+/* ============================================================================
+ * 7. TOOLBAR BUTTONS
+ * ============================================================================
+ *
+ * Action buttons in the DAG editor toolbar.
+ */
+
+.dag-toolbar-btn {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 36px;
+}
+
+.dag-toolbar-btn:hover:not(:disabled) {
+  background: var(--bg-soft);
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.dag-toolbar-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.dag-toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dag-toolbar-btn.primary {
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+  border-color: var(--primary-hover);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);
+}
+
+.dag-toolbar-btn.primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--primary-hover), var(--primary));
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.35);
+  color: #fff;
+}
+
+.dag-toolbar-btn.danger {
+  background: var(--danger-light);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.dag-toolbar-btn.danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: #fff;
+}
+
+.dag-toolbar-btn.ghost {
+  background: transparent;
+  border: none;
+  color: var(--ink-secondary);
+}
+
+.dag-toolbar-btn.ghost:hover:not(:disabled) {
+  background: var(--bg-soft);
+  color: var(--ink);
+}
+
+.dag-toolbar-btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--card),
+    0 0 0 4px var(--primary);
+}
+
+/* Toolbar separator */
+.dag-toolbar-separator {
+  width: 1px;
+  height: 24px;
+  background: var(--line);
+  margin: 0 var(--space-1);
+}
+
+/* ============================================================================
+ * 8. REDUCED MOTION SUPPORT
+ * ============================================================================
+ *
+ * Respects user preference for reduced motion.
+ */
+
+@media (prefers-reduced-motion: reduce) {
+  .dag-editor-modal,
+  .dag-editor-canvas .cy-node,
+  .dag-editor-canvas .cy-edge,
+  .dag-mode-toggle-btn,
+  .dag-toolbar-btn,
+  .dag-node-detail-field input,
+  .dag-node-detail-field textarea,
+  .dag-node-detail-field select {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .dag-node-status-running .cy-node {
+    animation: none !important;
+    box-shadow: none !important;
+  }
+
+  .dag-mode-toggle-btn:hover:not(:disabled),
+  .dag-toolbar-btn:hover:not(:disabled) {
+    transform: none !important;
+  }
+}
+
+/* Dark mode specific adjustments */
+@media (prefers-color-scheme: dark) {
+  .dag-node-status-pruned {
+    --node-color: #64748b;
+  }
+
+  .dag-editor-canvas .cy-edge-label {
+    background: var(--bg-elevated);
+  }
+}
