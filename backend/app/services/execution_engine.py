@@ -19,7 +19,7 @@ from app.services.progress_hub import ProgressHub
 from app.services.retrieval import RetrievalService
 from app.services.state_machine import InvalidStateTransition, transition_or_raise
 from app.services.writer import WriterService
-from app.services.four_agents.checking_agent import CheckingAgent
+from app.services.four_agents.checking.agent import CheckingAgent
 
 logger = logging.getLogger(__name__)
 

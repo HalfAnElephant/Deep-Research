@@ -39,7 +39,12 @@
   background: var(--bg);
   display: flex;
   flex-direction: column;
-  animation: dialog-fade-in var(--duration-normal) var(--ease-out);
+  animation: dag-editor-fade-in var(--duration-normal) var(--ease-out);
+}
+
+@keyframes dag-editor-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .dag-editor-modal-header {

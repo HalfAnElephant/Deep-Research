@@ -5,6 +5,7 @@ import logging
 import re
 from typing import Callable
 
+from app.core.utils import dedupe_segments
 from app.models.schemas import Citation, Evidence, ReportDraft, SectionDraft, WritingSectionPlan
 from app.services.mcp_executor import MCPExecutor
 from app.services.retrieval import RetrievalService
@@ -12,6 +13,25 @@ from app.services.writer import ReportBlueprint, WriterService
 
 
 logger = logging.getLogger(__name__)
+
+# Shared regex patterns for trace detection and placeholder filtering
+TRACE_PATTERNS = (
+    re.compile(r"(?im)^\s*##\s*trace section\b"),
+    re.compile(r"(?im)^\s*\[locked\]"),
+    re.compile(r"(?im)^\s*挑战识别\s*:"),
+)
+PLACEHOLDER_PATTERNS = (
+    re.compile(r"(?i)\[mock\]"),
+    re.compile(
+        r"(?i)\b(?:arxiv|semantic scholar|semanticscholar|tavily|web)\s+result\s+for\b"),
+    re.compile(r"(?i)synthetic evidence"),
+    re.compile(r"当前提供的证据列表与.+?研究主题.+?不相关"),
+    re.compile(r"无法为本章节的撰写提供有效支持"),
+    re.compile(r"本章节的撰写将无法依赖当前提供的证据材料"),
+    re.compile(r"必须依据研究计划中预设的.+?进行独立论述"),
+    re.compile(r"^\s*##\s*```(?:yaml|yml)?\s*$",
+               re.IGNORECASE | re.MULTILINE),
+)
 
 
 class ResearchAgent:
@@ -175,7 +195,7 @@ class ReportAgent:
         )
 
         if suppressed_content_callback is not None:
-            for segment in _dedupe_segments(suppressed_segments):
+            for segment in dedupe_segments(suppressed_segments):
                 suppressed_content_callback(segment)
 
         # 如果配置了 checking_agent，执行深度审核
@@ -188,7 +208,7 @@ class ReportAgent:
 
                 # 运行审核
                 from app.services.four_agents.base import AgentContext
-                from app.services.four_agents.checking_agent import CheckingAgent
+                from app.services.four_agents.checking.agent import CheckingAgent
 
                 context = AgentContext(
                     task_id=task_id,
@@ -396,23 +416,6 @@ class ReportReviewResult:
 class ReportReviewAgent:
     """Review report quality and block intermediate traces from leaking to users."""
 
-    TRACE_PATTERNS = (
-        re.compile(r"(?im)^\s*##\s*trace section\b"),
-        re.compile(r"(?im)^\s*\[locked\]"),
-        re.compile(r"(?im)^\s*挑战识别\s*:"),
-    )
-    PLACEHOLDER_PATTERNS = (
-        re.compile(r"(?i)\[mock\]"),
-        re.compile(
-            r"(?i)\b(?:arxiv|semantic scholar|semanticscholar|tavily|web)\s+result\s+for\b"),
-        re.compile(r"(?i)synthetic evidence"),
-        re.compile(r"当前提供的证据列表与.+?研究主题.+?不相关"),
-        re.compile(r"无法为本章节的撰写提供有效支持"),
-        re.compile(r"本章节的撰写将无法依赖当前提供的证据材料"),
-        re.compile(r"必须依据研究计划中预设的.+?进行独立论述"),
-        re.compile(r"^\s*##\s*```(?:yaml|yml)?\s*$",
-                   re.IGNORECASE | re.MULTILINE),
-    )
     EVIDENCE_REF_PATTERN = re.compile(r"\[(?:evidence:[^\]]+|\d+)\]")
     MIN_BODY_BASE_CHARS = 220
     MIN_BODY_PER_SECTION_CHARS = 70
@@ -432,9 +435,9 @@ class ReportReviewAgent:
         targeted_sections: list[str] = self._find_problem_sections(
             section_contents)
 
-        if any(pattern.search(body) for pattern in self.TRACE_PATTERNS):
+        if any(pattern.search(body) for pattern in TRACE_PATTERNS):
             issues.append("包含中间过程痕迹（如 Trace Section 或过程标签）。")
-        if any(pattern.search(body) for pattern in self.PLACEHOLDER_PATTERNS):
+        if any(pattern.search(body) for pattern in PLACEHOLDER_PATTERNS):
             issues.append("包含占位检索文本或写作过程说明，降低内容可信度。")
         if len(section_contents) < 3:
             issues.append("文章章节过少，至少需要三个明确章节。")
@@ -475,7 +478,7 @@ class ReportReviewAgent:
 
     def _find_problem_sections(self, section_contents: dict[str, str]) -> list[str]:
         problematic: list[str] = []
-        combined_patterns = self.TRACE_PATTERNS + self.PLACEHOLDER_PATTERNS
+        combined_patterns = TRACE_PATTERNS + PLACEHOLDER_PATTERNS
         for title, content in section_contents.items():
             section_text = f"## {title}\n{content}"
             if any(pattern.search(section_text) for pattern in combined_patterns):
@@ -532,18 +535,6 @@ class ReportReviewAgent:
 
 class ReportRevisionAgent:
     """Revise report body according to reviewer feedback."""
-
-    TRACE_LINE_PATTERNS = (
-        re.compile(r"(?i)^\s*##\s*trace section\b"),
-        re.compile(r"(?i)^\s*\[locked\]"),
-        re.compile(r"^\s*挑战识别\s*:"),
-    )
-    PLACEHOLDER_LINE_PATTERNS = (
-        re.compile(r"(?i)\[mock\]"),
-        re.compile(
-            r"(?i)\b(?:arxiv|semantic scholar|semanticscholar|tavily|web)\s+result\s+for\b"),
-        re.compile(r"(?i)synthetic evidence"),
-    )
 
     def __init__(self, writer_service: WriterService) -> None:
         self.writer_service = writer_service
@@ -612,9 +603,9 @@ class ReportRevisionAgent:
     def _strip_noisy_lines(self, text: str) -> str:
         kept: list[str] = []
         for line in text.splitlines():
-            if any(pattern.search(line) for pattern in self.TRACE_LINE_PATTERNS):
+            if any(pattern.search(line) for pattern in TRACE_PATTERNS):
                 continue
-            if any(pattern.search(line) for pattern in self.PLACEHOLDER_LINE_PATTERNS):
+            if any(pattern.search(line) for pattern in PLACEHOLDER_PATTERNS):
                 continue
             kept.append(line.rstrip())
 
@@ -646,15 +637,3 @@ class ReportRevisionAgent:
             "写作过程说明",
         )
         return any(any(keyword in issue for keyword in blocking_keywords) for issue in feedback.issues)
-
-
-def _dedupe_segments(segments: list[str]) -> list[str]:
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for segment in segments:
-        value = segment.strip()
-        if not value or value in seen:
-            continue
-        seen.add(value)
-        ordered.append(value)
-    return ordered

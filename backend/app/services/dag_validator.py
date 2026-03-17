@@ -1,7 +1,7 @@
 """DAG validation service for detecting cycles, orphans, and computing execution order."""
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import Any
 
 
@@ -27,14 +27,22 @@ class DAGValidator:
         node_ids = {n.get("taskId") for n in nodes if n.get("taskId")}
 
         # Check for missing node references in edges
-        for edge in edges:
+        for i, edge in enumerate(edges):
             # Support both 'from'/'to' and 'source'/'target' formats
             source = edge.get("from") or edge.get("source")
             target = edge.get("to") or edge.get("target")
 
-            if source and source not in node_ids:
+            # Check for missing required fields
+            if not source:
+                errors.append(f"Edge at index {i} is missing source ('from' or 'source' field)")
+                continue
+            if not target:
+                errors.append(f"Edge at index {i} is missing target ('to' or 'target' field)")
+                continue
+
+            if source not in node_ids:
                 errors.append(f"Edge references unknown source node: {source}")
-            if target and target not in node_ids:
+            if target not in node_ids:
                 errors.append(f"Edge references unknown target node: {target}")
 
         # Check for cycles using DFS
@@ -137,11 +145,11 @@ class DAGValidator:
                 in_degree[target] += 1
 
         # Start with nodes that have no dependencies
-        queue = [nid for nid in node_ids if in_degree[nid] == 0]
+        queue: deque[str] = deque(nid for nid in node_ids if in_degree[nid] == 0)
         result: list[str] = []
 
         while queue:
-            node = queue.pop(0)
+            node = queue.popleft()
             result.append(node)
             for neighbor in adj[node]:
                 in_degree[neighbor] -= 1

@@ -348,13 +348,13 @@ export function useDAGEditor(initialDag: DAGGraph): UseDAGEditorResult {
       // Prevent self-referential edges
       if (source === target) return;
 
-      // Prevent duplicate edges
-      const edgeExists = state.edges.some(
-        (e) => e.source === source && e.target === target
-      );
-      if (edgeExists) return;
-
       setState((prev) => {
+        // Prevent duplicate edges - check inside setState to avoid stale closure
+        const edgeExists = prev.edges.some(
+          (e) => e.source === source && e.target === target
+        );
+        if (edgeExists) return prev;
+
         const newEdge: DAGEdge = {
           id: generateEdgeId(),
           source,
@@ -381,7 +381,7 @@ export function useDAGEditor(initialDag: DAGGraph): UseDAGEditorResult {
         };
       });
     },
-    [generateEdgeId, checkDirty, state.edges]
+    [generateEdgeId, checkDirty]
   );
 
   /**

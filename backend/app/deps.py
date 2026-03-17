@@ -8,7 +8,7 @@ from app.services.agents import ReportAgent, ResearchAgent
 from app.services.analyst import AnalystService
 from app.services.conversation_agent import ConversationAgent
 from app.services.execution_engine import ExecutionEngine
-from app.services.four_agents.checking_agent import CheckingAgent
+from app.services.four_agents.checking.agent import CheckingAgent
 from app.services.mcp_executor import MCPExecutor
 from app.services.planner import MasterPlanner
 from app.services.progress_hub import ProgressHub

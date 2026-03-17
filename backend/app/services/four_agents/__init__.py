@@ -11,7 +11,7 @@ from app.services.four_agents.base import BaseAgent
 from app.services.four_agents.ideation_agent import IdeationAgent
 from app.services.four_agents.planning_agent import PlanningAgent
 from app.services.four_agents.writing_agent import WritingAgent
-from app.services.four_agents.checking_agent import CheckingAgent
+from app.services.four_agents.checking.agent import CheckingAgent
 
 __all__ = [
     "BaseAgent",
