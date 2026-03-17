@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import FileResponse, PlainTextResponse
 
-from app.deps import conversation_agent, conversation_repository, task_repository
+from app.deps import conversation_agent, conversation_repository, evidence_repository, task_repository
 from app.models.schemas import (
     ConversationBulkDeleteResponse,
     ConversationDeleteResponse,
@@ -20,6 +20,7 @@ from app.models.schemas import (
     UpdateConversationRequest,
     UpdatePlanRequest,
 )
+from app.services.export_service import export_service
 
 router = APIRouter(prefix="/api/v1")
 
@@ -171,4 +172,110 @@ def export_references(conversation_id: str) -> FileResponse:
         references_path,
         media_type="text/markdown",
         filename=f"{conversation_id}_references.md"
+    )
+
+
+@router.get("/conversations/{conversation_id}/export/ris")
+def export_ris(conversation_id: str) -> PlainTextResponse:
+    """导出 RIS 格式的引用文件。"""
+    try:
+        summary = conversation_repository.get_summary(conversation_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Conversation not found: {conversation_id}") from exc
+    if not summary.taskId:
+        raise HTTPException(status_code=404, detail="Conversation has no task yet")
+
+    # Get all evidence for this task
+    evidences = evidence_repository.list(task_id=summary.taskId, limit=500).items
+
+    if not evidences:
+        raise HTTPException(status_code=404, detail="No evidence found for this conversation")
+
+    # Generate RIS content
+    ris_content = export_service.generate_ris(evidences)
+
+    return PlainTextResponse(
+        content=ris_content,
+        media_type="application/x-research-info-systems",
+        headers={"Content-Disposition": f'attachment; filename="{conversation_id}.ris"'}
+    )
+
+
+@router.get("/conversations/{conversation_id}/export/bibtex")
+def export_bibtex(conversation_id: str) -> PlainTextResponse:
+    """导出 BibTeX 格式的引用文件。"""
+    try:
+        summary = conversation_repository.get_summary(conversation_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Conversation not found: {conversation_id}") from exc
+    if not summary.taskId:
+        raise HTTPException(status_code=404, detail="Conversation has no task yet")
+
+    # Get all evidence for this task
+    evidences = evidence_repository.list(task_id=summary.taskId, limit=500).items
+
+    if not evidences:
+        raise HTTPException(status_code=404, detail="No evidence found for this conversation")
+
+    # Generate BibTeX content
+    bibtex_content = export_service.generate_bibtex(evidences)
+
+    return PlainTextResponse(
+        content=bibtex_content,
+        media_type="application/x-bibtex",
+        headers={"Content-Disposition": f'attachment; filename="{conversation_id}.bib"'}
+    )
+
+
+@router.get("/library/export/ris")
+def export_library_ris(
+    favorited_only: bool = Query(default=False, alias="favoritedOnly")
+) -> PlainTextResponse:
+    """导出文献库为 RIS 格式。
+
+    Args:
+        favorited_only: 仅导出收藏的文献
+    """
+    from app.services.library_service import library_service
+
+    # Get library items
+    result = library_service.get_library_items(
+        page=1,
+        page_size=500,
+        favorited_only=favorited_only,
+        sort_by="created_at",
+        sort_order="desc"
+    )
+
+    if not result["items"]:
+        raise HTTPException(status_code=404, detail="No evidence found in library")
+
+    # Convert dict items back to Evidence-like objects for the export service
+    from app.models.schemas import Evidence, EvidenceMetadata, ExtractedData, SourceType
+
+    evidences = []
+    for item in result["items"]:
+        evidence = Evidence(
+            id=item["id"],
+            taskId=item["taskId"],
+            nodeId=item["nodeId"],
+            sourceType=SourceType(item["sourceType"]),
+            url=item["url"],
+            content=item["content"],
+            metadata=EvidenceMetadata(**item["metadata"]),
+            score=item["score"],
+            extractedData=ExtractedData(**item["extractedData"]),
+            favorited=item["favorited"]
+        )
+        evidences.append(evidence)
+
+    # Generate RIS content
+    ris_content = export_service.generate_ris(evidences)
+
+    filename = "library_favorited.ris" if favorited_only else "library.ris"
+
+    return PlainTextResponse(
+        content=ris_content,
+        media_type="application/x-research-info-systems",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )

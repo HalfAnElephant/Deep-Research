@@ -294,6 +294,19 @@ export async function exportReferences(conversationId: string): Promise<void> {
   await download(`${API_BASE}/api/v1/conversations/${conversationId}/export/references`, `${conversationId}_references.md`);
 }
 
+export async function exportRis(conversationId: string): Promise<void> {
+  await download(`${API_BASE}/api/v1/conversations/${conversationId}/export/ris`, `${conversationId}.ris`);
+}
+
+export async function exportBibtex(conversationId: string): Promise<void> {
+  await download(`${API_BASE}/api/v1/conversations/${conversationId}/export/bibtex`, `${conversationId}.bib`);
+}
+
+export async function exportLibraryRis(favoritedOnly: boolean = false): Promise<void> {
+  const url = `${API_BASE}/api/v1/library/export/ris${favoritedOnly ? "?favoritedOnly=true" : ""}`;
+  await download(url, favoritedOnly ? "library_favorited.ris" : "library.ris");
+}
+
 export interface WebSocketCallbacks {
   onMessage: (event: MessageEvent<string>) => void;
   onError?: (error: Event) => void;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
+  exportLibraryRis,
   getLibraryItems,
   getLibraryKeywords,
   getLibrarySummary,
@@ -12,6 +13,7 @@ import {
   type LibrarySummary,
   type TrendAnalysis,
 } from "../api";
+import { AnalyticsCharts } from "./AnalyticsCharts";
 
 interface LibraryPageProps {
   onClose?: () => void;
@@ -102,6 +104,15 @@ export function LibraryPage({ onClose }: LibraryPageProps) {
   useEffect(() => {
     fetchAnalytics();
   }, [fetchAnalytics]);
+
+  const handleExportRis = async () => {
+    try {
+      await exportLibraryRis(favoritedOnly);
+    } catch (error) {
+      console.error("Failed to export RIS:", error);
+      alert("导出失败，请重试");
+    }
+  };
 
   const handleToggleFavorite = async (evidenceId: string) => {
     try {
@@ -229,14 +240,14 @@ export function LibraryPage({ onClose }: LibraryPageProps) {
         </button>
       </div>
       <div className="library-card-meta">
-        {item.metadata.authors?.length > 0 && (
+        {item.metadata.authors && item.metadata.authors.length > 0 && (
           <span className="library-meta-item">{item.metadata.authors.slice(0, 3).join(", ")}</span>
         )}
         {item.metadata.publishDate && (
           <span className="library-meta-item">{new Date(item.metadata.publishDate).toLocaleDateString("zh-CN")}</span>
         )}
         <span className="library-meta-item library-score">相关度: {(item.score * 100).toFixed(0)}%</span>
-        {item.metadata.citationCount > 0 && (
+        {item.metadata.citationCount && item.metadata.citationCount > 0 && (
           <span className="library-meta-item">引用: {item.metadata.citationCount}</span>
         )}
       </div>
@@ -247,107 +258,64 @@ export function LibraryPage({ onClose }: LibraryPageProps) {
   );
 
   const renderTrendsTab = () => {
-    if (!trends || isAnalyticsLoading) {
-      return <div className="library-loading">加载趋势分析...</div>;
-    }
-
     return (
-      <div className="library-trends">
-        <div className="library-stats-grid">
-          <div className="library-stat-card">
-            <div className="library-stat-value">{trends.totalItems}</div>
-            <div className="library-stat-label">文献总数</div>
-          </div>
-          <div className="library-stat-card">
-            <div className="library-stat-value">{trends.favoritedItems}</div>
-            <div className="library-stat-label">收藏文献</div>
-          </div>
-        </div>
-
-        <div className="library-trend-section">
-          <h3>来源分布</h3>
-          <div className="library-source-bars">
-            {Object.entries(trends.sourceDistribution).map(([source, count]) => (
-              <div key={source} className="library-source-bar">
-                <span className="library-source-label">{source}</span>
-                <div className="library-bar-track">
-                  <div
-                    className="library-bar-fill"
-                    style={{ width: `${(count / trends.totalItems) * 100}%` }}
-                  />
-                </div>
-                <span className="library-source-count">{count}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="library-trend-section">
-          <h3>时间分布</h3>
-          <div className="library-time-series">
-            {trends.timeSeries.map((point) => (
-              <div key={point.date} className="library-time-point">
-                <div
-                  className="library-time-bar"
-                  style={{ height: `${Math.max(4, point.count * 5)}px` }}
-                />
-                <span className="library-time-label">{point.date.slice(5)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <AnalyticsCharts
+        trends={trends}
+        keywords={keywords}
+        isLoading={isAnalyticsLoading}
+      />
     );
   };
 
   const renderKeywordsTab = () => {
     if (!keywords || isAnalyticsLoading) {
-      return <div className="library-loading">加载关键词分析...</div>;
+      return (
+        <div className="analytics-loading">
+          <div className="analytics-loading-spinner" />
+          <span>加载关键词分析...</span>
+        </div>
+      );
     }
 
     return (
-      <div className="library-keywords">
-        <div className="library-keyword-stats">
-          <div className="library-keyword-stat">
-            <span className="library-keyword-number">{keywords.vocabularySize}</span>
-            <span className="library-keyword-label">词汇量</span>
-          </div>
-          <div className="library-keyword-stat">
-            <span className="library-keyword-number">{keywords.analyzedDocuments}</span>
-            <span className="library-keyword-label">分析文献</span>
-          </div>
-        </div>
+      <div className="analytics-keywords-detail">
+        <div className="analytics-keyword-cloud-section">
+          <h3>词云</h3>
+          <div className="analytics-keyword-cloud">
+            {keywords.topKeywords.slice(0, 50).map((kw, idx) => {
+              const maxCount = keywords.topKeywords[0]?.count || 1;
+              const minSize = 14;
+              const maxSize = 32;
+              const size = minSize + (kw.count / maxCount) * (maxSize - minSize);
+              const opacity = 0.5 + (kw.count / maxCount) * 0.5;
 
-        <div className="library-keyword-sections">
-          <div className="library-keyword-section">
-            <h3>高频关键词</h3>
-            <div className="library-keyword-cloud">
-              {keywords.topKeywords.slice(0, 30).map((kw, idx) => (
+              return (
                 <span
                   key={kw.word}
-                  className="library-keyword-tag"
+                  className="analytics-keyword-cloud-tag"
                   style={{
-                    fontSize: `${Math.max(12, 24 - idx * 0.4)}px`,
-                    opacity: Math.max(0.6, 1 - idx * 0.02),
+                    fontSize: `${size}px`,
+                    opacity,
                   }}
                 >
                   {kw.word}
-                  <span className="library-keyword-count">({kw.count})</span>
+                  <small>({kw.count})</small>
                 </span>
-              ))}
-            </div>
+              );
+            })}
           </div>
+        </div>
 
-          <div className="library-keyword-section">
-            <h3>常见短语</h3>
-            <div className="library-phrase-list">
-              {keywords.topPhrases.slice(0, 20).map((phrase) => (
-                <div key={phrase.phrase} className="library-phrase-item">
-                  <span className="library-phrase-text">{phrase.phrase}</span>
-                  <span className="library-phrase-count">{phrase.count}</span>
-                </div>
-              ))}
-            </div>
+        <div className="analytics-phrases-section">
+          <h3>常见短语</h3>
+          <div className="analytics-phrases-list">
+            {keywords.topPhrases.slice(0, 20).map((phrase, idx) => (
+              <div key={phrase.phrase} className="analytics-phrase-item">
+                <span className="analytics-phrase-rank">{idx + 1}</span>
+                <span className="analytics-phrase-text">{phrase.phrase}</span>
+                <span className="analytics-phrase-count">{phrase.count}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -358,11 +326,16 @@ export function LibraryPage({ onClose }: LibraryPageProps) {
     <div className="library-page">
       <div className="library-header">
         <h1 className="library-title">文献库</h1>
-        {onClose && (
-          <button className="library-close-btn" onClick={onClose} aria-label="关闭">
-            ✕
+        <div className="library-header-actions">
+          <button className="library-btn library-btn-secondary" onClick={handleExportRis}>
+            导出 RIS
           </button>
-        )}
+          {onClose && (
+            <button className="library-close-btn" onClick={onClose} aria-label="关闭">
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="library-tabs">

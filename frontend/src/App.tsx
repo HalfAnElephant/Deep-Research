@@ -21,6 +21,7 @@ import { Dialog } from "./components/Dialog";
 import { ExportModal } from "./components/ExportModal";
 import { LibraryPage } from "./components/LibraryPage";
 import { PlanEditorPane } from "./components/PlanEditorPane";
+import { WorkflowNavigator } from "./components/WorkflowNavigator";
 import { APP_CONFIG, STATUS_LABEL } from "./constants";
 import type {
   AgentState,
@@ -224,6 +225,7 @@ export function App() {
   const [rightSidebarVisible, setRightSidebarVisible] = useState(() => readStoredFlag(RIGHT_SIDEBAR_KEY, false));
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
   const [lastProgressEventAt, setLastProgressEventAt] = useState<string | null>(null);
+  const [currentPhase, setCurrentPhase] = useState<string | null>(null);
   const [streamClock, setStreamClock] = useState(() => Date.now());
   const [showLibrary, setShowLibrary] = useState(false);
 
@@ -348,6 +350,13 @@ export function App() {
     if (!activeConversationId) return;
     void refreshConversationDetail(activeConversationId, { syncDraft: true });
   }, [activeConversationId, refreshConversationDetail]);
+
+  // Reset current phase when conversation changes or task completes
+  useEffect(() => {
+    if (!activeConversationId || activeStatus === "COMPLETED" || activeStatus === "FAILED") {
+      setCurrentPhase(null);
+    }
+  }, [activeConversationId, activeStatus]);
 
   useEffect(() => {
     if (!activeConversationId || (activeStatus !== "RUNNING" && activeStatus !== "DRAFTING_PLAN")) return;
@@ -561,6 +570,8 @@ export function App() {
           reconnectAttemptRef.current = 0;
           setLastProgressEventAt(parsed.timestamp ?? new Date().toISOString());
           const payload = parsed.data as Record<string, unknown>;
+          const phase = typeof payload.phase === "string" ? payload.phase : parsed.event;
+          setCurrentPhase(phase);
           if (isProgressEventKind(parsed.event)) {
             applyRealtimeProgress(parsed.event, payload, parsed.timestamp ?? new Date().toISOString());
           }
@@ -1077,6 +1088,19 @@ export function App() {
             <p>{statusLabel}</p>
           </div>
         </header>
+
+        <WorkflowNavigator
+          status={activeStatus}
+          currentPhase={currentPhase}
+          onStepClick={(stepId) => {
+            // Navigate to different views based on step
+            if (stepId === "planning") {
+              setRightSidebarVisible(true);
+            } else if (stepId === "search") {
+              setShowLibrary(true);
+            }
+          }}
+        />
 
         {activeStatus === "RUNNING" && effectiveAgentStates.length > 0 && (
           <AgentStatusPanel

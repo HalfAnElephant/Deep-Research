@@ -60,7 +60,6 @@ CREATE TABLE IF NOT EXISTS evidences (
 );
 
 CREATE INDEX IF NOT EXISTS idx_evidences_task_id ON evidences(task_id);
-CREATE INDEX IF NOT EXISTS idx_evidences_favorited ON evidences(favorited);
 CREATE INDEX IF NOT EXISTS idx_evidences_source_type ON evidences(source_type);
 
 CREATE TABLE IF NOT EXISTS conflicts (
@@ -123,4 +122,13 @@ def get_connection() -> sqlite3.Connection:
 def init_db() -> None:
     with get_connection() as conn:
         conn.executescript(SCHEMA_SQL)
+
+        # Handle migrations: add favorited column if it doesn't exist
+        cursor = conn.execute("PRAGMA table_info(evidences)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "favorited" not in columns:
+            conn.execute("ALTER TABLE evidences ADD COLUMN favorited INTEGER NOT NULL DEFAULT 0")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_evidences_favorited ON evidences(favorited)")
+            conn.commit()
+
         conn.commit()

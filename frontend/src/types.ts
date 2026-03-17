@@ -48,8 +48,19 @@ export interface Evidence {
     title: string;
     publishDate: string;
     relevanceScore: number;
+    authors?: string[];
+    abstract?: string;
+    citationCount?: number;
+    impactFactor?: number;
+    isPeerReviewed?: boolean;
   };
   score: number;
+  extractedData?: {
+    tables?: Array<Record<string, unknown>>;
+    images?: Array<Record<string, unknown>>;
+    numericalValues?: Array<Record<string, unknown>>;
+  };
+  favorited?: boolean;
 }
 
 export interface ConflictRecord {
