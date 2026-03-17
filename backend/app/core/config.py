@@ -2,9 +2,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "Deep Research"
+    app_name: str = "Research Flow"
     api_prefix: str = "/api/v1"
-    db_path: str = "backend/.data/deep_research.db"
+    db_path: str = "backend/.data/research_flow.db"
     log_level: str = "INFO"
     use_mock_sources: bool = False
     default_llm_provider: str = "openrouter"

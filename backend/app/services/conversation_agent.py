@@ -888,7 +888,7 @@ class ConversationAgent:
 
     def _generate_initial_plan(self, *, topic: str, config: TaskConfig) -> str:
         prompt = (
-            "请为用户生成一个可执行的深度研究方案，输出必须是 Markdown，并且必须包含 front matter。\n"
+            "请为用户生成一个可执行的研究方案，输出必须是 Markdown，并且必须包含 front matter。\n"
             "front matter 字段固定为：title, topic, max_depth, max_nodes, priority, search_sources, target_word_count。\n"
             "正文至少包含：研究目标、研究问题拆解、方法与来源、执行步骤、风险与边界、交付标准。\n"
             "严禁输出解释性前言，直接返回完整 Markdown。"
@@ -1073,7 +1073,7 @@ class ConversationAgent:
     def _fallback_plan(*, topic: str, config: TaskConfig) -> str:
         return (
             "---\n"
-            f"title: {topic} 深度研究方案\n"
+            f"title: {topic} 研究方案\n"
             f"topic: {topic}\n"
             f"max_depth: {config.maxDepth}\n"
             f"max_nodes: {config.maxNodes}\n"
