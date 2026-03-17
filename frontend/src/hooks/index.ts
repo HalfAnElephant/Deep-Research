@@ -15,3 +15,13 @@ export {
   type UseMessageTimelineOptions,
   type UseMessageTimelineResult,
 } from "./useMessageTimeline";
+export {
+  useDAGEditor,
+  type TaskNodeStatus,
+  type DAGEditorMode,
+  type TaskNode,
+  type DAGEdge,
+  type DAGGraph,
+  type DAGEditorState,
+  type UseDAGEditorResult,
+} from "./useDAGEditor";
