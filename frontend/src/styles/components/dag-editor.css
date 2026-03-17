@@ -109,23 +109,23 @@
  */
 
 .dag-node-status-pending {
-  --node-color: var(--primary);
+  --node-color: #4A90D9;
 }
 
 .dag-node-status-running {
-  --node-color: var(--warning);
+  --node-color: #FFB84D;
 }
 
 .dag-node-status-completed {
-  --node-color: var(--success);
+  --node-color: #4CAF50;
 }
 
 .dag-node-status-failed {
-  --node-color: var(--danger);
+  --node-color: #FF6B6B;
 }
 
 .dag-node-status-pruned {
-  --node-color: var(--muted);
+  --node-color: #9E9E9E;
 }
 
 /* Node base styles (applied by Cytoscape.js) */
