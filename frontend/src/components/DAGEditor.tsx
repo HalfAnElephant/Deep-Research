@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import cytoscape, { Core, LayoutOptions } from "cytoscape";
 import dagre from "cytoscape-dagre";
 import type { TaskNode, DAGEdge, DAGEditorMode, TaskNodeStatus } from "../hooks/useDAGEditor";
@@ -14,6 +14,11 @@ type DagreLayoutOptions = LayoutOptions & {
   nodeSep?: number;
   rankSep?: number;
 };
+
+/**
+ * Edge creation step state for two-step edge creation flow
+ */
+type EdgeCreationStep = "idle" | "source" | "target";
 
 export interface DAGEditorProps {
   nodes: TaskNode[];
@@ -57,15 +62,31 @@ export function DAGEditor({
   onNodeAdd,
   onNodeDelete,
   onEdgeAdd,
+  onEdgeDelete,
 }: DAGEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
 
+  // Edge creation state for two-step flow
+  const [edgeCreationStep, setEdgeCreationStep] = useState<EdgeCreationStep>("idle");
+  const [edgeSource, setEdgeSource] = useState<string | null>(null);
+
   // Stable callback refs to avoid effect re-runs
   const onNodeSelectRef = useRef(onNodeSelect);
+  const onEdgeAddRef = useRef(onEdgeAdd);
+  const onEdgeDeleteRef = useRef(onEdgeDelete);
+
   useEffect(() => {
     onNodeSelectRef.current = onNodeSelect;
   }, [onNodeSelect]);
+
+  useEffect(() => {
+    onEdgeAddRef.current = onEdgeAdd;
+  }, [onEdgeAdd]);
+
+  useEffect(() => {
+    onEdgeDeleteRef.current = onEdgeDelete;
+  }, [onEdgeDelete]);
 
   /**
    * Initialize Cytoscape instance
@@ -105,11 +126,12 @@ export function DAGEditor({
         {
           selector: "edge",
           style: {
-            width: 2,
-            "line-color": "#666",
-            "target-arrow-color": "#666",
+            width: mode === "advanced" ? 3 : 2,
+            "line-color": mode === "advanced" ? "#888" : "#666",
+            "target-arrow-color": mode === "advanced" ? "#888" : "#666",
             "target-arrow-shape": "triangle",
             "curve-style": "bezier",
+            opacity: mode === "advanced" ? 1 : 0.8,
           },
         },
         {
@@ -118,6 +140,14 @@ export function DAGEditor({
             width: 3,
             "line-color": "#FF6B6B",
             "target-arrow-color": "#FF6B6B",
+          },
+        },
+        {
+          selector: "edge.highlighted",
+          style: {
+            width: 4,
+            "line-color": "#4CAF50",
+            "target-arrow-color": "#4CAF50",
           },
         },
       ],
@@ -134,15 +164,48 @@ export function DAGEditor({
 
     cyRef.current = cy;
 
+    // Handle edge deletion in advanced mode
+    cy.on("tap", "edge", (evt) => {
+      if (mode === "advanced") {
+        const edge = evt.target;
+        // Delete edge on click in advanced mode
+        onEdgeDeleteRef.current?.(edge.id());
+      }
+    });
+
     // Handle node selection
     cy.on("tap", "node", (evt) => {
       const node = evt.target;
+
+      // Handle edge creation flow
+      if (edgeCreationStep === "source") {
+        setEdgeSource(node.id());
+        setEdgeCreationStep("target");
+        return;
+      }
+
+      if (edgeCreationStep === "target" && edgeSource) {
+        // Prevent self-loops
+        if (edgeSource !== node.id()) {
+          onEdgeAddRef.current?.(edgeSource, node.id());
+        }
+        setEdgeCreationStep("idle");
+        setEdgeSource(null);
+        return;
+      }
+
+      // Normal node selection
       onNodeSelectRef.current(node.id());
     });
 
     // Handle canvas click (deselect)
     cy.on("tap", (evt) => {
       if (evt.target === cy) {
+        // Cancel edge creation if clicking on canvas
+        if (edgeCreationStep !== "idle") {
+          setEdgeCreationStep("idle");
+          setEdgeSource(null);
+        }
         onNodeSelectRef.current(null);
       }
     });
@@ -155,7 +218,7 @@ export function DAGEditor({
     return () => {
       cy.destroy();
     };
-  }, []);
+  }, [mode, edgeCreationStep, edgeSource]);
 
   /**
    * Update elements when nodes/edges change
@@ -219,15 +282,20 @@ export function DAGEditor({
   }, [onNodeDelete, selectedNodeId]);
 
   /**
-   * Handle adding edge (advanced mode)
+   * Start edge creation flow
    */
-  const handleAddEdge = useCallback(() => {
-    if (mode === "advanced" && onEdgeAdd) {
-      // In advanced mode, could show a modal or use edgehandles extension
-      // For now, this is a placeholder
-      console.log("Add edge functionality available in advanced mode");
-    }
-  }, [mode, onEdgeAdd]);
+  const handleStartEdgeCreation = useCallback(() => {
+    setEdgeCreationStep("source");
+    setEdgeSource(null);
+  }, []);
+
+  /**
+   * Cancel edge creation flow
+   */
+  const handleCancelEdgeCreation = useCallback(() => {
+    setEdgeCreationStep("idle");
+    setEdgeSource(null);
+  }, []);
 
   return (
     <div className="dag-editor-canvas" ref={containerRef}>
@@ -258,14 +326,43 @@ export function DAGEditor({
             </button>
           </>
         )}
-        {mode === "advanced" && (
+        {mode === "advanced" && edgeCreationStep === "idle" && (
           <button
             className="dag-toolbar-btn"
-            onClick={handleAddEdge}
-            title="Add an edge between two nodes (advanced mode)"
+            onClick={handleStartEdgeCreation}
+            title="Start creating an edge between two nodes"
           >
             Add Edge
           </button>
+        )}
+        {mode === "advanced" && edgeCreationStep === "source" && (
+          <div className="dag-toolbar-hint">
+            <span>Click on the source node</span>
+            <button
+              className="dag-toolbar-btn ghost"
+              onClick={handleCancelEdgeCreation}
+              title="Cancel edge creation"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+        {mode === "advanced" && edgeCreationStep === "target" && (
+          <div className="dag-toolbar-hint">
+            <span>Click on the target node</span>
+            <button
+              className="dag-toolbar-btn ghost"
+              onClick={handleCancelEdgeCreation}
+              title="Cancel edge creation"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+        {mode === "advanced" && (
+          <span className="dag-toolbar-hint-inline">
+            Click edges to delete
+          </span>
         )}
       </div>
     </div>
