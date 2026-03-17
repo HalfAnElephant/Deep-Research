@@ -312,7 +312,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
                     >
                       打开草稿抽屉
                     </button>
-                    {isLatestPlan && currentTaskId && latestDagNodes.length > 0 && (
+                    {isLatestPlan && currentTaskId && latestDagNodes.length > 0 && activeStatus === "PLAN_READY" && (
                       <button
                         className="ghost"
                         type="button"
