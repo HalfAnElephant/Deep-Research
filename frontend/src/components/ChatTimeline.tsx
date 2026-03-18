@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import type { ConversationMessage, ConversationStatus } from "../types";
 import {
@@ -12,6 +12,7 @@ import { formatLocalTime } from "../utils/formatTime";
 import { ReportViewer } from "./ReportViewer";
 import { ProgressBar } from "./ProgressIndicator";
 import { DAGEditorModal } from "./DAGEditorModal";
+import { getDag } from "../api";
 import type { DAGGraph, TaskNode, DAGEdge } from "../hooks/useDAGEditor";
 
 interface ChatTimelineProps {
@@ -63,6 +64,41 @@ export function ChatTimeline(props: ChatTimelineProps) {
   const [isDAGEditorOpen, setIsDAGEditorOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
 
+  // DAG state for PLAN_READY phase (fetched from API)
+  const [planReadyDagNodes, setPlanReadyDagNodes] = useState<DagNodeLiveState[]>([]);
+
+  // Fetch DAG when in PLAN_READY state with taskId
+  useEffect(() => {
+    if (activeStatus !== "PLAN_READY" || !currentTaskId) {
+      setPlanReadyDagNodes([]);
+      return;
+    }
+
+    let cancelled = false;
+    const fetchDag = async () => {
+      try {
+        const dagData = await getDag(currentTaskId);
+        if (cancelled || !dagData || !dagData.nodes) return;
+        const nodes: DagNodeLiveState[] = dagData.nodes.map((node) => ({
+          nodeId: node.nodeId,
+          title: node.title,
+          status: node.status,
+          searchDepth: node.searchDepth ?? 0,
+          dependencies: node.dependencies ?? [],
+          elapsedMs: node.elapsedMs ?? 0,
+          retryCount: node.retryCount ?? 0,
+        }));
+        if (!cancelled) {
+          setPlanReadyDagNodes(nodes);
+        }
+      } catch (error) {
+        console.error("Failed to fetch DAG for PLAN_READY state:", error);
+      }
+    };
+    fetchDag();
+    return () => { cancelled = true; };
+  }, [activeStatus, currentTaskId]);
+
   // DAG save handler
   const handleSaveDAG = async (dag: DAGGraph) => {
     if (!editingTaskId) return;
@@ -105,11 +141,17 @@ export function ChatTimeline(props: ChatTimelineProps) {
     activeStatus === "PLAN_READY" || activeStatus === "COMPLETED" || activeStatus === "FAILED";
   const activeBundle = currentTaskId ? progressBundles.get(currentTaskId) ?? null : null;
   const activeEntries = activeBundle ? activeBundle.entries.slice(-6).reverse() : [];
-  const latestDagNodes = activeBundle
+
+  // Get DAG nodes: prefer API-fetched DAG in PLAN_READY state, otherwise from progress bundle
+  const progressDagNodes = activeBundle
     ? [...activeBundle.entries]
         .reverse()
         .find((entry) => Array.isArray(entry.dagNodes) && entry.dagNodes.length > 0)?.dagNodes ?? []
     : [];
+  const latestDagNodes = activeStatus === "PLAN_READY" && planReadyDagNodes.length > 0
+    ? planReadyDagNodes
+    : progressDagNodes;
+
   const currentPhase = activeEntries[0]?.phase ?? "";
   const idleWarning = idleSeconds >= 20;
   const dagColumns = groupDagNodesByDepth(latestDagNodes);

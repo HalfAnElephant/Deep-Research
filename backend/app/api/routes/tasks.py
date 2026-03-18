@@ -75,17 +75,17 @@ def get_task_dag(task_id: str) -> dict:
 
 @router.put("/tasks/{task_id}/dag", response_model=DAGValidationResponse)
 def update_task_dag(task_id: str, request: DAGUpdateRequest) -> DAGValidationResponse:
-    """Update the DAG for a task. Only allowed when task status is PLANNING."""
+    """Update the DAG for a task. Only allowed when task status is PLANNING or READY."""
     try:
         task = task_repository.get_task(task_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
 
-    # Validate task status - DAG can only be updated during PLANNING phase
-    if task.status != TaskStatus.PLANNING:
+    # Validate task status - DAG can only be updated during PLANNING or READY phase
+    if task.status not in {TaskStatus.PLANNING, TaskStatus.READY}:
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot update DAG: task status is {task.status.value}, expected PLANNING",
+            detail=f"Cannot update DAG: task status is {task.status.value}, expected PLANNING or READY",
         )
 
     # Convert nodes and edges to dictionaries for validation

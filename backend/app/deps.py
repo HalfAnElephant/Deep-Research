@@ -55,6 +55,7 @@ conversation_agent = ConversationAgent(
     execution_engine=execution_engine,
     evidence_repository=evidence_repository,
     report_agent=report_agent,
+    planner=planner,
 )
 
 execution_engine.set_event_listener(conversation_agent.on_task_event)
