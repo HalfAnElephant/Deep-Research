@@ -84,6 +84,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
           title: node.title,
           status: node.status,
           searchDepth: node.metadata?.searchDepth ?? 0,
+          // Use dependencies from node for edge derivation
           dependencies: node.dependencies ?? [],
           elapsedMs: 0,  // Not available in DAG response
           retryCount: 0,  // Not available in DAG response
@@ -530,27 +531,34 @@ function streamStatusLabel(status: "idle" | "connecting" | "connected" | "reconn
  * Derives edges from node dependencies.
  */
 function convertToDAGGraph(nodes: DagNodeLiveState[], taskId: string): DAGGraph {
+  if (!nodes || nodes.length === 0) {
+    return { nodes: [], edges: [] };
+  }
+
   const taskNodes: TaskNode[] = nodes.map((node) => ({
     nodeId: node.nodeId,
     taskId: taskId,
     title: node.title,
-    status: node.status as TaskNode["status"],
+    description: "",
+    status: (node.status || "PENDING") as TaskNode["status"],
     priority: 0,
-    searchDepth: node.searchDepth,
+    searchDepth: node.searchDepth || 0,
     infoGainScore: 0,
-    elapsedMs: node.elapsedMs,
-    retryCount: node.retryCount,
+    elapsedMs: node.elapsedMs || 0,
+    retryCount: node.retryCount || 0,
   }));
 
   // Derive edges from dependencies
   const edges: DAGEdge[] = [];
   for (const node of nodes) {
-    for (const depId of node.dependencies) {
-      edges.push({
-        id: `edge-${depId}-${node.nodeId}`,
-        source: depId,
-        target: node.nodeId,
-      });
+    if (node.dependencies && Array.isArray(node.dependencies)) {
+      for (const depId of node.dependencies) {
+        edges.push({
+          id: `edge-${depId}-${node.nodeId}`,
+          source: depId,
+          target: node.nodeId,
+        });
+      }
     }
   }
 

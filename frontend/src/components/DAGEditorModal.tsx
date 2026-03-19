@@ -127,6 +127,12 @@ export function DAGEditorModal({
   onClose,
   onSave,
 }: DAGEditorModalProps) {
+  // Ensure dag has valid structure
+  const safeDag: DAGGraph = {
+    nodes: Array.isArray(dag?.nodes) ? dag.nodes : [],
+    edges: Array.isArray(dag?.edges) ? dag.edges : [],
+  };
+
   const {
     state,
     undo,
@@ -141,7 +147,7 @@ export function DAGEditorModal({
     deleteEdge,
     setMode,
     exportDag,
-  } = useDAGEditor(dag);
+  } = useDAGEditor(safeDag);
 
   // Use hook's mode state instead of local state
   const mode = state.mode;

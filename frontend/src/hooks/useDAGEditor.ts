@@ -83,19 +83,25 @@ const MAX_HISTORY_SIZE = 50;
  * Provides undo/redo functionality, node and edge operations, and change tracking.
  */
 export function useDAGEditor(initialDag: DAGGraph): UseDAGEditorResult {
+  // Normalize initial DAG to ensure nodes and edges are arrays
+  const normalizedDag: DAGGraph = {
+    nodes: Array.isArray(initialDag?.nodes) ? initialDag.nodes : [],
+    edges: Array.isArray(initialDag?.edges) ? initialDag.edges : [],
+  };
+
   // Initial state
   const initialState: DAGEditorState = {
-    nodes: initialDag.nodes,
-    edges: initialDag.edges,
+    nodes: normalizedDag.nodes,
+    edges: normalizedDag.edges,
     selectedNodeId: null,
     mode: "simple",
-    history: [initialDag],
+    history: [normalizedDag],
     historyIndex: 0,
     isDirty: false,
   };
 
   const [state, setState] = useState<DAGEditorState>(initialState);
-  const initialDagRef = useRef<DAGGraph>(initialDag);
+  const initialDagRef = useRef<DAGGraph>(normalizedDag);
   const nextNodeIdRef = useRef(0);
 
   /**
