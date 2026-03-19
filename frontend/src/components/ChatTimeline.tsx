@@ -80,13 +80,13 @@ export function ChatTimeline(props: ChatTimelineProps) {
         const dagData = await getDag(currentTaskId);
         if (cancelled || !dagData || !dagData.nodes) return;
         const nodes: DagNodeLiveState[] = dagData.nodes.map((node) => ({
-          nodeId: node.nodeId,
+          nodeId: node.taskId,  // Use taskId as nodeId
           title: node.title,
           status: node.status,
-          searchDepth: node.searchDepth ?? 0,
+          searchDepth: node.metadata?.searchDepth ?? 0,
           dependencies: node.dependencies ?? [],
-          elapsedMs: node.elapsedMs ?? 0,
-          retryCount: node.retryCount ?? 0,
+          elapsedMs: 0,  // Not available in DAG response
+          retryCount: 0,  // Not available in DAG response
         }));
         if (!cancelled) {
           setPlanReadyDagNodes(nodes);

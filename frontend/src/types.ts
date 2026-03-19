@@ -29,9 +29,21 @@ export interface TaskResponse {
   dag?: {
     nodes: Array<{
       taskId: string;
+      parentTaskId?: string | null;
       title: string;
+      description: string;
       status: string;
-      metadata: { searchDepth: number; infoGainScore: number };
+      priority: number;
+      dependencies: string[];
+      children: string[];
+      metadata: {
+        estimatedTokenCost: number;
+        searchDepth: number;
+        infoGainScore: number;
+        createdAt: string;
+        updatedAt: string;
+      };
+      output: Array<Record<string, unknown>>;
     }>;
     edges: Array<{ from: string; to: string; type: string }>;
   };
