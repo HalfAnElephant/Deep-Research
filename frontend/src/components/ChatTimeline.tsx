@@ -13,7 +13,7 @@ import { ReportViewer } from "./ReportViewer";
 import { ProgressBar } from "./ProgressIndicator";
 import { DAGEditorModal } from "./DAGEditorModal";
 import { getDag } from "../api";
-import type { DAGGraph, TaskNode, DAGEdge } from "../hooks/useDAGEditor";
+import type { DAGGraph, TaskNode, DAGEdge, TaskNodeStatus } from "../hooks/useDAGEditor";
 
 interface ChatTimelineProps {
   messages: ConversationMessage[];
@@ -65,12 +65,12 @@ export function ChatTimeline(props: ChatTimelineProps) {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
 
   // DAG state for PLAN_READY phase (fetched from API)
-  const [planReadyDagNodes, setPlanReadyDagNodes] = useState<DagNodeLiveState[]>([]);
+  const [planReadyDag, setPlanReadyDag] = useState<DAGGraph>({ nodes: [], edges: [] });
 
   // Fetch DAG when in PLAN_READY state with taskId
   useEffect(() => {
     if (activeStatus !== "PLAN_READY" || !currentTaskId) {
-      setPlanReadyDagNodes([]);
+      setPlanReadyDag({ nodes: [], edges: [] });
       return;
     }
 
@@ -79,18 +79,30 @@ export function ChatTimeline(props: ChatTimelineProps) {
       try {
         const dagData = await getDag(currentTaskId);
         if (cancelled || !dagData || !dagData.nodes) return;
-        const nodes: DagNodeLiveState[] = dagData.nodes.map((node) => ({
-          nodeId: node.taskId,  // Use taskId as nodeId
+
+        // Convert backend format to frontend format
+        const taskNodes: TaskNode[] = dagData.nodes.map((node) => ({
+          nodeId: node.taskId,  // Backend uses taskId as nodeId
+          taskId: node.taskId,
           title: node.title,
-          status: node.status,
+          description: node.description || "",
+          status: (node.status || "PENDING") as TaskNodeStatus,
+          priority: node.priority || 0,
           searchDepth: node.metadata?.searchDepth ?? 0,
-          // Use dependencies from node for edge derivation
-          dependencies: node.dependencies ?? [],
-          elapsedMs: 0,  // Not available in DAG response
-          retryCount: 0,  // Not available in DAG response
+          infoGainScore: node.metadata?.infoGainScore ?? 0,
+          elapsedMs: 0,
+          retryCount: 0,
         }));
+
+        // Convert edges from backend format (from/to) to frontend format (source/target)
+        const dagEdges: DAGEdge[] = (dagData.edges || []).map((edge, index) => ({
+          id: `edge-${edge.from}-${edge.to}`,
+          source: edge.from,  // Backend uses 'from', frontend uses 'source'
+          target: edge.to,    // Backend uses 'to', frontend uses 'target'
+        }));
+
         if (!cancelled) {
-          setPlanReadyDagNodes(nodes);
+          setPlanReadyDag({ nodes: taskNodes, edges: dagEdges });
         }
       } catch (error) {
         console.error("Failed to fetch DAG for PLAN_READY state:", error);
@@ -149,8 +161,23 @@ export function ChatTimeline(props: ChatTimelineProps) {
         .reverse()
         .find((entry) => Array.isArray(entry.dagNodes) && entry.dagNodes.length > 0)?.dagNodes ?? []
     : [];
-  const latestDagNodes = activeStatus === "PLAN_READY" && planReadyDagNodes.length > 0
-    ? planReadyDagNodes
+
+  // For DAG editor: use planReadyDag (already in DAGGraph format) or convert from progress
+  const editorDag: DAGGraph = activeStatus === "PLAN_READY" && planReadyDag.nodes.length > 0
+    ? planReadyDag
+    : convertToDAGGraph(progressDagNodes, currentTaskId);
+
+  // For display: convert DAGGraph nodes to DagNodeLiveState format
+  const latestDagNodes = activeStatus === "PLAN_READY" && planReadyDag.nodes.length > 0
+    ? planReadyDag.nodes.map(n => ({
+        nodeId: n.nodeId,
+        title: n.title,
+        status: n.status,
+        searchDepth: n.searchDepth,
+        dependencies: [],
+        elapsedMs: n.elapsedMs,
+        retryCount: n.retryCount,
+      }))
     : progressDagNodes;
 
   const currentPhase = activeEntries[0]?.phase ?? "";
@@ -355,7 +382,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
                     >
                       打开草稿抽屉
                     </button>
-                    {isLatestPlan && currentTaskId && latestDagNodes.length > 0 && (activeStatus === "RUNNING" || activeStatus === "PLAN_READY" || activeStatus === "SUSPENDED") && (
+                    {isLatestPlan && currentTaskId && editorDag.nodes.length > 0 && (activeStatus === "RUNNING" || activeStatus === "PLAN_READY") && (
                       <button
                         className="ghost"
                         type="button"
@@ -452,7 +479,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
       {isDAGEditorOpen && editingTaskId && (
         <DAGEditorModal
           taskId={editingTaskId}
-          dag={convertToDAGGraph(latestDagNodes, editingTaskId)}
+          dag={editorDag}
           isOpen={isDAGEditorOpen}
           onClose={() => {
             setIsDAGEditorOpen(false);
@@ -530,8 +557,8 @@ function streamStatusLabel(status: "idle" | "connecting" | "connected" | "reconn
  * Convert DagNodeLiveState array to DAGGraph format for the editor.
  * Derives edges from node dependencies.
  */
-function convertToDAGGraph(nodes: DagNodeLiveState[], taskId: string): DAGGraph {
-  if (!nodes || nodes.length === 0) {
+function convertToDAGGraph(nodes: DagNodeLiveState[], taskId: string | null): DAGGraph {
+  if (!nodes || nodes.length === 0 || !taskId) {
     return { nodes: [], edges: [] };
   }
 
