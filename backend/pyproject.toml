@@ -23,6 +23,15 @@ dev = [
   "ruff>=0.6.9"
 ]
 
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+exclude = ["backend*", "*.egg-info"]
+namespaces = true
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
