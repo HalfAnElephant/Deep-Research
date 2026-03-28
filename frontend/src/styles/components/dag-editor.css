@@ -51,6 +51,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
   padding: var(--space-4);
   border-bottom: 1px solid var(--line);
   background: var(--card);
@@ -67,11 +69,15 @@
   display: flex;
   gap: var(--space-2);
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .dag-editor-modal-body {
   display: flex;
   flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -84,6 +90,8 @@
 
 .dag-editor-canvas {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   position: relative;
   overflow: hidden;
   background: var(--bg-soft);
@@ -99,8 +107,10 @@
   position: absolute;
   top: var(--space-4);
   left: var(--space-4);
+  right: var(--space-4);
   z-index: 10;
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
   padding: var(--space-2);
@@ -291,7 +301,8 @@
  */
 
 .dag-node-detail-panel {
-  width: 320px;
+  width: clamp(260px, 24vw, 360px);
+  flex-shrink: 0;
   border-left: 1px solid var(--line);
   padding: var(--space-4);
   display: flex;
@@ -518,6 +529,19 @@
   font-size: var(--text-xs);
   font-style: italic;
   opacity: 0.8;
+}
+
+@media (max-width: 1100px) {
+  .dag-editor-modal-body {
+    flex-direction: column;
+  }
+
+  .dag-node-detail-panel {
+    width: 100%;
+    max-height: 36vh;
+    border-left: none;
+    border-top: 1px solid var(--line);
+  }
 }
 
 /* ============================================================================

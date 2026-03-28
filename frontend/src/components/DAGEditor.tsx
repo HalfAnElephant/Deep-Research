@@ -15,6 +15,27 @@ type DagreLayoutOptions = LayoutOptions & {
   rankSep?: number;
 };
 
+const NODE_MIN_WIDTH = 220;
+const NODE_MAX_WIDTH = 300;
+const NODE_MIN_HEIGHT = 72;
+const NODE_HORIZONTAL_PADDING = 36;
+const NODE_VERTICAL_PADDING = 28;
+const NODE_FONT_SIZE = 14;
+const NODE_LINE_HEIGHT = 18;
+const NODE_CHARACTERS_PER_LINE = 14;
+const FIT_PADDING = 36;
+const MIN_FIT_ZOOM = 0.62;
+const MAX_FIT_ZOOM = 1.05;
+
+const DAGRE_LAYOUT_OPTIONS: DagreLayoutOptions = {
+  name: "dagre",
+  rankDir: "TB",
+  nodeSep: 72,
+  rankSep: 112,
+  fit: false,
+  animate: false,
+};
+
 /**
  * Edge creation step state for two-step edge creation flow
  */
@@ -45,6 +66,41 @@ function getNodeColor(status: TaskNodeStatus): string {
     PRUNED: "#9E9E9E",
   };
   return colors[status] || colors.PENDING;
+}
+
+function measureNode(title: string) {
+  const trimmedTitle = title.trim() || "Untitled";
+  const textLength = Array.from(trimmedTitle).length;
+  const lineCount = Math.max(1, Math.ceil(textLength / NODE_CHARACTERS_PER_LINE));
+  const widestLineChars = Math.min(
+    NODE_CHARACTERS_PER_LINE + 4,
+    Math.max(NODE_CHARACTERS_PER_LINE, textLength)
+  );
+  const width = Math.min(
+    NODE_MAX_WIDTH,
+    Math.max(NODE_MIN_WIDTH, widestLineChars * NODE_FONT_SIZE + NODE_HORIZONTAL_PADDING)
+  );
+  const height = Math.max(
+    NODE_MIN_HEIGHT,
+    lineCount * NODE_LINE_HEIGHT + NODE_VERTICAL_PADDING
+  );
+
+  return {
+    width,
+    height,
+    labelMaxWidth: width - NODE_HORIZONTAL_PADDING,
+  };
+}
+
+function fitGraph(cy: Core) {
+  const elements = cy.elements();
+  if (elements.length === 0) return;
+
+  cy.resize();
+  cy.fit(elements, FIT_PADDING);
+  const nextZoom = Math.min(MAX_FIT_ZOOM, Math.max(cy.zoom(), MIN_FIT_ZOOM));
+  cy.zoom(nextZoom);
+  cy.center(elements);
 }
 
 /**
@@ -87,6 +143,7 @@ export function DAGEditor({
   const onNodeSelectRef = useRef(onNodeSelect);
   const onEdgeAddRef = useRef(onEdgeAdd);
   const onEdgeDeleteRef = useRef(onEdgeDelete);
+  const resizeFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     onNodeSelectRef.current = onNodeSelect;
@@ -114,17 +171,20 @@ export function DAGEditor({
           style: {
             "background-color": "data(color)",
             label: "data(label)",
-            width: 150,
-            height: 40,
+            width: "data(width)",
+            height: "data(height)",
             shape: "roundrectangle",
+            padding: 14,
             "text-wrap": "wrap",
+            "text-max-width": "data(labelMaxWidth)",
             "text-valign": "center",
             "text-halign": "center",
-            "font-size": 12,
+            "font-size": NODE_FONT_SIZE,
+            "line-height": 1.3,
             color: "#fff",
             "border-width": 2,
             "border-color": "data(borderColor)",
-            "text-outline-width": 1,
+            "text-outline-width": 0.75,
             "text-outline-color": "data(color)",
           },
         },
@@ -163,14 +223,9 @@ export function DAGEditor({
           },
         },
       ],
-      layout: {
-        name: "dagre",
-        rankDir: "TB",
-        nodeSep: 50,
-        rankSep: 100,
-      } as DagreLayoutOptions,
-      minZoom: 0.3,
-      maxZoom: 2,
+      layout: DAGRE_LAYOUT_OPTIONS,
+      minZoom: 0.45,
+      maxZoom: 2.4,
       wheelSensitivity: 0.3,
     });
 
@@ -225,12 +280,30 @@ export function DAGEditor({
       }
     });
 
+    const resizeObserver = new ResizeObserver(() => {
+      if (resizeFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeFrameRef.current);
+      }
+
+      resizeFrameRef.current = window.requestAnimationFrame(() => {
+        fitGraph(cy);
+      });
+    });
+
+    resizeObserver.observe(containerRef.current);
+
     // Fit to view on initial render
     cy.ready(() => {
-      cy.fit(undefined, 50);
+      window.requestAnimationFrame(() => {
+        fitGraph(cy);
+      });
     });
 
     return () => {
+      if (resizeFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeFrameRef.current);
+      }
+      resizeObserver.disconnect();
       cy.destroy();
     };
   }, [mode]);
@@ -243,15 +316,22 @@ export function DAGEditor({
     if (!cy) return;
 
     // Map nodes to Cytoscape format
-    const cyNodes = nodes.map((node) => ({
-      data: {
-        id: node.nodeId,
-        label: node.title,
-        color: getNodeColor(node.status),
-        borderColor: getNodeColor(node.status),
-        ...node,
-      },
-    }));
+    const cyNodes = nodes.map((node) => {
+      const nodeSize = measureNode(node.title);
+
+      return {
+        data: {
+          id: node.nodeId,
+          label: node.title,
+          color: getNodeColor(node.status),
+          borderColor: getNodeColor(node.status),
+          width: nodeSize.width,
+          height: nodeSize.height,
+          labelMaxWidth: nodeSize.labelMaxWidth,
+          ...node,
+        },
+      };
+    });
 
     const cyEdges = edges.map((edge, index) => ({
       data: {
@@ -262,8 +342,11 @@ export function DAGEditor({
     }));
 
     cy.json({ elements: { nodes: cyNodes, edges: cyEdges } });
-    cy.layout({ name: "dagre", rankDir: "TB", nodeSep: 50, rankSep: 100 } as DagreLayoutOptions).run();
-    cy.fit(undefined, 50);
+    const layout = cy.layout(DAGRE_LAYOUT_OPTIONS);
+    layout.one("layoutstop", () => {
+      fitGraph(cy);
+    });
+    layout.run();
   }, [nodes, edges]);
 
   /**
