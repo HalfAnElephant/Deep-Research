@@ -12,6 +12,7 @@ htmlcov/
 *.log
 *.db
 backend/.data/
+backend/backend/.data/
 frontend/.vite/
 .worktrees/
 *.egg-info/
