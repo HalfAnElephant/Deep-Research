@@ -1,8 +1,6 @@
 """Unit tests for DAGValidator service."""
 from __future__ import annotations
 
-import pytest
-
 from app.services.dag_validator import DAGValidator
 
 

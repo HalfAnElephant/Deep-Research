@@ -15,7 +15,7 @@ import { DAGEditorModal } from "./DAGEditorModal";
 import { getDag } from "../api";
 import type { DAGGraph, TaskNode, DAGEdge, TaskNodeStatus } from "../hooks/useDAGEditor";
 
-interface ChatTimelineProps {
+export interface ChatTimelineProps {
   messages: ConversationMessage[];
   currentTaskId: string | null;
   draftMode: boolean;

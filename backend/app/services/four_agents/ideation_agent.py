@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import httpx
-
-from app.core.config import settings
 from app.models.schemas import AgentType, ResearchHypothesis
 from app.services.four_agents.base import AgentContext, AgentResult, BaseAgent
 from app.services.retrieval import RetrievalService

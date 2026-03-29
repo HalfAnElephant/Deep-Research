@@ -113,6 +113,88 @@ class ConversationAgent:
         self.report_agent = report_agent
         self.planner = planner
 
+    def _build_task_payload(
+        self,
+        *,
+        markdown: str,
+        topic: str,
+        base_config: TaskConfig,
+    ) -> tuple[ParsedPlan, str]:
+        parsed = self._parse_plan(markdown, topic=topic, base_config=base_config)
+        task_description = self._extract_plan_body(markdown)[:5000]
+        if len(task_description.strip()) < 3:
+            task_description = f"围绕主题\"{topic}\"执行系统化研究。"
+        return parsed, task_description
+
+    def _create_task_for_plan(
+        self,
+        *,
+        markdown: str,
+        topic: str,
+        base_config: TaskConfig,
+    ) -> str:
+        parsed, task_description = self._build_task_payload(
+            markdown=markdown,
+            topic=topic,
+            base_config=base_config,
+        )
+        task_id = new_id()
+        task = self.task_repository.create_task(
+            task_id=task_id,
+            title=parsed.title[:200],
+            description=task_description,
+            config=parsed.config,
+        )
+        if self.planner:
+            dag = self.planner.build_dag(
+                root_task_id=task_id,
+                title=parsed.title,
+                description=task_description,
+                config=parsed.config,
+            )
+            self.task_repository.save_dag(task_id, dag)
+        return task.taskId
+
+    def _load_task(self, task_id: str | None):
+        if not task_id:
+            return None
+        try:
+            return self.task_repository.get_task(task_id)
+        except KeyError:
+            return None
+
+    def _sync_reusable_task(
+        self,
+        *,
+        task_id: str | None,
+        markdown: str,
+        topic: str,
+        base_config: TaskConfig,
+    ) -> None:
+        task = self._load_task(task_id)
+        if task is None or task.status != TaskStatus.READY:
+            return
+
+        parsed, task_description = self._build_task_payload(
+            markdown=markdown,
+            topic=topic,
+            base_config=base_config,
+        )
+        self.task_repository.update_task(
+            task.taskId,
+            title=parsed.title[:200],
+            description=task_description,
+            config=parsed.config,
+        )
+        if self.planner:
+            dag = self.planner.build_dag(
+                root_task_id=task.taskId,
+                title=parsed.title,
+                description=task_description,
+                config=parsed.config,
+            )
+            self.task_repository.save_dag(task.taskId, dag)
+
     async def create_conversation(self, *, topic: str, config: TaskConfig | None = None) -> ConversationDetail:
         selected_config = config or TaskConfig()
         conversation_id = new_id()
@@ -145,31 +227,12 @@ class ConversationAgent:
             metadata={"version": revision.version},
         )
 
-        # Create Task and DAG during planning phase
-        task_id = new_id()
-        parsed = self._parse_plan(markdown, topic=topic, base_config=selected_config)
-        task_description = self._extract_plan_body(markdown)[:5000]
-        if len(task_description.strip()) < 3:
-            task_description = f"围绕主题\"{topic}\"执行系统化研究。"
-        task = self.task_repository.create_task(
-            task_id=task_id,
-            title=parsed.title[:200],
-            description=task_description,
-            config=parsed.config,
+        task_id = self._create_task_for_plan(
+            markdown=markdown,
+            topic=topic,
+            base_config=selected_config,
         )
-
-        # Generate and save DAG using planner
-        if self.planner:
-            dag = self.planner.build_dag(
-                root_task_id=task_id,
-                title=parsed.title,
-                description=task_description,
-                config=parsed.config,
-            )
-            self.task_repository.save_dag(task_id, dag)
-
-        # Link task to conversation
-        self.repository.set_task_id(conversation_id, task.taskId)
+        self.repository.set_task_id(conversation_id, task_id)
         self.repository.set_status(
             conversation_id, ConversationStatus.PLAN_READY)
         return self.repository.get_detail(conversation_id)
@@ -389,28 +452,13 @@ class ConversationAgent:
             metadata={"version": revision.version},
         )
 
-        # Update Task and DAG when plan is revised
         summary = self.repository.get_summary(conversation_id)
-        if summary.taskId and self.planner:
-            parsed = self._parse_plan(revised, topic=topic, base_config=config)
-            task_description = self._extract_plan_body(revised)[:5000]
-            if len(task_description.strip()) < 3:
-                task_description = f"围绕主题\"{topic}\"执行系统化研究。"
-            # Update task title and description
-            self.task_repository.update_task(
-                summary.taskId,
-                title=parsed.title[:200],
-                description=task_description,
-                config=parsed.config,
-            )
-            # Regenerate DAG based on revised plan
-            dag = self.planner.build_dag(
-                root_task_id=summary.taskId,
-                title=parsed.title,
-                description=task_description,
-                config=parsed.config,
-            )
-            self.task_repository.save_dag(summary.taskId, dag)
+        self._sync_reusable_task(
+            task_id=summary.taskId,
+            markdown=revised,
+            topic=topic,
+            base_config=config,
+        )
 
         self.repository.set_status(
             conversation_id, ConversationStatus.PLAN_READY)
@@ -434,28 +482,13 @@ class ConversationAgent:
             metadata={"version": revision.version},
         )
 
-        # Update Task and DAG when plan is edited
-        if summary.taskId and self.planner:
-            config = self.repository.get_config(conversation_id)
-            parsed = self._parse_plan(markdown, topic=summary.topic, base_config=config)
-            task_description = self._extract_plan_body(markdown)[:5000]
-            if len(task_description.strip()) < 3:
-                task_description = f"围绕主题\"{summary.topic}\"执行系统化研究。"
-            # Update task title and description
-            self.task_repository.update_task(
-                summary.taskId,
-                title=parsed.title[:200],
-                description=task_description,
-                config=parsed.config,
-            )
-            # Regenerate DAG based on edited plan
-            dag = self.planner.build_dag(
-                root_task_id=summary.taskId,
-                title=parsed.title,
-                description=task_description,
-                config=parsed.config,
-            )
-            self.task_repository.save_dag(summary.taskId, dag)
+        config = self.repository.get_config(conversation_id)
+        self._sync_reusable_task(
+            task_id=summary.taskId,
+            markdown=markdown,
+            topic=summary.topic,
+            base_config=config,
+        )
 
         self.repository.set_status(
             conversation_id, ConversationStatus.PLAN_READY)
@@ -549,17 +582,6 @@ class ConversationAgent:
         if current_plan is None:
             raise ValueError("没有可执行方案，请先生成或编辑研究方案。")
 
-        # Task should already exist from planning phase
-        if not summary.taskId:
-            raise ValueError("任务尚未创建，请重新生成方案。")
-
-        # Get existing task created during planning phase
-        try:
-            task = self.task_repository.get_task(summary.taskId)
-        except KeyError:
-            raise ValueError("任务不存在，请重新生成方案。")
-
-        # Parse plan and add any warnings
         base_config = self.repository.get_config(conversation_id)
         parsed = self._parse_plan(
             current_plan.markdown, topic=summary.topic, base_config=base_config)
@@ -571,6 +593,20 @@ class ConversationAgent:
                 kind=MessageKind.ERROR,
                 content=warning,
             )
+
+        task = self._load_task(summary.taskId)
+        if (
+            task is None
+            or task.status != TaskStatus.READY
+            or self._has_persisted_report(summary.taskId)
+        ):
+            task_id = self._create_task_for_plan(
+                markdown=current_plan.markdown,
+                topic=summary.topic,
+                base_config=base_config,
+            )
+            self.repository.set_task_id(conversation_id, task_id)
+            task = self.task_repository.get_task(task_id)
 
         self.repository.set_status(conversation_id, ConversationStatus.RUNNING)
         self.repository.add_message(

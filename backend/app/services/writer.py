@@ -56,7 +56,9 @@ class WriterService:
         r"|(\[locked\])"
     )
     UNICODE_ESCAPE_PATTERN = re.compile(r"\\u([0-9a-fA-F]{4})")
-    ARTICLE_TITLE_BLACKLIST = re.compile(r"(?i)(研究计划|执行步骤|风险与边界|交付标准)")
+    ARTICLE_TITLE_BLACKLIST = re.compile(
+        r"(?i)(研究计划|研究方案|执行步骤|风险与边界|交付标准)"
+    )
     GARBLED_PATTERNS = (
         re.compile(r"\\u[0-9a-fA-F]{4}"),
         re.compile(r"publishsource|srsltid|download\?etag=", re.IGNORECASE),

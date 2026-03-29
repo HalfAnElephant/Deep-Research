@@ -3,13 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 import logging
 import re
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from app.core.utils import dedupe_segments
 from app.models.schemas import Citation, Evidence, ReportDraft, SectionDraft, WritingSectionPlan
 from app.services.mcp_executor import MCPExecutor
 from app.services.retrieval import RetrievalService
 from app.services.writer import ReportBlueprint, WriterService
+
+if TYPE_CHECKING:
+    from app.services.four_agents.checking.agent import CheckingAgent
 
 
 logger = logging.getLogger(__name__)
@@ -208,7 +211,6 @@ class ReportAgent:
 
                 # 运行审核
                 from app.services.four_agents.base import AgentContext
-                from app.services.four_agents.checking.agent import CheckingAgent
 
                 context = AgentContext(
                     task_id=task_id,

@@ -1,8 +1,8 @@
+import { useState } from "react";
 import {
   useDAGEditor,
   type DAGGraph,
   type TaskNode,
-  type DAGEditorMode,
   type TaskNodeStatus,
 } from "../hooks/useDAGEditor";
 import { DAGEditor } from "./DAGEditor";
@@ -24,6 +24,107 @@ interface NodeDetailPanelProps {
   node: TaskNode | null;
   onUpdate: (updates: Partial<TaskNode>) => void;
   onDelete: () => void;
+}
+
+interface NodeOrderPanelProps {
+  nodes: TaskNode[];
+  selectedNodeId: string | null;
+  onSelect: (nodeId: string) => void;
+  onReorder: (orderedNodeIds: string[]) => void;
+  onAddNode: () => void;
+  onDeleteNode: (nodeId: string) => void;
+}
+
+function NodeOrderPanel({
+  nodes,
+  selectedNodeId,
+  onSelect,
+  onReorder,
+  onAddNode,
+  onDeleteNode,
+}: NodeOrderPanelProps) {
+  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
+
+  const handleDrop = (targetNodeId: string) => {
+    if (!draggingNodeId || draggingNodeId === targetNodeId) return;
+
+    const orderedIds = nodes.map((node) => node.nodeId);
+    const fromIndex = orderedIds.indexOf(draggingNodeId);
+    const toIndex = orderedIds.indexOf(targetNodeId);
+    if (fromIndex < 0 || toIndex < 0) return;
+
+    orderedIds.splice(fromIndex, 1);
+    orderedIds.splice(toIndex, 0, draggingNodeId);
+    onReorder(orderedIds);
+    setDraggingNodeId(null);
+  };
+
+  return (
+    <section className="dag-node-order-panel" aria-label="Node order">
+      <div className="dag-panel-header-row">
+        <h3 className="dag-node-detail-panel-header">Execution Order</h3>
+        <button
+          type="button"
+          className="dag-toolbar-btn"
+          onClick={onAddNode}
+          title="Create a new node"
+        >
+          Add Node
+        </button>
+      </div>
+
+      <p className="dag-panel-caption">Drag cards to change node order.</p>
+
+      <ul className="dag-order-list">
+        {nodes.length === 0 && (
+          <li className="dag-order-empty">No nodes yet. Create your first node.</li>
+        )}
+
+        {nodes.map((node, index) => {
+          const isSelected = node.nodeId === selectedNodeId;
+          const isDragging = node.nodeId === draggingNodeId;
+
+          return (
+            <li
+              key={node.nodeId}
+              className={`dag-order-item ${isSelected ? "selected" : ""} ${isDragging ? "dragging" : ""}`}
+              draggable
+              onDragStart={() => setDraggingNodeId(node.nodeId)}
+              onDragEnd={() => setDraggingNodeId(null)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => handleDrop(node.nodeId)}
+              title={`Node ${index + 1}: ${node.title}`}
+            >
+              <div className="dag-order-item-rank">{index + 1}</div>
+              <button
+                type="button"
+                className="dag-order-item-main"
+                onClick={() => onSelect(node.nodeId)}
+                title={`Select node ${node.title || "Untitled"}`}
+              >
+                <div className="dag-order-item-content">
+                  <div className="dag-order-item-title">{node.title || "Untitled"}</div>
+                  <div className="dag-order-item-meta">{node.status}</div>
+                </div>
+              </button>
+              <button
+                type="button"
+                className="dag-order-item-delete"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDeleteNode(node.nodeId);
+                }}
+                title="Delete node"
+                aria-label={`Delete node ${node.title || "Untitled"}`}
+              >
+                Delete
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
 }
 
 function NodeDetailPanel({ node, onUpdate, onDelete }: NodeDetailPanelProps) {
@@ -104,6 +205,7 @@ function NodeDetailPanel({ node, onUpdate, onDelete }: NodeDetailPanelProps) {
 
       <div className="dag-node-detail-actions">
         <button
+          type="button"
           className="dag-toolbar-btn danger"
           onClick={onDelete}
         >
@@ -171,16 +273,29 @@ export function DAGEditorModal({
 
   const selectedNode = state.nodes.find((n) => n.nodeId === state.selectedNodeId) ?? null;
 
+  const completedCount = state.nodes.filter((node) => node.status === "COMPLETED").length;
+
   return (
     <div className="dag-editor-modal" role="dialog" aria-labelledby="dag-editor-title">
       <header className="dag-editor-modal-header">
-        <h1 id="dag-editor-title" className="dag-editor-modal-title">
-          Edit DAG - Task {taskId.slice(0, 8)}...
-        </h1>
+        <div className="dag-editor-modal-title-wrap">
+          <h1 id="dag-editor-title" className="dag-editor-modal-title">
+            DAG Studio
+          </h1>
+          <p className="dag-editor-modal-subtitle">Task {taskId.slice(0, 8)}...</p>
+        </div>
+
+        <div className="dag-editor-metrics">
+          <span className="dag-metric-chip">Nodes: {state.nodes.length}</span>
+          <span className="dag-metric-chip">Edges: {state.edges.length}</span>
+          <span className="dag-metric-chip">Completed: {completedCount}</span>
+        </div>
+
         <div className="dag-editor-modal-toolbar">
           {/* Mode toggle */}
           <div className="dag-mode-toggle">
             <button
+              type="button"
               className={`dag-mode-toggle-btn ${mode === "simple" ? "active" : ""}`}
               onClick={() => setMode("simple")}
               aria-pressed={mode === "simple"}
@@ -188,6 +303,7 @@ export function DAGEditorModal({
               Simple
             </button>
             <button
+              type="button"
               className={`dag-mode-toggle-btn ${mode === "advanced" ? "active" : ""}`}
               onClick={() => setMode("advanced")}
               aria-pressed={mode === "advanced"}
@@ -200,6 +316,7 @@ export function DAGEditorModal({
 
           {/* Undo/Redo */}
           <button
+            type="button"
             className="dag-toolbar-btn"
             onClick={undo}
             disabled={!canUndo}
@@ -208,6 +325,7 @@ export function DAGEditorModal({
             Undo
           </button>
           <button
+            type="button"
             className="dag-toolbar-btn"
             onClick={redo}
             disabled={!canRedo}
@@ -227,12 +345,14 @@ export function DAGEditorModal({
 
           {/* Actions */}
           <button
+            type="button"
             className="dag-toolbar-btn ghost"
             onClick={handleClose}
           >
             Cancel
           </button>
           <button
+            type="button"
             className="dag-toolbar-btn primary"
             onClick={handleSave}
             disabled={!state.isDirty}
@@ -256,19 +376,30 @@ export function DAGEditorModal({
           onEdgeDelete={deleteEdge}
         />
 
-        <NodeDetailPanel
-          node={selectedNode}
-          onUpdate={(updates) => {
-            if (state.selectedNodeId) {
-              updateNode(state.selectedNodeId, updates);
-            }
-          }}
-          onDelete={() => {
-            if (state.selectedNodeId) {
-              deleteNode(state.selectedNodeId);
-            }
-          }}
-        />
+        <aside className="dag-editor-sidebar">
+          <NodeOrderPanel
+            nodes={state.nodes}
+            selectedNodeId={state.selectedNodeId}
+            onSelect={selectNode}
+            onReorder={reorderNodes}
+            onAddNode={() => addNode()}
+            onDeleteNode={deleteNode}
+          />
+
+          <NodeDetailPanel
+            node={selectedNode}
+            onUpdate={(updates) => {
+              if (state.selectedNodeId) {
+                updateNode(state.selectedNodeId, updates);
+              }
+            }}
+            onDelete={() => {
+              if (state.selectedNodeId) {
+                deleteNode(state.selectedNodeId);
+              }
+            }}
+          />
+        </aside>
       </div>
     </div>
   );

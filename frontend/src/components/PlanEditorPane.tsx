@@ -3,7 +3,7 @@ import type { ConversationStatus } from "../types";
 import { PlanConfigForm } from "./PlanConfigForm";
 import { parseYamlFrontmatter, serializeYamlFrontmatter } from "../utils/yamlFrontmatter";
 
-interface PlanEditorPaneProps {
+export interface PlanEditorPaneProps {
   markdown: string;
   dirty: boolean;
   showMobileClose: boolean;

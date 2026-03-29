@@ -14,12 +14,12 @@ export interface ToastMessage {
   };
 }
 
-interface ToastProps {
+export interface ToastProps {
   toast: ToastMessage;
   onDismiss: (id: string) => void;
 }
 
-function Toast(props: ToastProps) {
+export function Toast(props: ToastProps) {
   const { toast, onDismiss } = props;
   const [isExiting, setIsExiting] = useState(false);
 

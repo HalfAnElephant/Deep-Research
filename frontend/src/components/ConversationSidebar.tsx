@@ -52,7 +52,7 @@ interface KeyboardNavigationState {
   currentFocusArea: FocusArea;
 }
 
-interface ConversationSidebarProps {
+export interface ConversationSidebarProps {
   summaries: ConversationSummary[];
   activeConversationId: string | null;
   creatingDraft: boolean;
@@ -106,13 +106,13 @@ export function ConversationSidebar(props: ConversationSidebarProps) {
   });
 
   // Refs 用于焦点管理
-  const sidebarRef = useRef<HTMLElement>(null);
-  const globalMenuTriggerRef = useRef<HTMLButtonElement>(null);
-  const globalMenuRef = useRef<HTMLDivElement>(null);
-  const itemMenuTriggerRef = useRef<HTMLButtonElement>(null);
-  const itemMenuRef = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  const globalMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const globalMenuRef = useRef<HTMLDivElement | null>(null);
+  const itemMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const itemMenuRef = useRef<HTMLDivElement | null>(null);
   const conversationItemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
-  const liveRegionRef = useRef<HTMLDivElement>(null);
+  const liveRegionRef = useRef<HTMLDivElement | null>(null);
 
   // 公告消息状态
   const [announcement, setAnnouncement] = useState<string>("");

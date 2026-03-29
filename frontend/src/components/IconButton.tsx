@@ -1,6 +1,6 @@
 import { memo, type ReactNode, type ButtonHTMLAttributes } from "react";
 
-interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: ReactNode;
   size?: "small" | "medium" | "large";
   variant?: "default" | "primary" | "ghost" | "danger";

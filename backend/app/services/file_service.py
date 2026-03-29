@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from fastapi.responses import FileResponse
 
 
-type ReportType = Literal["report", "article", "references"]
+ReportType = Literal["report", "article", "references"]
 
 
 class FileService:

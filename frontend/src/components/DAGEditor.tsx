@@ -13,6 +13,8 @@ type DagreLayoutOptions = LayoutOptions & {
   rankDir?: "TB" | "BT" | "LR" | "RL";
   nodeSep?: number;
   rankSep?: number;
+  fit?: boolean;
+  animate?: boolean;
 };
 
 const NODE_MIN_WIDTH = 220;
@@ -206,6 +208,37 @@ export function DAGEditor({
     selectedNodeIdRef.current = selectedNodeId;
   }, [selectedNodeId]);
 
+  const nodeStyle: Record<string, string | number> = {
+    "background-color": "data(backgroundColor)",
+    label: "data(label)",
+    width: "data(width)",
+    height: "data(height)",
+    shape: "roundrectangle",
+    "corner-radius": "24px",
+    padding: "14px",
+    "text-wrap": "wrap",
+    "text-max-width": "data(labelMaxWidth)",
+    "text-valign": "center",
+    "text-halign": "center",
+    "font-size": NODE_FONT_SIZE,
+    "line-height": 1.3,
+    color: "#0f172a",
+    "border-width": 1.75,
+    "border-color": "data(borderColor)",
+    "text-outline-width": 0,
+    "shadow-color": "data(shadowColor)",
+    "shadow-blur": 18,
+    "shadow-opacity": 0.4,
+    "shadow-offset-y": 6,
+  };
+
+  const selectedNodeStyle: Record<string, string | number> = {
+    "border-width": 3,
+    "border-color": "#111827",
+    "shadow-blur": 24,
+    "shadow-opacity": 0.58,
+  };
+
   /**
    * Initialize Cytoscape instance
    */
@@ -217,38 +250,11 @@ export function DAGEditor({
       style: [
         {
           selector: "node",
-          style: {
-            "background-color": "data(backgroundColor)",
-            label: "data(label)",
-            width: "data(width)",
-            height: "data(height)",
-            shape: "roundrectangle",
-            "corner-radius": 24,
-            padding: 14,
-            "text-wrap": "wrap",
-            "text-max-width": "data(labelMaxWidth)",
-            "text-valign": "center",
-            "text-halign": "center",
-            "font-size": NODE_FONT_SIZE,
-            "line-height": 1.3,
-            color: "#0f172a",
-            "border-width": 1.75,
-            "border-color": "data(borderColor)",
-            "text-outline-width": 0,
-            "shadow-color": "data(shadowColor)",
-            "shadow-blur": 18,
-            "shadow-opacity": 0.4,
-            "shadow-offset-y": 6,
-          },
+          style: nodeStyle,
         },
         {
           selector: "node:selected",
-          style: {
-            "border-width": 3,
-            "border-color": "#111827",
-            "shadow-blur": 24,
-            "shadow-opacity": 0.58,
-          },
+          style: selectedNodeStyle,
         },
         {
           selector: "edge",

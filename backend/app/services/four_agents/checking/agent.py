@@ -134,6 +134,10 @@ class CheckingAgent(BaseAgent):
 
         return issues
 
+    def _check_structure(self, content: str) -> list[CheckIssue]:
+        """Backward-compatible shim for structure-only checks used by tests."""
+        return self._validators["structure"].validate(content)
+
     def _evaluate_approval(self, issues: list[CheckIssue]) -> dict:
         """Evaluate if content passes based on issues found."""
         critical_issues = [i for i in issues if i.severity == "critical"]

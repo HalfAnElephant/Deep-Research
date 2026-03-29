@@ -74,11 +74,46 @@
   backdrop-filter: blur(16px) saturate(120%);
 }
 
+.dag-editor-modal-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .dag-editor-modal-title {
   font-size: var(--text-xl);
-  font-weight: var(--font-semibold);
+  font-weight: 700;
+  letter-spacing: 0.01em;
   color: var(--ink);
   margin: 0;
+}
+
+.dag-editor-modal-subtitle {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.dag-editor-metrics {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.dag-metric-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-full);
+  border: 1px solid color-mix(in oklab, var(--line) 72%, transparent);
+  background: color-mix(in oklab, var(--card) 88%, transparent);
+  color: var(--ink-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
 }
 
 .dag-editor-modal-toolbar {
@@ -95,6 +130,8 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  gap: var(--space-3);
+  padding: var(--space-3);
 }
 
 /* ============================================================================
@@ -110,6 +147,9 @@
   min-height: 0;
   position: relative;
   overflow: hidden;
+  border-radius: calc(var(--radius-lg) + 2px);
+  border: 1px solid color-mix(in oklab, var(--line) 68%, transparent);
+  box-shadow: var(--shadow-md);
   background: linear-gradient(
     160deg,
     color-mix(in oklab, var(--bg-soft) 74%, white 26%),
@@ -324,16 +364,177 @@
  */
 
 .dag-node-detail-panel {
-  width: clamp(260px, 24vw, 360px);
+  width: 100%;
   flex-shrink: 0;
-  border-left: 1px solid color-mix(in oklab, var(--line) 70%, transparent);
+  border: 1px solid color-mix(in oklab, var(--line) 70%, transparent);
+  border-radius: calc(var(--radius-md) + 4px);
   padding: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-3);
   overflow-y: auto;
   background: color-mix(in oklab, var(--card) 75%, transparent);
   backdrop-filter: blur(14px) saturate(120%);
+  box-shadow: var(--shadow-sm);
+}
+
+.dag-editor-sidebar {
+  width: clamp(300px, 27vw, 380px);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+}
+
+.dag-node-order-panel {
+  border: 1px solid color-mix(in oklab, var(--line) 70%, transparent);
+  border-radius: calc(var(--radius-md) + 4px);
+  background: color-mix(in oklab, var(--card) 75%, transparent);
+  backdrop-filter: blur(14px) saturate(120%);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 220px;
+}
+
+.dag-panel-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.dag-panel-caption {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.dag-order-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  padding-right: 2px;
+}
+
+.dag-order-empty {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.dag-order-item {
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in oklab, var(--line) 80%, transparent);
+  background: color-mix(in oklab, var(--bg-soft) 88%, transparent);
+  cursor: grab;
+  transition:
+    border-color var(--transition-fast),
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.dag-order-item:hover {
+  border-color: color-mix(in oklab, var(--primary) 46%, var(--line));
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+.dag-order-item-main {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.dag-order-item-main:focus-visible {
+  outline: none;
+}
+
+.dag-order-item:has(.dag-order-item-main:focus-visible) {
+  border-color: color-mix(in oklab, var(--primary) 72%, var(--line));
+  box-shadow:
+    0 0 0 2px color-mix(in oklab, var(--card) 92%, transparent),
+    0 0 0 4px color-mix(in oklab, var(--primary) 45%, transparent);
+}
+
+.dag-order-item.selected {
+  border-color: color-mix(in oklab, var(--primary) 68%, var(--line));
+  background: color-mix(in oklab, var(--primary-light) 52%, var(--card));
+}
+
+.dag-order-item.dragging {
+  opacity: 0.72;
+  cursor: grabbing;
+}
+
+.dag-order-item-rank {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--ink-secondary);
+  background: color-mix(in oklab, var(--line-subtle) 70%, var(--card));
+}
+
+.dag-order-item-content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dag-order-item-title {
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dag-order-item-meta {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.dag-order-item-delete {
+  border: 1px solid color-mix(in oklab, var(--danger) 55%, var(--line));
+  background: color-mix(in oklab, var(--danger-light) 60%, var(--card));
+  color: var(--danger);
+  border-radius: var(--radius-sm);
+  min-height: 30px;
+  padding: 0 var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+}
+
+.dag-order-item-delete:hover {
+  background: var(--danger);
+  color: #fff;
 }
 
 .dag-node-detail-panel-header {
@@ -562,13 +763,36 @@
 @media (max-width: 1100px) {
   .dag-editor-modal-body {
     flex-direction: column;
+    padding: var(--space-2);
   }
 
-  .dag-node-detail-panel {
+  .dag-editor-sidebar {
     width: 100%;
-    max-height: 36vh;
-    border-left: none;
-    border-top: 1px solid var(--line);
+    max-height: 44vh;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2);
+  }
+
+  .dag-node-order-panel,
+  .dag-node-detail-panel {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 860px) {
+  .dag-editor-modal-header {
+    gap: var(--space-2);
+    align-items: flex-start;
+  }
+
+  .dag-editor-metrics {
+    margin-left: 0;
+  }
+
+  .dag-editor-sidebar {
+    grid-template-columns: 1fr;
+    max-height: 52vh;
   }
 }
 
@@ -583,6 +807,7 @@
   .dag-editor-modal,
   .dag-editor-canvas .cy-node,
   .dag-editor-canvas .cy-edge,
+  .dag-order-item,
   .dag-mode-toggle-btn,
   .dag-toolbar-btn,
   .dag-node-detail-field input,

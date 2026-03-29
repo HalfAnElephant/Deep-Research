@@ -2,14 +2,14 @@ import { memo, type RefObject } from "react";
 
 import type { ConversationStatus } from "../types";
 
-interface ComposerProps {
+export interface ComposerProps {
   value: string;
   status: ConversationStatus | null;
   sending: boolean;
   disabled: boolean;
   placeholder: string;
   sendLabel: string;
-  textareaRef: RefObject<HTMLTextAreaElement | null>;
+  textareaRef: RefObject<HTMLTextAreaElement>;
   onChange: (value: string) => void;
   onSend: () => void;
 }

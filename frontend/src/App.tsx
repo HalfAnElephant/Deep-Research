@@ -120,9 +120,11 @@ function deriveAgentStatesFromMessages(messages: ConversationMessage[]): AgentSt
       const normalizedStatus = typeof latestRaw.status === "string" ? latestRaw.status.toUpperCase() : "RUNNING";
       return base.map((agent) => {
         if (agent.agentType !== normalizedType) return agent;
+        const status: AgentState["status"] =
+          normalizedStatus === "FAILED" ? "FAILED" : normalizedStatus === "COMPLETED" ? "COMPLETED" : "RUNNING";
         return {
           ...agent,
-          status: normalizedStatus === "FAILED" ? "FAILED" : normalizedStatus === "COMPLETED" ? "COMPLETED" : "RUNNING",
+          status,
           progress: typeof latestRaw.progress === "number" ? Math.max(0, Math.min(100, Math.round(latestRaw.progress))) : agent.progress,
           currentActivity: typeof latestRaw.currentActivity === "string" && latestRaw.currentActivity.trim()
             ? latestRaw.currentActivity
@@ -146,7 +148,7 @@ function deriveAgentStatesFromMessages(messages: ConversationMessage[]): AgentSt
           ? "PLANNING"
           : "IDEATION";
 
-  const updated = base.map((agent) => {
+  const updated: AgentState[] = base.map((agent): AgentState => {
     if (agent.agentType === runningAgent) {
       return {
         ...agent,
@@ -228,7 +230,7 @@ export function App() {
   const [streamClock, setStreamClock] = useState(() => Date.now());
   const [showLibrary, setShowLibrary] = useState(false);
 
-  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const progressWsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const reconnectAttemptRef = useRef(0);
@@ -974,7 +976,7 @@ export function App() {
   const confirmDeleteConversationPending =
     confirmDialog?.kind === "deleteConversation" && deletingConversationId === confirmDialog.conversationId;
   const confirmDeleteAllPending = confirmDialog?.kind === "deleteAll" && deletingAll;
-  const renamePending = Boolean(renameDialog) && renamingConversationId === renameDialog.conversationId;
+  const renamePending = renamingConversationId !== null && renameDialog?.conversationId === renamingConversationId;
 
   return (
     <>

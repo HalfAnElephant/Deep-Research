@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { exportArticle, exportReferences } from "../api";
 
-interface ExportModalProps {
+export interface ExportModalProps {
   conversationId: string;
   onClose: () => void;
 }

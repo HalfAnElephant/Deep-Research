@@ -582,8 +582,6 @@ class RetrievalService:
                 continue
 
             title = self._normalize_text(str(article.get("title", "")))
-            # PubMed ESummary doesn't return abstract directly, use title as fallback
-            abstract = title  # We'll try to fetch abstracts in a follow-up if needed
 
             # Extract authors
             author_list = article.get("authors", [])
@@ -709,10 +707,6 @@ class RetrievalService:
             if cited_by_count:
                 citation_bonus = min(cited_by_count, 500) / 1500
                 rank_score = min(0.95, rank_score + citation_bonus)
-
-            # Extract concepts/topics for relevance
-            concepts = item.get("concepts", [])
-            concept_names = [c.get("display_name", "") for c in concepts[:3]]
 
             # Determine if peer-reviewed
             is_peer_reviewed = item.get("is_retracted") is False and item.get("type") in ["article", "review", "preprint"]

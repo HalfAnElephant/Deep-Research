@@ -1,4 +1,8 @@
 {
   "editor.fontFamily": "Maple Mono NF CN, Fira Code, Menlo, Monaco, 'Courier New', monospace",
-  "editor.fontSize": 14
+  "editor.fontSize": 14,
+  "chat.tools.terminal.autoApprove": {
+    "git add": true,
+    "git commit": true
+  }
 }

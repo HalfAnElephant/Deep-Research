@@ -4,7 +4,7 @@ from app.models.schemas import TaskStatus
 
 
 ALLOWED_TRANSITIONS: dict[TaskStatus, set[TaskStatus]] = {
-    TaskStatus.READY: {TaskStatus.PLANNING, TaskStatus.SUSPENDED, TaskStatus.ABORTED},
+    TaskStatus.READY: {TaskStatus.PLANNING, TaskStatus.EXECUTING, TaskStatus.SUSPENDED, TaskStatus.ABORTED},
     TaskStatus.PLANNING: {TaskStatus.EXECUTING, TaskStatus.SUSPENDED, TaskStatus.ABORTED, TaskStatus.FAILED},
     TaskStatus.EXECUTING: {
         TaskStatus.REVIEWING,

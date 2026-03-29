@@ -2,7 +2,7 @@
 
 import type { AgentState, AgentType } from "../types";
 
-interface AgentStatusPanelProps {
+export interface AgentStatusPanelProps {
   agents: AgentState[];
   activePhases: AgentType[];
 }

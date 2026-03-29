@@ -1,6 +1,6 @@
 import { memo, useMemo } from "react";
 
-interface ReportViewerProps {
+export interface ReportViewerProps {
   markdown: string;
   downloading: boolean;
   expanded: boolean;

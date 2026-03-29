@@ -1,7 +1,24 @@
 import { useEffect, useRef } from "react";
-import * as echarts from "echarts";
+import * as echarts from "echarts/core";
+import type { BarSeriesOption, LineSeriesOption, PieSeriesOption } from "echarts/charts";
+import { BarChart, LineChart, PieChart } from "echarts/charts";
+import type { GridComponentOption, LegendComponentOption, TooltipComponentOption } from "echarts/components";
+import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components";
+import { CanvasRenderer } from "echarts/renderers";
+import type { EChartsType } from "echarts/core";
 
 import type { KeywordAnalysis, TrendAnalysis } from "../api";
+
+echarts.use([BarChart, LineChart, PieChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
+
+type AnalyticsChartOption = echarts.ComposeOption<
+  | BarSeriesOption
+  | LineSeriesOption
+  | PieSeriesOption
+  | GridComponentOption
+  | LegendComponentOption
+  | TooltipComponentOption
+>;
 
 interface AnalyticsChartsProps {
   trends: TrendAnalysis | null;
@@ -25,7 +42,7 @@ export function AnalyticsCharts({ trends, keywords, isLoading }: AnalyticsCharts
   const scoreDistRef = useRef<HTMLDivElement>(null);
   const keywordsRef = useRef<HTMLDivElement>(null);
 
-  const chartsRef = useRef<echarts.ECharts[]>([]);
+  const chartsRef = useRef<EChartsType[]>([]);
 
   // Initialize and update charts
   useEffect(() => {
@@ -66,7 +83,7 @@ export function AnalyticsCharts({ trends, keywords, isLoading }: AnalyticsCharts
 
     // 1. Time Series Chart - Publication Trends
     if (trends?.timeSeries) {
-      const timeSeriesOption: echarts.EChartsOption = {
+      const timeSeriesOption: AnalyticsChartOption = {
         grid: commonGrid,
         tooltip: {
           ...tooltip,
@@ -126,7 +143,7 @@ export function AnalyticsCharts({ trends, keywords, isLoading }: AnalyticsCharts
         value,
       }));
 
-      const sourceDistOption: echarts.EChartsOption = {
+      const sourceDistOption: AnalyticsChartOption = {
         tooltip: {
           trigger: "item" as const,
           backgroundColor: "rgba(255, 255, 255, 0.95)",
@@ -179,7 +196,7 @@ export function AnalyticsCharts({ trends, keywords, isLoading }: AnalyticsCharts
       const scoreData = Object.entries(trends.scoreDistribution)
         .sort((a, b) => parseFloat(a[0]) - parseFloat(b[0]));
 
-      const scoreDistOption: echarts.EChartsOption = {
+      const scoreDistOption: AnalyticsChartOption = {
         grid: commonGrid,
         tooltip: {
           ...tooltip,
@@ -226,7 +243,7 @@ export function AnalyticsCharts({ trends, keywords, isLoading }: AnalyticsCharts
     if (keywords?.topKeywords) {
       const top20Keywords = keywords.topKeywords.slice(0, 20).reverse();
 
-      const keywordsOption: echarts.EChartsOption = {
+      const keywordsOption: AnalyticsChartOption = {
         grid: {
           left: "3%",
           right: "8%",

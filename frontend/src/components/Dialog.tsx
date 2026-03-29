@@ -1,6 +1,6 @@
 import { memo, useEffect, useId, useRef, type ReactNode } from "react";
 
-interface DialogProps {
+export interface DialogProps {
   open: boolean;
   title: string;
   description?: string;

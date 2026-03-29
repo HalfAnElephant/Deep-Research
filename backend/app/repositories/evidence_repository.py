@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
 
 from app.core.database import get_connection
 from app.core.utils import now_iso

@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-interface EmptyStateProps {
+export interface EmptyStateProps {
   scenario: "welcome" | "no-conversation" | "no-messages" | "loading";
   onCreateDraft?: () => void;
   onSelectConversation?: () => void;

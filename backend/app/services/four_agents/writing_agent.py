@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
-from app.models.schemas import AgentType, Citation, Evidence
+from app.models.schemas import AgentType, Evidence
 from app.services.four_agents.base import AgentContext, AgentResult, BaseAgent
 from app.services.writer import WriterService
 
@@ -38,7 +36,6 @@ class WritingAgent(BaseAgent):
             包含文章和引用文件路径的执行结果。
         """
         hypothesis_data = context.config.get("hypothesis")
-        plan_data = context.config.get("plan")
         evidences_data = context.config.get("evidences", [])
 
         if not evidences_data:

@@ -1,4 +1,4 @@
-interface ProgressBarProps {
+export interface ProgressBarProps {
   progress: number;
   status: "pending" | "running" | "completed" | "failed";
   size?: "small" | "medium" | "large";
@@ -58,7 +58,7 @@ interface ProgressStep {
   phase?: string; // 可选的阶段标识，用于颜色显示
 }
 
-interface ProgressStepsProps {
+export interface ProgressStepsProps {
   steps: ProgressStep[];
   orientation?: "horizontal" | "vertical";
 }
@@ -146,7 +146,7 @@ function getStatusLabel(status: ProgressStep["status"]): string {
   }
 }
 
-interface ProgressCardProps {
+export interface ProgressCardProps {
   summary: string;
   progress: number;
   status: "pending" | "running" | "completed" | "failed";
