@@ -84,6 +84,18 @@ export function ChatTimeline(props: ChatTimelineProps) {
     loading: false,
     items: [],
   });
+  const [nodeConflicts, setNodeConflicts] = useState<{
+    loading: boolean;
+    items: Array<{
+      conflictId: string;
+      parameter: string;
+      variance: number;
+      resolutionStatus: string;
+    }>;
+  }>({
+    loading: false,
+    items: [],
+  });
 
   // DAG state for PLAN_READY phase (fetched from API)
   const [planReadyDag, setPlanReadyDag] = useState<DAGGraph>({ nodes: [], edges: [] });
@@ -116,7 +128,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
         }));
 
         // Convert edges from backend format (from/to) to frontend format (source/target)
-        const dagEdges: DAGEdge[] = (dagData.edges || []).map((edge, index) => ({
+        const dagEdges: DAGEdge[] = (dagData.edges || []).map((edge) => ({
           id: `edge-${edge.from}-${edge.to}`,
           source: edge.from,  // Backend uses 'from', frontend uses 'source'
           target: edge.to,    // Backend uses 'to', frontend uses 'target'
@@ -323,23 +335,44 @@ export function ChatTimeline(props: ChatTimelineProps) {
   useEffect(() => {
     if (!currentTaskId || !selectedNodeId) {
       setNodeEvidence({ loading: false, items: [] });
+      setNodeConflicts({ loading: false, items: [] });
       return;
     }
     let cancelled = false;
     setNodeEvidence((prev) => ({ ...prev, loading: true }));
+    setNodeConflicts((prev) => ({ ...prev, loading: true }));
 
     const load = async () => {
       try {
-        const all = await listEvidence(currentTaskId);
+        const [allEvidence, allConflicts] = await Promise.all([
+          listEvidence(currentTaskId),
+          listConflicts(currentTaskId),
+        ]);
         if (cancelled) return;
-        const items = all
+        const items = allEvidence
           .filter((item) => item.nodeId === selectedNodeId)
           .sort((a, b) => b.score - a.score)
           .slice(0, 6);
+
+        const selectedEvidenceIds = new Set(items.map((item) => item.id));
+        const conflicts = allConflicts
+          .filter((conflict) =>
+            conflict.disputedValues?.some((value) => selectedEvidenceIds.has(value.evidenceId)),
+          )
+          .map((conflict) => ({
+            conflictId: conflict.conflictId,
+            parameter: conflict.parameter,
+            variance: conflict.variance,
+            resolutionStatus: conflict.resolutionStatus,
+          }))
+          .slice(0, 4);
+
         setNodeEvidence({ loading: false, items });
+        setNodeConflicts({ loading: false, items: conflicts });
       } catch {
         if (cancelled) return;
         setNodeEvidence({ loading: false, items: [] });
+        setNodeConflicts({ loading: false, items: [] });
       }
     };
 
@@ -501,18 +534,11 @@ export function ChatTimeline(props: ChatTimelineProps) {
                     </header>
                     <div className="live-progress-dag-column-body">
                       {column.nodes.map((node) => (
-                        <article
+                        <button
                           key={node.nodeId}
+                          type="button"
                           className={`dag-node dag-node-${node.status.toLowerCase()} ${node.nodeId === selectedNodeId ? "dag-node-selected" : ""}`}
-                          role="button"
-                          tabIndex={0}
                           onClick={() => setSelectedNodeId(node.nodeId)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              setSelectedNodeId(node.nodeId);
-                            }
-                          }}
                         >
                           <div className="dag-node-title">{node.title}</div>
                           <div className="dag-node-meta mono">
@@ -523,7 +549,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
                             <span>耗时 {formatElapsed(node.elapsedMs)}</span>
                             <span>重试 {node.retryCount}</span>
                           </div>
-                        </article>
+                        </button>
                       ))}
                     </div>
                   </section>
@@ -555,6 +581,23 @@ export function ChatTimeline(props: ChatTimelineProps) {
                       ))}
                     </div>
                   )}
+                  <div className="live-progress-node-conflicts">
+                    <strong>节点冲突预览</strong>
+                    {nodeConflicts.loading ? (
+                      <div className="live-progress-node-empty">正在加载冲突...</div>
+                    ) : nodeConflicts.items.length === 0 ? (
+                      <div className="live-progress-node-empty">该节点暂无冲突记录。</div>
+                    ) : (
+                      <div className="live-progress-node-conflict-list">
+                        {nodeConflicts.items.map((conflict) => (
+                          <div key={conflict.conflictId} className="live-progress-node-conflict-item">
+                            <span>{conflict.parameter}</span>
+                            <span className="mono">variance {conflict.variance.toFixed(3)} · {conflict.resolutionStatus}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </section>
               </div>
             </div>

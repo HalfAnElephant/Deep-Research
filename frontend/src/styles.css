@@ -1252,7 +1252,12 @@ button.ghost:hover:not(:disabled) {
   display: grid;
   gap: 6px;
   cursor: pointer;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+  text-align: left;
+  width: 100%;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .dag-node:hover {
@@ -1262,7 +1267,8 @@ button.ghost:hover:not(:disabled) {
 
 .dag-node-selected {
   border-color: var(--phase-executing);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--phase-executing) 28%, transparent);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--phase-executing) 28%, transparent);
 }
 
 .dag-node-running {
@@ -1360,6 +1366,33 @@ button.ghost:hover:not(:disabled) {
 .live-progress-node-list {
   display: grid;
   gap: 6px;
+}
+
+.live-progress-node-conflicts {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid var(--line-subtle);
+  padding-top: 8px;
+}
+
+.live-progress-node-conflicts strong {
+  font-size: 12px;
+}
+
+.live-progress-node-conflict-list {
+  display: grid;
+  gap: 5px;
+}
+
+.live-progress-node-conflict-item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--warning-light) 40%, var(--card));
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
 }
 
 .live-progress-node-item {
