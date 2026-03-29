@@ -24,6 +24,8 @@ def test_conversation_plan_run_and_download() -> None:
         conversation_id = created["conversationId"]
         assert created["status"] == "PLAN_READY"
         assert created["currentPlan"]["version"] == 1
+        assert len(created["currentIdeas"]) == 3
+        assert len([idea for idea in created["currentIdeas"] if idea["status"] == "SELECTED"]) == 1
         assert created["messages"][0]["role"] == "user"
         assert created["messages"][0]["content"] == "AI Agent 代码评审提效研究"
 
@@ -137,10 +139,14 @@ search_sources: [arXiv]
                     "maxNodes": 8,
                     "searchSources": ["arXiv"],
                     "priority": 4,
+                    "researchMode": "experimental_research",
                 },
             },
         )
         assert create_resp2.status_code == 201
+        ideas = create_resp2.json()["currentIdeas"]
+        assert len(ideas) == 3
+        assert len([idea for idea in ideas if idea["status"] == "SELECTED"]) == 1
 
         bulk_delete_resp = client.delete("/api/v1/conversations")
         assert bulk_delete_resp.status_code == 200

@@ -1,5 +1,5 @@
 import { memo } from "react";
-import type { ConversationStatus } from "../types";
+import type { ConversationStatus, ResearchIdea } from "../types";
 import { PlanConfigForm } from "./PlanConfigForm";
 import { parseYamlFrontmatter, serializeYamlFrontmatter } from "../utils/yamlFrontmatter";
 
@@ -11,6 +11,7 @@ export interface PlanEditorPaneProps {
   starting: boolean;
   downloading: boolean;
   status: ConversationStatus | null;
+  currentIdeas?: ResearchIdea[];
   onRequestCloseMobile: () => void;
   onChange: (value: string) => void;
   onReset: () => void;
@@ -57,6 +58,7 @@ function PlanEditorPaneBase(props: PlanEditorPaneProps) {
     starting,
     downloading,
     status,
+    currentIdeas,
     onRequestCloseMobile,
     onChange,
     onReset,
@@ -158,6 +160,32 @@ function PlanEditorPaneBase(props: PlanEditorPaneProps) {
           showResetButton={false}
         />
       </div>
+      {Array.isArray(currentIdeas) && currentIdeas.length > 0 && (
+        <section className="idea-summary" aria-label="候选研究想法">
+          <div className="idea-summary-head">
+            <h4>候选 Ideas</h4>
+            <p>当前展示首轮结构化研究想法，已按分数筛出主路线。</p>
+          </div>
+          <div className="idea-summary-list">
+            {currentIdeas.map((idea) => (
+              <article
+                key={idea.ideaId}
+                className={`idea-chip ${idea.status === "SELECTED" ? "selected" : idea.status === "REJECTED" ? "rejected" : ""}`}
+              >
+                <div className="idea-chip-top">
+                  <strong>{idea.title}</strong>
+                  <span>{idea.status}</span>
+                </div>
+                <p>{idea.shortHypothesis || idea.problemStatement}</p>
+                <div className="idea-chip-meta">
+                  <span>overall {idea.scoreCard?.overallScore?.toFixed?.(2) ?? "0.00"}</span>
+                  <span>novelty {idea.scoreCard?.noveltyScore?.toFixed?.(2) ?? "0.00"}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
       <div className="editor-body">
         <textarea
           aria-label="研究方案正文 Markdown 编辑器"

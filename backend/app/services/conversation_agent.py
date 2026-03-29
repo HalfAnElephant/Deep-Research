@@ -19,15 +19,20 @@ from app.models.schemas import (
     MessageRole,
     NodeStatus,
     PlanRevision,
+    ResearchIdea,
+    ResearchMode,
     RunConversationResponse,
     TaskConfig,
     TaskStatus,
 )
+from app.prompts.plan_render import build_plan_render_system_prompt, build_plan_render_user_prompt
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.evidence_repository import EvidenceRepository
 from app.repositories.task_repository import TaskRepository
 from app.services.agents import ReportAgent
 from app.services.execution_engine import ExecutionEngine
+from app.services.idea_service import IdeaService
+from app.services.novelty_gate import NoveltyGateService
 from app.services.planner import MasterPlanner
 
 
@@ -106,6 +111,8 @@ class ConversationAgent:
         evidence_repository: EvidenceRepository | None = None,
         report_agent: ReportAgent | None = None,
         planner: MasterPlanner | None = None,
+        idea_service: IdeaService | None = None,
+        novelty_gate_service: NoveltyGateService | None = None,
     ) -> None:
         self.repository = repository
         self.task_repository = task_repository
@@ -113,6 +120,8 @@ class ConversationAgent:
         self.evidence_repository = evidence_repository
         self.report_agent = report_agent
         self.planner = planner
+        self.idea_service = idea_service or IdeaService()
+        self.novelty_gate_service = novelty_gate_service or NoveltyGateService()
 
     def _build_task_payload(
         self,
@@ -222,7 +231,12 @@ class ConversationAgent:
             content=self._build_ack_message(topic=topic, config=selected_config),
             metadata={"stage": "ACKNOWLEDGED"},
         )
-        markdown = await asyncio.to_thread(self._generate_initial_plan, topic=topic, config=selected_config)
+        ideas, markdown = await asyncio.to_thread(
+            self._prepare_initial_conversation_assets,
+            topic=topic,
+            config=selected_config,
+        )
+        self.repository.set_current_ideas(conversation_id, ideas)
         revision = self.repository.add_plan_revision(
             conversation_id,
             author=MessageRole.ASSISTANT,
@@ -441,12 +455,14 @@ class ConversationAgent:
             content=instruction,
         )
         config = self.repository.get_config(conversation_id)
+        selected_idea = self._selected_idea_for_conversation(conversation_id)
         revised = await asyncio.to_thread(
             self._generate_revised_plan,
             topic=topic,
             config=config,
             current_plan=current_plan,
             instruction=instruction,
+            selected_idea=selected_idea,
         )
         revision = self.repository.add_plan_revision(
             conversation_id,
@@ -1019,27 +1035,11 @@ class ConversationAgent:
         return [part for part in parts if part]
 
     def _generate_initial_plan(self, *, topic: str, config: TaskConfig) -> str:
-        prompt = (
-            "请为用户生成一个可执行的研究方案，输出必须是 Markdown，并且必须包含 front matter。\n"
-            "front matter 字段固定为：title, topic, max_depth, max_nodes, priority, search_sources, target_word_count, llm_provider。\n"
-            "正文至少包含：研究目标、研究问题拆解、方法与来源、执行步骤、风险与边界、交付标准。\n"
-            "严禁输出解释性前言，直接返回完整 Markdown。"
-        )
-        user_input = (
-            f"主题：{topic}\n"
-            f"配置建议：max_depth={config.maxDepth}, max_nodes={config.maxNodes}, "
-            f"priority={config.priority}, search_sources={config.searchSources}, "
-            f"target_word_count={config.targetWordCount}, llm_provider={config.llmProvider.value}\n"
-            "输出语言：中文。"
-        )
-        generated = self._chat_complete(
-            system_prompt=prompt, user_prompt=user_input, provider=config.llmProvider)
-        if generated:
-            normalized = self._ensure_front_matter(
-                generated, topic=topic, config=config)
-            if normalized:
-                return normalized
-        return self._fallback_plan(topic=topic, config=config)
+        ideas = self._generate_initial_ideas(topic=topic, config=config)
+        selected = self._select_primary_idea(ideas)
+        if selected is None:
+            return self._fallback_plan(topic=topic, config=config)
+        return self._render_plan_from_idea(topic=topic, config=config, idea=selected)
 
     def _generate_revised_plan(
         self,
@@ -1048,16 +1048,22 @@ class ConversationAgent:
         config: TaskConfig,
         current_plan: str,
         instruction: str,
+        selected_idea: ResearchIdea | None = None,
     ) -> str:
         prompt = (
             "你是研究计划修订 Agent。请根据用户指令修订「当前研究方案」。\n"
             "输出必须是完整 Markdown，且必须包含完整 front matter。\n"
             "不要解释你做了什么，不要输出多余文本，只返回最终方案。"
         )
+        selected_idea_text = (
+            f"\n\n当前选中的结构化 idea：\n{selected_idea.model_dump_json(indent=2)}"
+            if selected_idea is not None
+            else ""
+        )
         user_input = (
             f"主题：{topic}\n"
             f"用户指令：{instruction}\n\n"
-            f"当前方案如下：\n{current_plan}\n\n"
+            f"当前方案如下：\n{current_plan}{selected_idea_text}\n\n"
             f"保底配置：max_depth={config.maxDepth}, max_nodes={config.maxNodes}, "
             f"priority={config.priority}, search_sources={config.searchSources}, "
             f"target_word_count={config.targetWordCount}, llm_provider={config.llmProvider.value}"
@@ -1069,7 +1075,89 @@ class ConversationAgent:
                 generated, topic=topic, config=config)
             if normalized:
                 return normalized
+        if selected_idea is not None:
+            rendered = self._render_plan_from_idea(topic=topic, config=config, idea=selected_idea)
+            if rendered.strip():
+                return rendered
         return self._fallback_revision(current_plan=current_plan, instruction=instruction, topic=topic, config=config)
+
+    def _prepare_initial_conversation_assets(
+        self,
+        *,
+        topic: str,
+        config: TaskConfig,
+    ) -> tuple[list[ResearchIdea], str]:
+        ideas = self._generate_initial_ideas(topic=topic, config=config)
+        selected = self._select_primary_idea(ideas)
+        markdown = self._render_plan_from_idea(
+            topic=topic,
+            config=config,
+            idea=selected,
+        ) if selected is not None else self._fallback_plan(topic=topic, config=config)
+        return ideas, markdown
+
+    def _generate_initial_ideas(self, *, topic: str, config: TaskConfig) -> list[ResearchIdea]:
+        ideas, evidences = self.idea_service.generate_ideas(topic=topic, config=config)
+        if not ideas:
+            ideas = []
+        evaluated = self.novelty_gate_service.evaluate_ideas(
+            topic=topic,
+            ideas=ideas,
+            evidences=evidences,
+            llm_provider=config.llmProvider,
+            enforce_thresholds=config.requiresNoveltyCheck,
+        )
+        return evaluated or ideas
+
+    def _render_plan_from_idea(
+        self,
+        *,
+        topic: str,
+        config: TaskConfig,
+        idea: ResearchIdea | None,
+    ) -> str:
+        if idea is None:
+            return self._fallback_plan(topic=topic, config=config)
+        if config.researchMode in {ResearchMode.SURVEY, ResearchMode.EVIDENCE_REPORT}:
+            return self._fallback_plan_from_idea(topic=topic, config=config, idea=idea)
+        config_summary = (
+            f"max_depth={config.maxDepth}, max_nodes={config.maxNodes}, priority={config.priority}, "
+            f"research_mode={config.researchMode.value}, search_sources={config.searchSources}, "
+            f"target_word_count={config.targetWordCount}, llm_provider={config.llmProvider.value}"
+        )
+        generated = self._chat_complete(
+            system_prompt=build_plan_render_system_prompt(),
+            user_prompt=build_plan_render_user_prompt(
+                topic=topic,
+                config_summary=config_summary,
+                idea_json=idea.model_dump_json(indent=2),
+            ),
+            provider=config.llmProvider,
+        )
+        if generated:
+            normalized = self._ensure_front_matter(
+                generated,
+                topic=idea.title or topic,
+                config=config,
+            )
+            if normalized:
+                return normalized
+        return self._fallback_plan_from_idea(topic=topic, config=config, idea=idea)
+
+    def _select_primary_idea(self, ideas: list[ResearchIdea]) -> ResearchIdea | None:
+        if not ideas:
+            return None
+        selected = [idea for idea in ideas if idea.status.value == "SELECTED"]
+        if selected:
+            return selected[0]
+        return max(ideas, key=lambda idea: idea.scoreCard.overallScore)
+
+    def _selected_idea_for_conversation(self, conversation_id: str) -> ResearchIdea | None:
+        try:
+            ideas = self.repository.get_current_ideas(conversation_id)
+        except KeyError:
+            return None
+        return self._select_primary_idea(ideas)
 
     def _chat_complete(
         self,
@@ -1256,6 +1344,56 @@ class ConversationAgent:
             "## 交付标准\n"
             "- 报告含摘要、方法、发现、分析、建议。\n"
             "- 关键结论标注证据引用并给出行动建议。\n"
+        )
+
+    @staticmethod
+    def _fallback_plan_from_idea(*, topic: str, config: TaskConfig, idea: ResearchIdea) -> str:
+        related_work = "\n".join(
+            f"- {item.title}：{item.summary or '已有工作线索。'}"
+            for item in idea.relatedWork[:3]
+        ) or "- 首轮尚未形成稳定的相关工作清单，后续需补充检索。"
+        differentiators = "\n".join(
+            f"- {item}" for item in idea.differentiators[:4]
+        ) or "- 需要在执行阶段补充与已有工作的差异化说明。"
+        experiments = "\n".join(
+            f"{index + 1}. {proposal.title}：{proposal.objective or proposal.method or '补充验证方案。'}"
+            for index, proposal in enumerate(idea.experimentProposals[:4])
+        ) or "1. 围绕核心假设补充验证路径与评估指标。"
+        risks = "\n".join(
+            f"- {item.risk}（{item.severity}）：{item.mitigation}"
+            for item in idea.riskFactors[:4]
+        ) or "- 需进一步确认相关工作重叠度与证据充分性。"
+        limitations = "\n".join(
+            f"- {item}" for item in idea.limitations[:4]
+        ) or "- 当前为首轮结构化 idea，后续还需补充更多证据。"
+
+        return (
+            "---\n"
+            f"title: {idea.title or topic}\n"
+            f"topic: {topic}\n"
+            f"max_depth: {config.maxDepth}\n"
+            f"max_nodes: {config.maxNodes}\n"
+            f"priority: {config.priority}\n"
+            f"search_sources: [{', '.join(config.searchSources)}]\n"
+            f"target_word_count: {config.targetWordCount}\n"
+            f"llm_provider: {config.llmProvider.value}\n"
+            "---\n\n"
+            "## 研究目标\n"
+            f"{idea.problemStatement or f'围绕“{topic}”形成结构化研究入口。'}\n\n"
+            "## 研究问题拆解\n"
+            f"1. 核心假设：{idea.shortHypothesis or f'识别“{topic}”的关键问题。'}\n"
+            "2. 该主题与已有工作的重叠和差异在哪里。\n"
+            "3. 应如何设计验证路径并明确结论边界。\n\n"
+            "## 方法与来源\n"
+            f"{related_work}\n\n"
+            "## 执行步骤\n"
+            f"{experiments}\n\n"
+            "## 风险与边界\n"
+            f"{risks}\n"
+            f"{limitations}\n\n"
+            "## 交付标准\n"
+            f"{differentiators}\n"
+            "- 输出兼容当前执行引擎的 Markdown 研究方案与最终报告。\n"
         )
 
     def _fallback_revision(self, *, current_plan: str, instruction: str, topic: str, config: TaskConfig) -> str:

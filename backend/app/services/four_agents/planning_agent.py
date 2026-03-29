@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.models.schemas import AgentType, ResearchHypothesis, ResearchPlan
+from app.models.schemas import AgentType, ResearchHypothesis, ResearchIdea, ResearchPlan
 from app.services.four_agents.base import AgentContext, AgentResult, BaseAgent
 
 
@@ -30,6 +30,7 @@ class PlanningAgent(BaseAgent):
             包含 ResearchPlan 的执行结果。
         """
         hypothesis_data = context.config.get("hypothesis")
+        ideas_data = context.config.get("ideas", [])
         if not hypothesis_data:
             return AgentResult(
                 success=False,
@@ -47,6 +48,8 @@ class PlanningAgent(BaseAgent):
         feasibility = self._assess_feasibility(hypothesis, context)
         self._set_progress(50, "生成研究方案")
 
+        selected_idea = self._select_idea(ideas_data)
+
         # 生成方案
         plan = await self._create_plan(hypothesis, context, feasibility)
         self._set_progress(90, "方案生成完成")
@@ -55,7 +58,8 @@ class PlanningAgent(BaseAgent):
             success=True,
             output={
                 "plan": plan.model_dump(),
-                "feasibility": feasibility
+                "feasibility": feasibility,
+                "selectedIdea": selected_idea.model_dump(mode="json") if selected_idea else None,
             }
         )
 
@@ -125,3 +129,20 @@ class PlanningAgent(BaseAgent):
             steps=steps,
             createdAt=datetime.utcnow().isoformat()
         )
+
+    @staticmethod
+    def _select_idea(ideas_data: list[dict]) -> ResearchIdea | None:
+        ideas: list[ResearchIdea] = []
+        for item in ideas_data:
+            if not isinstance(item, dict):
+                continue
+            try:
+                ideas.append(ResearchIdea.model_validate(item))
+            except Exception:
+                continue
+        if not ideas:
+            return None
+        selected = [idea for idea in ideas if idea.status.value == "SELECTED"]
+        if selected:
+            return selected[0]
+        return max(ideas, key=lambda idea: idea.scoreCard.overallScore)

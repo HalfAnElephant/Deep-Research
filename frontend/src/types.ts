@@ -10,11 +10,23 @@ export type TaskStatus =
   | "SUSPENDED"
   | "ABORTED";
 
+export type ResearchMode =
+  | "survey"
+  | "evidence_report"
+  | "experimental_research"
+  | "paper_writeup";
+
+export type IdeaStatus = "CANDIDATE" | "SELECTED" | "REJECTED";
+
 export interface TaskConfig {
   maxDepth: number;
   maxNodes: number;
   searchSources: string[];
   priority: number;
+  researchMode?: ResearchMode;
+  numReflections?: number;
+  numInitialIdeas?: number;
+  requiresNoveltyCheck?: boolean;
 }
 
 export interface TaskResponse {
@@ -135,6 +147,7 @@ export interface ConversationDetail extends ConversationSummary {
   currentPlan?: PlanRevision | null;
   messages: ConversationMessage[];
   agentStates?: AgentState[];
+  currentIdeas?: ResearchIdea[];
 }
 
 export interface RevisePlanResponse {
@@ -181,6 +194,24 @@ export interface ResearchHypothesis {
   sources: string[];
   confidence: number;
   createdAt: string;
+}
+
+export interface ResearchScoreCard {
+  noveltyScore: number;
+  feasibilityScore: number;
+  evidenceStrengthScore: number;
+  writeupReadinessScore: number;
+  overallScore: number;
+}
+
+export interface ResearchIdea {
+  ideaId: string;
+  title: string;
+  problemStatement: string;
+  shortHypothesis: string;
+  abstract: string;
+  scoreCard: ResearchScoreCard;
+  status: IdeaStatus;
 }
 
 export interface ResearchPlan {

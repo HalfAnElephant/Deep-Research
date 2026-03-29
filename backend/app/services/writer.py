@@ -10,7 +10,7 @@ import unicodedata
 import httpx
 
 from app.core.config import settings
-from app.models.schemas import Citation, Evidence, ReportDraft, SectionDraft, WritingSectionPlan
+from app.models.schemas import Citation, Evidence, LLMProvider, ReportDraft, SectionDraft, WritingSectionPlan
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +95,7 @@ class WriterService:
         locked_sections: set[str] | None = None,
         blueprint: ReportBlueprint | None = None,
         report_body: str | None = None,
+        llm_provider: LLMProvider | str | None = None,
     ) -> tuple[str, str, dict[str, Citation]]:
         """生成研究文章和引用列表两个独立的文件。
 
@@ -116,6 +117,7 @@ class WriterService:
                 sections=sections,
                 evidences=evidences,
                 blueprint=blueprint,
+                llm_provider=llm_provider,
             )
         else:
             generated_body = report_body
@@ -181,6 +183,7 @@ class WriterService:
         evidences: list[Evidence],
         blueprint: ReportBlueprint | None = None,
         writing_plan: list[WritingSectionPlan] | None = None,
+        llm_provider: LLMProvider | str | None = None,
     ) -> str:
         selected_blueprint = blueprint or self._default_blueprint()
         draft = self.generate_draft(
@@ -190,6 +193,7 @@ class WriterService:
             evidences=evidences,
             blueprint=selected_blueprint,
             writing_plan=writing_plan,
+            llm_provider=llm_provider,
         )
         return draft.body
 
@@ -202,6 +206,7 @@ class WriterService:
         evidences: list[Evidence],
         blueprint: ReportBlueprint | None = None,
         writing_plan: list[WritingSectionPlan] | None = None,
+        llm_provider: LLMProvider | str | None = None,
     ) -> ReportDraft:
         selected_blueprint = blueprint or self._default_blueprint()
         return self._generate_body(
@@ -211,6 +216,7 @@ class WriterService:
             evidences=evidences,
             blueprint=selected_blueprint,
             writing_plan=writing_plan,
+            llm_provider=llm_provider,
         )
 
     def rewrite_body(
@@ -225,6 +231,7 @@ class WriterService:
         feedback_issues: list[str],
         targeted_sections: list[str] | None = None,
         writing_plan: list[WritingSectionPlan] | None = None,
+        llm_provider: LLMProvider | str | None = None,
     ) -> str:
         draft = self.rewrite_draft(
             task_title=task_title,
@@ -236,6 +243,7 @@ class WriterService:
             feedback_issues=feedback_issues,
             targeted_sections=targeted_sections,
             writing_plan=writing_plan,
+            llm_provider=llm_provider,
         )
         return draft.body
 
@@ -251,6 +259,7 @@ class WriterService:
         feedback_issues: list[str],
         targeted_sections: list[str] | None = None,
         writing_plan: list[WritingSectionPlan] | None = None,
+        llm_provider: LLMProvider | str | None = None,
     ) -> ReportDraft:
         outlines = self._build_section_outlines(
             task_title=task_title,
@@ -304,6 +313,7 @@ class WriterService:
                     blueprint=blueprint,
                     rewrite_context=draft_body,
                     feedback_issues=feedback_issues,
+                    llm_provider=llm_provider,
                 )
             if not section_body.strip():
                 section_body = existing_sections.get(
@@ -344,12 +354,13 @@ class WriterService:
         task_description: str,
         body: str,
         evidences: list[Evidence],
+        llm_provider: LLMProvider | str | None = None,
     ) -> str:
         body = self._normalize_text(body)
         if settings.use_mock_sources:
             return self._derive_title_from_text(task_title=task_title, body=body)
 
-        base_url, api_key, model = self._resolve_provider()
+        base_url, api_key, model = self._resolve_provider(llm_provider)
         if not base_url or not api_key:
             return self._derive_title_from_text(task_title=task_title, body=body)
 
@@ -407,6 +418,7 @@ class WriterService:
         evidences: list[Evidence],
         blueprint: ReportBlueprint,
         writing_plan: list[WritingSectionPlan] | None = None,
+        llm_provider: LLMProvider | str | None = None,
     ) -> ReportDraft:
         """生成文章正文内容，不含内部标记。"""
         outlines = self._build_section_outlines(
@@ -433,6 +445,7 @@ class WriterService:
             evidences=evidences,
             blueprint=blueprint,
             outlines=outlines,
+            llm_provider=llm_provider,
         )
         return self._finalize_report_draft(
             drafts=section_drafts,
@@ -450,8 +463,9 @@ class WriterService:
         evidences: list[Evidence],
         blueprint: ReportBlueprint,
         outlines: list[SectionOutline],
+        llm_provider: LLMProvider | str | None = None,
     ) -> list[SectionDraft]:
-        base_url, api_key, model = self._resolve_provider()
+        base_url, api_key, model = self._resolve_provider(llm_provider)
         if not base_url or not api_key:
             return []
 
@@ -543,13 +557,14 @@ class WriterService:
 
         return article_sections
 
-    def _resolve_provider(self) -> tuple[str, str, str]:
-        provider = settings.default_llm_provider.lower().strip()
-        if provider == "openrouter":
+    def _resolve_provider(self, provider: LLMProvider | str | None = None) -> tuple[str, str, str]:
+        selected = (provider.value if isinstance(provider, LLMProvider) else provider) or settings.default_llm_provider
+        provider_name = selected.lower().strip()
+        if provider_name == "openrouter":
             return settings.openrouter_base_url, settings.openrouter_api_key, settings.openrouter_model
-        if provider == "deepseek":
+        if provider_name == "deepseek":
             return settings.deepseek_base_url, settings.deepseek_api_key, settings.deepseek_model
-        if provider == "openai":
+        if provider_name == "openai":
             return settings.openai_base_url, settings.openai_api_key, settings.openai_model
         return "", "", ""
 
@@ -826,12 +841,13 @@ class WriterService:
         system_prompt: str | None = None,
         rewrite_context: str = "",
         feedback_issues: list[str] | None = None,
+        llm_provider: LLMProvider | str | None = None,
     ) -> str:
         resolved_base_url = base_url
         resolved_api_key = api_key
         resolved_model = model
         if not resolved_base_url or not resolved_api_key or not resolved_model:
-            resolved_base_url, resolved_api_key, resolved_model = self._resolve_provider()
+            resolved_base_url, resolved_api_key, resolved_model = self._resolve_provider(llm_provider)
         if not resolved_base_url or not resolved_api_key or not resolved_model:
             return ""
 

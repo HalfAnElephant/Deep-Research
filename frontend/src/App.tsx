@@ -1151,6 +1151,7 @@ export function App() {
         starting={starting}
         downloading={downloading}
         status={activeStatus}
+        currentIdeas={activeDetail?.currentIdeas ?? []}
         onRequestCloseMobile={() => setMobileEditorOpen(false)}
         onChange={(value) => {
           setPlanDraft(value);
