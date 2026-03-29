@@ -91,11 +91,14 @@ export function ChatTimeline(props: ChatTimelineProps) {
       parameter: string;
       variance: number;
       resolutionStatus: string;
+      context: string;
+      disputedValues: Array<{ evidenceId: string; value: number; unit: string; source: string }>;
     }>;
   }>({
     loading: false,
     items: [],
   });
+  const [expandedConflictIds, setExpandedConflictIds] = useState<Record<string, boolean>>({});
 
   // DAG state for PLAN_READY phase (fetched from API)
   const [planReadyDag, setPlanReadyDag] = useState<DAGGraph>({ nodes: [], edges: [] });
@@ -349,6 +352,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
     if (!currentTaskId || !selectedNodeId) {
       setNodeEvidence({ loading: false, items: [] });
       setNodeConflicts({ loading: false, items: [] });
+      setExpandedConflictIds({});
       return;
     }
     let cancelled = false;
@@ -362,12 +366,12 @@ export function ChatTimeline(props: ChatTimelineProps) {
           listConflicts(currentTaskId),
         ]);
         if (cancelled) return;
-        const items = allEvidence
-          .filter((item) => item.nodeId === selectedNodeId)
+        const nodeEvidenceAll = allEvidence.filter((item) => item.nodeId === selectedNodeId);
+        const items = nodeEvidenceAll
           .sort((a, b) => b.score - a.score)
           .slice(0, 6);
 
-        const selectedEvidenceIds = new Set(items.map((item) => item.id));
+        const selectedEvidenceIds = new Set(nodeEvidenceAll.map((item) => item.id));
         const conflicts = allConflicts
           .filter((conflict) =>
             conflict.disputedValues?.some((value) => selectedEvidenceIds.has(value.evidenceId)),
@@ -377,11 +381,14 @@ export function ChatTimeline(props: ChatTimelineProps) {
             parameter: conflict.parameter,
             variance: conflict.variance,
             resolutionStatus: conflict.resolutionStatus,
+            context: conflict.context,
+            disputedValues: conflict.disputedValues || [],
           }))
           .slice(0, 4);
 
         setNodeEvidence({ loading: false, items });
         setNodeConflicts({ loading: false, items: conflicts });
+        setExpandedConflictIds({});
       } catch {
         if (cancelled) return;
         setNodeEvidence({ loading: false, items: [] });
@@ -628,8 +635,35 @@ export function ChatTimeline(props: ChatTimelineProps) {
                       <div className="live-progress-node-conflict-list">
                         {nodeConflicts.items.map((conflict) => (
                           <div key={conflict.conflictId} className="live-progress-node-conflict-item">
-                            <span>{conflict.parameter}</span>
-                            <span className="mono">variance {conflict.variance.toFixed(3)} · {conflict.resolutionStatus}</span>
+                            <div className="live-progress-node-conflict-row">
+                              <span>{conflict.parameter}</span>
+                              <span className="mono">variance {conflict.variance.toFixed(3)} · {conflict.resolutionStatus}</span>
+                            </div>
+                            <button
+                              type="button"
+                              className="ghost live-progress-node-conflict-toggle"
+                              onClick={() =>
+                                setExpandedConflictIds((prev) => ({
+                                  ...prev,
+                                  [conflict.conflictId]: !prev[conflict.conflictId],
+                                }))
+                              }
+                            >
+                              {expandedConflictIds[conflict.conflictId] ? "收起详情" : "展开详情"}
+                            </button>
+                            {expandedConflictIds[conflict.conflictId] && (
+                              <div className="live-progress-node-conflict-detail">
+                                <div>{conflict.context || "无上下文描述"}</div>
+                                {conflict.disputedValues.length > 0 && (
+                                  <div className="live-progress-node-conflict-values mono">
+                                    {conflict.disputedValues
+                                      .slice(0, 5)
+                                      .map((value) => `${value.source}: ${value.value}${value.unit}`)
+                                      .join(" | ")}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
