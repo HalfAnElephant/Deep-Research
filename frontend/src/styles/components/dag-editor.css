@@ -196,27 +196,46 @@
  * 3. NODE STYLING
  * ============================================================================
  *
- * Color coding for different node statuses using CSS custom properties.
+ * Glassmorphism color coding for different node statuses.
  */
+
+:root {
+  --node-glass-bg: rgba(255, 255, 255, 0.25);
+  --node-glass-border: rgba(255, 255, 255, 0.4);
+  --node-glass-shadow: rgba(0, 0, 0, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --node-glass-bg: rgba(30, 41, 59, 0.65);
+    --node-glass-border: rgba(100, 116, 139, 0.35);
+    --node-glass-shadow: rgba(0, 0, 0, 0.25);
+  }
+}
 
 .dag-node-status-pending {
   --node-color: #4a90d9;
+  --node-glow: rgba(74, 144, 217, 0.3);
 }
 
 .dag-node-status-running {
   --node-color: #ffb84d;
+  --node-glow: rgba(255, 184, 77, 0.35);
 }
 
 .dag-node-status-completed {
   --node-color: #4caf50;
+  --node-glow: rgba(76, 175, 80, 0.3);
 }
 
 .dag-node-status-failed {
   --node-color: #ff6b6b;
+  --node-glow: rgba(255, 107, 107, 0.35);
 }
 
 .dag-node-status-pruned {
   --node-color: #9e9e9e;
+  --node-glow: rgba(158, 158, 158, 0.2);
 }
 
 /* Node base styles (applied by Cytoscape.js) */

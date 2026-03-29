@@ -195,3 +195,18 @@ export interface ResearchPlan {
   }>;
   createdAt: string;
 }
+
+// LLM Settings types
+export type LLMProvider = "openrouter" | "deepseek" | "openai";
+
+export interface LLMOption {
+  provider: LLMProvider;
+  label: string;
+  model: string;
+  configured: boolean;
+}
+
+export interface LLMSettingsResponse {
+  defaultProvider: LLMProvider;
+  options: LLMOption[];
+}

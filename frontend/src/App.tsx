@@ -7,6 +7,7 @@ import {
   deleteConversation,
   downloadConversationReport,
   getConversation,
+  getLLMSettings,
   listConversations,
   renameConversation,
   reviseConversationPlan,
@@ -21,6 +22,7 @@ import { Dialog } from "./components/Dialog";
 import { ExportModal } from "./components/ExportModal";
 import { LibraryPage } from "./components/LibraryPage";
 import { PlanEditorPane } from "./components/PlanEditorPane";
+import { SettingsModal } from "./components/SettingsModal";
 import { APP_CONFIG, STATUS_LABEL } from "./constants";
 import type {
   AgentState,
@@ -29,6 +31,7 @@ import type {
   ConversationMessage,
   ConversationStatus,
   ConversationSummary,
+  LLMProvider,
   ProgressEvent,
 } from "./types";
 
@@ -229,6 +232,8 @@ export function App() {
   const [currentPhase, setCurrentPhase] = useState<string | null>(null);
   const [streamClock, setStreamClock] = useState(() => Date.now());
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [selectedLLMProvider, setSelectedLLMProvider] = useState<LLMProvider | null>(null);
 
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const progressWsRef = useRef<WebSocket | null>(null);
@@ -1083,6 +1088,14 @@ export function App() {
             >
               文献库
             </button>
+            <button
+              className="ghost"
+              type="button"
+              onClick={() => setShowSettings(true)}
+              title="打开设置"
+            >
+              设置
+            </button>
           </div>
           <div className="chat-title">
             <h1>{activeSummary?.topic ?? (draftMode ? "新研究" : "Research Flow")}</h1>
@@ -1249,6 +1262,13 @@ export function App() {
           <LibraryPage onClose={() => setShowLibrary(false)} />
         </div>
       )}
+
+      <SettingsModal
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        selectedProvider={selectedLLMProvider}
+        onSelectProvider={setSelectedLLMProvider}
+      />
 
       {error && <div className="error-banner">{error}</div>}
       </main>

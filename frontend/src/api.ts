@@ -5,6 +5,7 @@ import type {
   ConversationDetail,
   ConversationSummary,
   Evidence,
+  LLMSettingsResponse,
   RevisePlanResponse,
   RunConversationResponse,
   TaskResponse
@@ -386,4 +387,8 @@ export async function getLibraryKeywords(topN: number = 50): Promise<KeywordAnal
 
 export async function getLibrarySummary(): Promise<LibrarySummary> {
   return json<LibrarySummary>(`${API_BASE}/api/v1/library/summary`);
+}
+
+export async function getLLMSettings(): Promise<LLMSettingsResponse> {
+  return json<LLMSettingsResponse>(`${API_BASE}/api/v1/settings/llm`);
 }

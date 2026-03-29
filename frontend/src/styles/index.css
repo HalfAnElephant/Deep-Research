@@ -80,3 +80,6 @@
 
 /* Feedback animations (success, error, copy toast, progress flash) */
 @import './components/feedback.css';
+
+/* Settings modal styles */
+@import './components/settings.css';

@@ -5,13 +5,102 @@ import re
 
 from app.core.utils import new_id, now_iso
 from app.models.schemas import DAGGraph, DAGEdge, NodeStatus, TaskConfig, TaskMetadata, TaskNode, WritingSectionPlan
+from app.services.research_plan_generator import research_plan_generator
 
 
 class MasterPlanner:
-    """Builds a bounded DAG with BFS + DFS expansion and simple pruning."""
+    """Builds a bounded DAG with LLM-generated structured research questions."""
 
     def build_dag(self, root_task_id: str, title: str, description: str, config: TaskConfig) -> DAGGraph:
+        """Build DAG using LLM-generated structured research plan."""
         ts = now_iso()
+
+        # Generate structured research plan using LLM
+        try:
+            plan = research_plan_generator.generate(
+                topic=title,
+                description=description,
+                config=config,
+            )
+            return self._build_dag_from_plan(root_task_id, title, description, plan, config, ts)
+        except Exception:
+            # Fallback to template-based generation
+            return self._build_dag_fallback(root_task_id, title, description, config, ts)
+
+    def _build_dag_from_plan(
+        self,
+        root_task_id: str,
+        title: str,
+        description: str,
+        plan,
+        config: TaskConfig,
+        ts: str,
+    ) -> DAGGraph:
+        """Convert structured research plan to DAG format."""
+        nodes: list[TaskNode] = []
+        edges: list[DAGEdge] = []
+        question_to_task: dict[str, str] = {}
+
+        # Map question IDs to task IDs
+        for question_id in plan.all_questions:
+            question_to_task[question_id] = new_id()
+
+        # Root task ID mapping
+        root_question = plan.root_question
+        question_to_task[root_question.question_id] = root_task_id
+
+        # Create TaskNode for each research question
+        for question_id, question in plan.all_questions.items():
+            task_id = question_to_task[question_id]
+
+            # Calculate priority based on level (deeper = lower priority)
+            priority = max(1, config.priority - question.level)
+
+            # Determine status based on level
+            status = NodeStatus.PENDING
+
+            node = TaskNode(
+                taskId=task_id,
+                parentTaskId=question_to_task.get(question.parent_id) if question.parent_id else None,
+                title=question.title,
+                description=question.description,
+                status=status,
+                priority=priority,
+                dependencies=[question_to_task[question.parent_id]] if question.parent_id else [],
+                children=[question_to_task[cid] for cid in question.children],
+                metadata=TaskMetadata(
+                    estimatedTokenCost=800 + question.level * 200,
+                    searchDepth=question.level,
+                    infoGainScore=1.0 - (question.level * 0.15),
+                    createdAt=ts,
+                    updatedAt=ts,
+                ),
+                output=[],
+            )
+            nodes.append(node)
+
+        # Create edges based on parent-child relationships
+        for question_id, question in plan.all_questions.items():
+            source_id = question_to_task[question_id]
+            for child_id in question.children:
+                target_id = question_to_task.get(child_id)
+                if target_id:
+                    edges.append(DAGEdge.model_validate({
+                        "from": source_id,
+                        "to": target_id,
+                    }))
+
+        return DAGGraph(nodes=nodes, edges=edges)
+
+    def _build_dag_fallback(
+        self,
+        root_task_id: str,
+        title: str,
+        description: str,
+        config: TaskConfig,
+        ts: str,
+    ) -> DAGGraph:
+        """Fallback DAG generation when LLM fails."""
         root = TaskNode(
             taskId=root_task_id,
             parentTaskId=None,
@@ -35,7 +124,6 @@ class MasterPlanner:
         edges: list[DAGEdge] = []
         q: deque[tuple[TaskNode, int]] = deque([(root, 0)])
         total_nodes = 1
-        low_gain_streak = 0
 
         while q and total_nodes < config.maxNodes:
             parent, depth = q.popleft()
@@ -47,25 +135,19 @@ class MasterPlanner:
                 if total_nodes >= config.maxNodes:
                     break
                 node_id = new_id()
-                info_gain = self._estimate_info_gain(node_id, depth + 1)
-                status = NodeStatus.PRUNED if low_gain_streak >= 1 and info_gain < 0.2 else NodeStatus.PENDING
-                if info_gain < 0.2:
-                    low_gain_streak += 1
-                else:
-                    low_gain_streak = 0
                 node = TaskNode(
                     taskId=node_id,
                     parentTaskId=parent.taskId,
                     title=ctitle,
                     description=f"{ctitle}: {description}",
-                    status=status,
+                    status=NodeStatus.PENDING,
                     priority=max(1, config.priority - depth),
                     dependencies=[parent.taskId],
                     children=[],
                     metadata=TaskMetadata(
                         estimatedTokenCost=800 + depth * 200,
                         searchDepth=depth + 1,
-                        infoGainScore=info_gain,
+                        infoGainScore=0.5,
                         createdAt=ts,
                         updatedAt=ts,
                     ),
@@ -305,8 +387,3 @@ class MasterPlanner:
             if item not in deduped:
                 deduped.append(item)
         return deduped[:4]
-
-    @staticmethod
-    def _estimate_info_gain(seed: str, depth: int) -> float:
-        value = (sum(ord(ch) for ch in seed) % 100) / 100.0
-        return max(0.05, round(value * (1.0 / (depth + 0.5)), 2))

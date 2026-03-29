@@ -18,13 +18,14 @@ type DagreLayoutOptions = LayoutOptions & {
 };
 
 const NODE_MIN_WIDTH = 220;
-const NODE_MAX_WIDTH = 300;
+const NODE_MAX_WIDTH = 320;
 const NODE_MIN_HEIGHT = 72;
-const NODE_HORIZONTAL_PADDING = 36;
+const NODE_HORIZONTAL_PADDING = 40;
 const NODE_VERTICAL_PADDING = 28;
 const NODE_FONT_SIZE = 14;
-const NODE_LINE_HEIGHT = 18;
-const NODE_CHARACTERS_PER_LINE = 14;
+const NODE_LINE_HEIGHT = 20;
+const AVG_CHAR_WIDTH = 9;
+const CHINESE_CHAR_WIDTH_MULTIPLIER = 1.85;
 const FIT_PADDING = 36;
 const MIN_FIT_ZOOM = 0.62;
 const MAX_FIT_ZOOM = 1.05;
@@ -81,21 +82,79 @@ function hexToRgba(hexColor: string, alpha: number): string {
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
+/**
+ * Generate glassmorphism colors for a node based on status
+ */
+function getNodeGlassColors(status: TaskNodeStatus): {
+  backgroundColor: string;
+  borderColor: string;
+  shadowColor: string;
+  textColor: string;
+} {
+  const baseColor = getNodeColor(status);
+  return {
+    backgroundColor: hexToRgba(baseColor, 0.18),
+    borderColor: hexToRgba(baseColor, 0.55),
+    shadowColor: hexToRgba(baseColor, 0.28),
+    textColor: "#1e293b",
+  };
+}
+
+const CJK_REGEX = /[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/;
+
+/**
+ * Calculate visual width of a character
+ * CJK characters are approximately 1.85x wider than Latin characters
+ */
+function getCharWidth(char: string): number {
+  return CJK_REGEX.test(char) ? AVG_CHAR_WIDTH * CHINESE_CHAR_WIDTH_MULTIPLIER : AVG_CHAR_WIDTH;
+}
+
+/**
+ * Calculate total visual width of a string
+ */
+function calculateTextWidth(text: string): number {
+  let width = 0;
+  for (const char of text) {
+    width += getCharWidth(char);
+  }
+  return width;
+}
+
 function measureNode(title: string) {
   const trimmedTitle = title.trim() || "Untitled";
-  const textLength = Array.from(trimmedTitle).length;
-  const lineCount = Math.max(1, Math.ceil(textLength / NODE_CHARACTERS_PER_LINE));
-  const widestLineChars = Math.min(
-    NODE_CHARACTERS_PER_LINE + 4,
-    Math.max(NODE_CHARACTERS_PER_LINE, textLength)
-  );
+  const maxLineWidth = NODE_MAX_WIDTH - NODE_HORIZONTAL_PADDING;
+
+  // Split text into lines based on visual width
+  const lines: string[] = [];
+  let currentLine = "";
+  let currentLineWidth = 0;
+
+  for (const char of trimmedTitle) {
+    const charWidth = getCharWidth(char);
+    if (currentLineWidth + charWidth > maxLineWidth && currentLine.length > 0) {
+      lines.push(currentLine);
+      currentLine = char;
+      currentLineWidth = charWidth;
+    } else {
+      currentLine += char;
+      currentLineWidth += charWidth;
+    }
+  }
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  // Calculate the width of the widest line
+  const widestLineWidth = Math.max(...lines.map(line => calculateTextWidth(line)));
+
   const width = Math.min(
     NODE_MAX_WIDTH,
-    Math.max(NODE_MIN_WIDTH, widestLineChars * NODE_FONT_SIZE + NODE_HORIZONTAL_PADDING)
+    Math.max(NODE_MIN_WIDTH, widestLineWidth + NODE_HORIZONTAL_PADDING)
   );
   const height = Math.max(
     NODE_MIN_HEIGHT,
-    lineCount * NODE_LINE_HEIGHT + NODE_VERTICAL_PADDING
+    lines.length * NODE_LINE_HEIGHT + NODE_VERTICAL_PADDING
   );
 
   return {
@@ -214,29 +273,34 @@ export function DAGEditor({
     width: "data(width)",
     height: "data(height)",
     shape: "roundrectangle",
-    "corner-radius": "24px",
+    "corner-radius": "16px",
     padding: "14px",
     "text-wrap": "wrap",
     "text-max-width": "data(labelMaxWidth)",
     "text-valign": "center",
     "text-halign": "center",
     "font-size": NODE_FONT_SIZE,
-    "line-height": 1.3,
-    color: "#0f172a",
-    "border-width": 1.75,
+    "line-height": 1.4,
+    color: "#1e293b",
+    "border-width": 1.5,
     "border-color": "data(borderColor)",
+    "border-opacity": 0.6,
     "text-outline-width": 0,
     "shadow-color": "data(shadowColor)",
-    "shadow-blur": 18,
-    "shadow-opacity": 0.4,
-    "shadow-offset-y": 6,
+    "shadow-blur": 24,
+    "shadow-opacity": 0.35,
+    "shadow-offset-x": 0,
+    "shadow-offset-y": 8,
+    "background-opacity": 0.85,
   };
 
   const selectedNodeStyle: Record<string, string | number> = {
-    "border-width": 3,
-    "border-color": "#111827",
-    "shadow-blur": 24,
-    "shadow-opacity": 0.58,
+    "border-width": 2.5,
+    "border-color": "#1e293b",
+    "border-opacity": 1,
+    "shadow-blur": 32,
+    "shadow-opacity": 0.5,
+    "shadow-offset-y": 12,
   };
 
   /**
@@ -448,7 +512,7 @@ export function DAGEditor({
 
     // Map nodes to Cytoscape format
     const cyNodes = nodes.map((node) => {
-      const baseColor = getNodeColor(node.status);
+      const glassColors = getNodeGlassColors(node.status);
       const nodeSize = measureNode(node.title);
       const fallbackPosition = {
         x: averageX + ((nodes.findIndex((n) => n.nodeId === node.nodeId) % 4) - 1.5) * 92,
@@ -459,10 +523,10 @@ export function DAGEditor({
         data: {
           id: node.nodeId,
           label: node.title,
-          color: baseColor,
-          backgroundColor: hexToRgba(baseColor, 0.3),
-          borderColor: hexToRgba(baseColor, 0.85),
-          shadowColor: hexToRgba(baseColor, 0.42),
+          color: glassColors.textColor,
+          backgroundColor: glassColors.backgroundColor,
+          borderColor: glassColors.borderColor,
+          shadowColor: glassColors.shadowColor,
           width: nodeSize.width,
           height: nodeSize.height,
           labelMaxWidth: nodeSize.labelMaxWidth,

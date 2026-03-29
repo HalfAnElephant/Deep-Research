@@ -14,6 +14,7 @@ from app.models.schemas import (
     ConversationDetail,
     ConversationMessage,
     ConversationStatus,
+    LLMProvider,
     MessageKind,
     MessageRole,
     NodeStatus,
@@ -211,6 +212,15 @@ class ConversationAgent:
             kind=MessageKind.USER_TEXT,
             content=topic,
             metadata={"stage": "CREATED"},
+        )
+        # Add AI acknowledgment message before generating plan
+        self.repository.add_message(
+            conversation_id,
+            message_id=new_id(),
+            role=MessageRole.ASSISTANT,
+            kind=MessageKind.ASSISTANT_TEXT,
+            content=self._build_ack_message(topic=topic, config=selected_config),
+            metadata={"stage": "ACKNOWLEDGED"},
         )
         markdown = await asyncio.to_thread(self._generate_initial_plan, topic=topic, config=selected_config)
         revision = self.repository.add_plan_revision(
@@ -981,6 +991,13 @@ class ConversationAgent:
                 config_data["targetWordCount"] = self._int_or_default(
                     value, base_config.targetWordCount, min_value=1000, max_value=50000)
                 continue
+            if key == "llm_provider":
+                normalized = value.strip().strip('"').strip("'").lower()
+                if normalized in {item.value for item in LLMProvider}:
+                    config_data["llmProvider"] = normalized
+                else:
+                    warnings.append(f"llm_provider 无效，已忽略：{value}")
+                continue
 
         return ParsedPlan(title=parsed_title[:200], config=TaskConfig(**config_data), warnings=warnings)
 
@@ -1004,7 +1021,7 @@ class ConversationAgent:
     def _generate_initial_plan(self, *, topic: str, config: TaskConfig) -> str:
         prompt = (
             "请为用户生成一个可执行的研究方案，输出必须是 Markdown，并且必须包含 front matter。\n"
-            "front matter 字段固定为：title, topic, max_depth, max_nodes, priority, search_sources, target_word_count。\n"
+            "front matter 字段固定为：title, topic, max_depth, max_nodes, priority, search_sources, target_word_count, llm_provider。\n"
             "正文至少包含：研究目标、研究问题拆解、方法与来源、执行步骤、风险与边界、交付标准。\n"
             "严禁输出解释性前言，直接返回完整 Markdown。"
         )
@@ -1012,11 +1029,11 @@ class ConversationAgent:
             f"主题：{topic}\n"
             f"配置建议：max_depth={config.maxDepth}, max_nodes={config.maxNodes}, "
             f"priority={config.priority}, search_sources={config.searchSources}, "
-            f"target_word_count={config.targetWordCount}\n"
+            f"target_word_count={config.targetWordCount}, llm_provider={config.llmProvider.value}\n"
             "输出语言：中文。"
         )
         generated = self._chat_complete(
-            system_prompt=prompt, user_prompt=user_input)
+            system_prompt=prompt, user_prompt=user_input, provider=config.llmProvider)
         if generated:
             normalized = self._ensure_front_matter(
                 generated, topic=topic, config=config)
@@ -1043,10 +1060,10 @@ class ConversationAgent:
             f"当前方案如下：\n{current_plan}\n\n"
             f"保底配置：max_depth={config.maxDepth}, max_nodes={config.maxNodes}, "
             f"priority={config.priority}, search_sources={config.searchSources}, "
-            f"target_word_count={config.targetWordCount}"
+            f"target_word_count={config.targetWordCount}, llm_provider={config.llmProvider.value}"
         )
         generated = self._chat_complete(
-            system_prompt=prompt, user_prompt=user_input)
+            system_prompt=prompt, user_prompt=user_input, provider=config.llmProvider)
         if generated:
             normalized = self._ensure_front_matter(
                 generated, topic=topic, config=config)
@@ -1054,10 +1071,16 @@ class ConversationAgent:
                 return normalized
         return self._fallback_revision(current_plan=current_plan, instruction=instruction, topic=topic, config=config)
 
-    def _chat_complete(self, *, system_prompt: str, user_prompt: str) -> str:
+    def _chat_complete(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        provider: LLMProvider | str | None = None,
+    ) -> str:
         if settings.use_mock_sources:
             return ""
-        base_url, api_key, model = self._resolve_provider()
+        base_url, api_key, model = self._resolve_provider(provider)
         if not base_url or not api_key:
             return ""
         try:
@@ -1089,15 +1112,30 @@ class ConversationAgent:
             return ""
 
     @staticmethod
-    def _resolve_provider() -> tuple[str, str, str]:
-        provider = settings.default_llm_provider.lower().strip()
-        if provider == "openrouter":
+    def _resolve_provider(provider: LLMProvider | str | None = None) -> tuple[str, str, str]:
+        selected = (provider.value if isinstance(provider, LLMProvider) else provider) or settings.default_llm_provider
+        provider_name = selected.lower().strip()
+        if provider_name == "openrouter":
             return settings.openrouter_base_url, settings.openrouter_api_key, settings.openrouter_model
-        if provider == "deepseek":
+        if provider_name == "deepseek":
             return settings.deepseek_base_url, settings.deepseek_api_key, settings.deepseek_model
-        if provider == "openai":
+        if provider_name == "openai":
             return settings.openai_base_url, settings.openai_api_key, settings.openai_model
         return "", "", ""
+
+    @staticmethod
+    def _build_ack_message(*, topic: str, config: TaskConfig) -> str:
+        provider_labels = {
+            LLMProvider.OPENROUTER: "OpenRouter",
+            LLMProvider.DEEPSEEK: "DeepSeek",
+            LLMProvider.OPENAI: "OpenAI",
+        }
+        provider_name = provider_labels.get(config.llmProvider, config.llmProvider.value)
+        return (
+            f"已收到您的研究主题「{topic[:60]}」。"
+            f"我将使用 {provider_name} 为您构思研究方案，"
+            f"预计将从 {config.maxDepth} 个层级展开 {config.maxNodes} 个研究节点。"
+        )
 
     def _abort_task_if_active(self, task_id: str | None) -> None:
         if not task_id:
@@ -1180,6 +1218,7 @@ class ConversationAgent:
             f"priority: {config.priority}\n"
             f"search_sources: [{', '.join(config.searchSources)}]\n"
             f"target_word_count: {config.targetWordCount}\n"
+            f"llm_provider: {config.llmProvider.value}\n"
             "---\n\n"
             f"{text}"
         )
@@ -1195,6 +1234,7 @@ class ConversationAgent:
             f"priority: {config.priority}\n"
             f"search_sources: [{', '.join(config.searchSources)}]\n"
             f"target_word_count: {config.targetWordCount}\n"
+            f"llm_provider: {config.llmProvider.value}\n"
             "---\n\n"
             "## 研究目标\n"
             "围绕主题建立可验证的结论链路，输出可执行决策建议。\n\n"
