@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS conversations (
   topic TEXT NOT NULL,
   status TEXT NOT NULL,
   config_json TEXT NOT NULL,
+  current_ideas_json TEXT NOT NULL DEFAULT '[]',
   task_id TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -140,6 +141,11 @@ def init_db() -> None:
             conn.execute("ALTER TABLE task_nodes ADD COLUMN position_x REAL")
         if "position_y" not in task_node_columns:
             conn.execute("ALTER TABLE task_nodes ADD COLUMN position_y REAL")
+
+        cursor = conn.execute("PRAGMA table_info(conversations)")
+        conversation_columns = [row[1] for row in cursor.fetchall()]
+        if "current_ideas_json" not in conversation_columns:
+            conn.execute("ALTER TABLE conversations ADD COLUMN current_ideas_json TEXT NOT NULL DEFAULT '[]'")
         conn.commit()
 
         conn.commit()

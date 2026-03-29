@@ -15,6 +15,7 @@ from app.models.schemas import (
     MessageKind,
     MessageRole,
     PlanRevision,
+    ResearchIdea,
     TaskConfig,
 )
 
@@ -48,11 +49,11 @@ class ConversationRepository:
             conn.execute(
                 """
                 INSERT INTO conversations(
-                  conversation_id, topic, status, config_json, task_id, created_at, updated_at
-                ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                  conversation_id, topic, status, config_json, current_ideas_json, task_id, created_at, updated_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (conversation_id, topic, status.value,
-                 config.model_dump_json(), None, ts, ts),
+                 config.model_dump_json(), "[]", None, ts, ts),
             )
             conn.commit()
         return self.get_summary(conversation_id)
@@ -131,6 +132,40 @@ class ConversationRepository:
             conn.commit()
             if conn.total_changes == 0:
                 raise KeyError(conversation_id)
+
+    def set_current_ideas(self, conversation_id: str, ideas: list[ResearchIdea]) -> None:
+        self.get_summary(conversation_id)
+        with get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE conversations
+                SET current_ideas_json = ?, updated_at = ?
+                WHERE conversation_id = ?
+                """,
+                (
+                    json.dumps([idea.model_dump(mode="json") for idea in ideas], ensure_ascii=False),
+                    now_iso(),
+                    conversation_id,
+                ),
+            )
+            conn.commit()
+
+    def get_current_ideas(self, conversation_id: str) -> list[ResearchIdea]:
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT current_ideas_json FROM conversations WHERE conversation_id = ?",
+                (conversation_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(conversation_id)
+        raw_items = json.loads(row["current_ideas_json"] or "[]")
+        if not isinstance(raw_items, list):
+            return []
+        return [
+            ResearchIdea.model_validate(item)
+            for item in raw_items
+            if isinstance(item, dict)
+        ]
 
     def find_by_task_id(self, task_id: str) -> ConversationSummary | None:
         with get_connection() as conn:
@@ -581,4 +616,5 @@ class ConversationRepository:
             currentPlan=self.get_current_plan(conversation_id),
             messages=messages,
             agentStates=self._derive_agent_states_from_messages(messages),
+            currentIdeas=self.get_current_ideas(conversation_id),
         )

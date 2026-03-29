@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class TaskStatus(StrEnum):
@@ -53,6 +53,25 @@ class AgentStatus(StrEnum):
     WAITING_INPUT = "WAITING_INPUT"
 
 
+class LLMProvider(StrEnum):
+    OPENROUTER = "openrouter"
+    DEEPSEEK = "deepseek"
+    OPENAI = "openai"
+
+
+class ResearchMode(StrEnum):
+    SURVEY = "survey"
+    EVIDENCE_REPORT = "evidence_report"
+    EXPERIMENTAL_RESEARCH = "experimental_research"
+    PAPER_WRITEUP = "paper_writeup"
+
+
+class IdeaStatus(StrEnum):
+    CANDIDATE = "CANDIDATE"
+    SELECTED = "SELECTED"
+    REJECTED = "REJECTED"
+
+
 class TaskConfig(BaseModel):
     maxDepth: int = Field(default=3, ge=1, le=8)
     maxNodes: int = Field(default=50, ge=1, le=500)
@@ -60,7 +79,31 @@ class TaskConfig(BaseModel):
         default_factory=lambda: ["Web Search", "arXiv", "Semantic Scholar", "OpenAlex"]
     )
     priority: int = Field(default=3, ge=1, le=5)
+    researchMode: ResearchMode = Field(default=ResearchMode.EVIDENCE_REPORT)
+    numReflections: int = Field(default=2, ge=1, le=6)
+    numInitialIdeas: int = Field(default=3, ge=1, le=8)
+    requiresNoveltyCheck: bool = False
     targetWordCount: int = Field(default=5000, ge=1000, le=50000)
+    llmProvider: LLMProvider = Field(default=LLMProvider.OPENROUTER)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _apply_research_defaults(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        payload = dict(data)
+        raw_mode = payload.get("researchMode", ResearchMode.EVIDENCE_REPORT)
+        try:
+            mode = raw_mode if isinstance(raw_mode, ResearchMode) else ResearchMode(str(raw_mode))
+        except Exception:
+            mode = ResearchMode.EVIDENCE_REPORT
+            payload["researchMode"] = mode
+        if payload.get("requiresNoveltyCheck") is None or "requiresNoveltyCheck" not in payload:
+            payload["requiresNoveltyCheck"] = mode in {
+                ResearchMode.EXPERIMENTAL_RESEARCH,
+                ResearchMode.PAPER_WRITEUP,
+            }
+        return payload
 
 
 class CreateTaskRequest(BaseModel):
@@ -147,6 +190,7 @@ class MessageRole(StrEnum):
 
 class MessageKind(StrEnum):
     USER_TEXT = "USER_TEXT"
+    ASSISTANT_TEXT = "ASSISTANT_TEXT"
     PLAN_DRAFT = "PLAN_DRAFT"
     PLAN_EDITED = "PLAN_EDITED"
     PLAN_REVISION = "PLAN_REVISION"
@@ -195,6 +239,69 @@ class AgentStateRecord(BaseModel):
     error: str | None = None
 
 
+class RelatedWorkItem(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    summary: str = Field(default="", max_length=1000)
+    url: str = ""
+    relevanceScore: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class NoveltyAssessment(BaseModel):
+    summary: str = ""
+    noveltyScore: float = Field(default=0.0, ge=0.0, le=1.0)
+    isNovel: bool = False
+    similarWork: list[str] = Field(default_factory=list)
+    differentiationNotes: list[str] = Field(default_factory=list)
+
+
+class FeasibilityAssessment(BaseModel):
+    summary: str = ""
+    feasibilityScore: float = Field(default=0.0, ge=0.0, le=1.0)
+    isFeasible: bool = False
+    blockers: list[str] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
+
+
+class ExperimentProposal(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    objective: str = Field(default="", max_length=1000)
+    method: str = Field(default="", max_length=2000)
+    metrics: list[str] = Field(default_factory=list)
+    expectedOutcome: str = Field(default="", max_length=1000)
+
+
+class RiskAssessment(BaseModel):
+    risk: str = Field(min_length=1, max_length=500)
+    severity: str = Field(default="medium", pattern="^(low|medium|high)$")
+    mitigation: str = Field(default="", max_length=1000)
+
+
+class ResearchScoreCard(BaseModel):
+    noveltyScore: float = Field(default=0.0, ge=0.0, le=1.0)
+    feasibilityScore: float = Field(default=0.0, ge=0.0, le=1.0)
+    evidenceStrengthScore: float = Field(default=0.0, ge=0.0, le=1.0)
+    writeupReadinessScore: float = Field(default=0.0, ge=0.0, le=1.0)
+    overallScore: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class ResearchIdea(BaseModel):
+    ideaId: str
+    title: str = Field(min_length=1, max_length=200)
+    problemStatement: str = Field(default="", max_length=2000)
+    shortHypothesis: str = Field(default="", max_length=1000)
+    abstract: str = Field(default="", max_length=3000)
+    relatedWork: list[RelatedWorkItem] = Field(default_factory=list)
+    differentiators: list[str] = Field(default_factory=list)
+    noveltyAssessment: NoveltyAssessment = Field(default_factory=NoveltyAssessment)
+    feasibilityAssessment: FeasibilityAssessment = Field(default_factory=FeasibilityAssessment)
+    experimentProposals: list[ExperimentProposal] = Field(default_factory=list)
+    riskFactors: list[RiskAssessment] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    scoreCard: ResearchScoreCard = Field(default_factory=ResearchScoreCard)
+    sourceEvidenceIds: list[str] = Field(default_factory=list)
+    status: IdeaStatus = Field(default=IdeaStatus.CANDIDATE)
+
+
 class ResearchHypothesis(BaseModel):
     """研究假设模型。"""
     hypothesisId: str
@@ -218,6 +325,7 @@ class ConversationDetail(ConversationSummary):
     messages: list[ConversationMessage] = Field(default_factory=list)
     agentStates: list[AgentStateRecord] = Field(default_factory=list)
     currentHypothesis: ResearchHypothesis | None = None
+    currentIdeas: list[ResearchIdea] = Field(default_factory=list)
 
 
 class CreateConversationRequest(BaseModel):
@@ -256,6 +364,18 @@ class RunConversationResponse(BaseModel):
 class ConversationDeleteResponse(BaseModel):
     conversationId: str
     deleted: bool
+
+
+class LLMOption(BaseModel):
+    provider: LLMProvider
+    label: str
+    model: str
+    configured: bool
+
+
+class LLMSettingsResponse(BaseModel):
+    defaultProvider: LLMProvider
+    options: list[LLMOption]
 
 
 class ConversationBulkDeleteResponse(BaseModel):

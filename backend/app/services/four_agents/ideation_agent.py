@@ -1,9 +1,10 @@
-"""构思智能体 - 负责文献调研、研究方向分析和研究假设生成。"""
+"""构思智能体 - 负责文献调研、研究方向分析和候选 idea 生成。"""
 
 from __future__ import annotations
 
-from app.models.schemas import AgentType, ResearchHypothesis
+from app.models.schemas import AgentType, ResearchHypothesis, TaskConfig
 from app.services.four_agents.base import AgentContext, AgentResult, BaseAgent
+from app.services.idea_service import IdeaService
 from app.services.retrieval import RetrievalService
 
 
@@ -25,6 +26,7 @@ class IdeationAgent(BaseAgent):
     ) -> None:
         super().__init__(on_progress)
         self.retrieval = retrieval_service
+        self.idea_service = IdeaService(retrieval_service)
 
     async def run(self, context: AgentContext) -> AgentResult:
         """执行构思阶段任务。
@@ -49,15 +51,24 @@ class IdeationAgent(BaseAgent):
         directions = await self._analyze_directions(context.topic, evidences)
         self._set_progress(70, f"识别到 {len(directions)} 个研究方向")
 
-        # 3. 生成研究假设
-        self._set_progress(80, "生成研究假设")
+        # 3. 生成候选 idea 与兼容性假设
+        self._set_progress(80, "生成候选研究 idea")
+        raw_task_config = context.config.get("taskConfig")
+        config = TaskConfig.model_validate(
+            raw_task_config if isinstance(raw_task_config, dict) else context.config
+        )
+        ideas, _ = self.idea_service.generate_ideas(
+            topic=context.topic,
+            config=config,
+        )
         hypothesis = await self._generate_hypothesis(context, evidences, directions)
-        self._set_progress(95, "假设生成完成")
+        self._set_progress(95, f"已生成 {len(ideas)} 个 idea")
 
         return AgentResult(
             success=True,
             output={
                 "hypothesis": hypothesis.model_dump(),
+                "ideas": [idea.model_dump(mode="json") for idea in ideas],
                 "evidence_count": len(evidences),
                 "directions": directions
             }

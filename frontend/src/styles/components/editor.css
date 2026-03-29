@@ -97,6 +97,77 @@
   gap: var(--space-2);
 }
 
+.idea-summary {
+  border-bottom: 1px solid var(--line);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.idea-summary-head h4 {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+}
+
+.idea-summary-head p {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.idea-summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.idea-chip {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg-soft);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.idea-chip.selected {
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--line));
+  background: color-mix(in srgb, var(--primary) 8%, var(--bg-soft));
+}
+
+.idea-chip.rejected {
+  opacity: 0.74;
+}
+
+.idea-chip-top,
+.idea-chip-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.idea-chip-top strong {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.idea-chip-top span,
+.idea-chip-meta span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.idea-chip p {
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 /* ============================================================================
  * 4. EDITOR BODY
  * ============================================================================ */
