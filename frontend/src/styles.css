@@ -1204,7 +1204,10 @@ button.ghost:hover:not(:disabled) {
   display: grid;
   gap: 2px;
   cursor: pointer;
-  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+  transition:
+    transform var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .live-progress-branch-chip:hover {
@@ -1214,7 +1217,8 @@ button.ghost:hover:not(:disabled) {
 
 .live-progress-branch-chip.active {
   border-color: var(--phase-executing);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--phase-executing) 22%, transparent);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--phase-executing) 22%, transparent);
   background: color-mix(in srgb, var(--phase-executing-light) 35%, var(--card));
 }
 
@@ -1247,6 +1251,18 @@ button.ghost:hover:not(:disabled) {
   padding: 8px;
   display: grid;
   gap: 6px;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+
+.dag-node:hover {
+  transform: translateY(-1px);
+  border-color: var(--phase-executing-border);
+}
+
+.dag-node-selected {
+  border-color: var(--phase-executing);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--phase-executing) 28%, transparent);
 }
 
 .dag-node-running {
@@ -1313,6 +1329,58 @@ button.ghost:hover:not(:disabled) {
 .event-progress {
   color: var(--primary);
   font-weight: 600;
+}
+
+.live-progress-node-panel {
+  grid-column: 1 / -1;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  background: color-mix(in srgb, var(--bg-soft) 60%, var(--card));
+  display: grid;
+  gap: 8px;
+}
+
+.live-progress-node-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.live-progress-node-head strong {
+  font-size: 12px;
+}
+
+.live-progress-node-empty {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.live-progress-node-list {
+  display: grid;
+  gap: 6px;
+}
+
+.live-progress-node-item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  background: var(--card);
+  display: grid;
+  gap: 3px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.live-progress-node-item:hover {
+  border-color: var(--primary);
+}
+
+.live-progress-node-item-title {
+  font-size: 12px;
+  color: var(--ink);
+  line-height: 1.35;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -6599,7 +6667,9 @@ textarea:focus {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .analytics-empty {

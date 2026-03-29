@@ -65,6 +65,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
   const [isDAGEditorOpen, setIsDAGEditorOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [branchInsight, setBranchInsight] = useState<{
     loading: boolean;
     evidenceCount: number;
@@ -75,6 +76,13 @@ export function ChatTimeline(props: ChatTimelineProps) {
     evidenceCount: 0,
     conflictCount: 0,
     topSources: [],
+  });
+  const [nodeEvidence, setNodeEvidence] = useState<{
+    loading: boolean;
+    items: Evidence[];
+  }>({
+    loading: false,
+    items: [],
   });
 
   // DAG state for PLAN_READY phase (fetched from API)
@@ -221,6 +229,16 @@ export function ChatTimeline(props: ChatTimelineProps) {
   }, [branchGroups, selectedBranchId]);
 
   useEffect(() => {
+    if (displayedDagNodes.length === 0) {
+      setSelectedNodeId(null);
+      return;
+    }
+    if (!selectedNodeId || !displayedDagNodes.some((node) => node.nodeId === selectedNodeId)) {
+      setSelectedNodeId(displayedDagNodes[0].nodeId);
+    }
+  }, [displayedDagNodes, selectedNodeId]);
+
+  useEffect(() => {
     if (!currentTaskId || !selectedBranchId) {
       setBranchInsight((prev) => ({
         ...prev,
@@ -301,6 +319,35 @@ export function ChatTimeline(props: ChatTimelineProps) {
       cancelled = true;
     };
   }, [currentTaskId, selectedBranchId, latestDagNodes]);
+
+  useEffect(() => {
+    if (!currentTaskId || !selectedNodeId) {
+      setNodeEvidence({ loading: false, items: [] });
+      return;
+    }
+    let cancelled = false;
+    setNodeEvidence((prev) => ({ ...prev, loading: true }));
+
+    const load = async () => {
+      try {
+        const all = await listEvidence(currentTaskId);
+        if (cancelled) return;
+        const items = all
+          .filter((item) => item.nodeId === selectedNodeId)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 6);
+        setNodeEvidence({ loading: false, items });
+      } catch {
+        if (cancelled) return;
+        setNodeEvidence({ loading: false, items: [] });
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTaskId, selectedNodeId]);
 
   // Helper to render progress bundle
   const renderProgressBundle = (bundle: ProgressBundle) => {
@@ -456,7 +503,16 @@ export function ChatTimeline(props: ChatTimelineProps) {
                       {column.nodes.map((node) => (
                         <article
                           key={node.nodeId}
-                          className={`dag-node dag-node-${node.status.toLowerCase()}`}
+                          className={`dag-node dag-node-${node.status.toLowerCase()} ${node.nodeId === selectedNodeId ? "dag-node-selected" : ""}`}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setSelectedNodeId(node.nodeId)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              setSelectedNodeId(node.nodeId);
+                            }
+                          }}
                         >
                           <div className="dag-node-title">{node.title}</div>
                           <div className="dag-node-meta mono">
@@ -472,6 +528,34 @@ export function ChatTimeline(props: ChatTimelineProps) {
                     </div>
                   </section>
                 ))}
+                <section className="live-progress-node-panel">
+                  <header className="live-progress-node-head">
+                    <strong>节点证据预览</strong>
+                    <span className="mono">节点 {selectedNodeId || "-"}</span>
+                  </header>
+                  {nodeEvidence.loading ? (
+                    <div className="live-progress-node-empty">正在加载证据...</div>
+                  ) : nodeEvidence.items.length === 0 ? (
+                    <div className="live-progress-node-empty">该节点暂无证据。</div>
+                  ) : (
+                    <div className="live-progress-node-list">
+                      {nodeEvidence.items.map((item) => (
+                        <a
+                          key={item.id}
+                          className="live-progress-node-item"
+                          href={item.url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <span className="live-progress-node-item-title">
+                            {item.metadata?.title || item.url}
+                          </span>
+                          <span className="mono">{item.sourceType} · score {item.score.toFixed(2)}</span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </section>
               </div>
             </div>
           )}
