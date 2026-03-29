@@ -145,6 +145,7 @@ export function DAGEditorModal({
     selectNode,
     addEdge,
     deleteEdge,
+    reorderNodes,
     setMode,
     exportDag,
   } = useDAGEditor(safeDag);
@@ -250,6 +251,7 @@ export function DAGEditorModal({
           onNodeSelect={selectNode}
           onNodeAdd={addNode}
           onNodeDelete={deleteNode}
+          onNodeReorder={reorderNodes}
           onEdgeAdd={addEdge}
           onEdgeDelete={deleteEdge}
         />

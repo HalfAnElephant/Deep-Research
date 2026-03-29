@@ -50,6 +50,7 @@ export interface DAGEditorProps {
   onNodeAdd: (parentNodeId?: string) => void;
   onNodeDelete: (nodeId: string) => void;
   onNodeMove?: (nodeId: string, position: { x: number; y: number }) => void;
+  onNodeReorder?: (orderedNodeIds: string[]) => void;
   onEdgeAdd?: (source: string, target: string) => void;
   onEdgeDelete?: (edgeId: string) => void;
 }
@@ -66,6 +67,16 @@ function getNodeColor(status: TaskNodeStatus): string {
     PRUNED: "#9E9E9E",
   };
   return colors[status] || colors.PENDING;
+}
+
+function hexToRgba(hexColor: string, alpha: number): string {
+  const normalized = hexColor.replace("#", "");
+  if (normalized.length !== 6) return `rgba(74, 144, 217, ${alpha})`;
+
+  const red = Number.parseInt(normalized.slice(0, 2), 16);
+  const green = Number.parseInt(normalized.slice(2, 4), 16);
+  const blue = Number.parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
 function measureNode(title: string) {
@@ -126,6 +137,8 @@ export function DAGEditor({
   onNodeSelect,
   onNodeAdd,
   onNodeDelete,
+  onNodeMove,
+  onNodeReorder,
   onEdgeAdd,
   onEdgeDelete,
 }: DAGEditorProps) {
@@ -150,14 +163,32 @@ export function DAGEditor({
 
   // Stable callback refs to avoid effect re-runs
   const onNodeSelectRef = useRef(onNodeSelect);
+  const onNodeDeleteRef = useRef(onNodeDelete);
+  const onNodeMoveRef = useRef(onNodeMove);
+  const onNodeReorderRef = useRef(onNodeReorder);
   const onEdgeAddRef = useRef(onEdgeAdd);
   const onEdgeDeleteRef = useRef(onEdgeDelete);
   const modeRef = useRef(mode);
   const resizeFrameRef = useRef<number | null>(null);
+  const selectedNodeIdRef = useRef<string | null>(selectedNodeId);
+  const manualLayoutRef = useRef(false);
+  const manualPositionsRef = useRef<Record<string, { x: number; y: number }>>({});
 
   useEffect(() => {
     onNodeSelectRef.current = onNodeSelect;
   }, [onNodeSelect]);
+
+  useEffect(() => {
+    onNodeDeleteRef.current = onNodeDelete;
+  }, [onNodeDelete]);
+
+  useEffect(() => {
+    onNodeMoveRef.current = onNodeMove;
+  }, [onNodeMove]);
+
+  useEffect(() => {
+    onNodeReorderRef.current = onNodeReorder;
+  }, [onNodeReorder]);
 
   useEffect(() => {
     onEdgeAddRef.current = onEdgeAdd;
@@ -171,6 +202,10 @@ export function DAGEditor({
     modeRef.current = mode;
   }, [mode]);
 
+  useEffect(() => {
+    selectedNodeIdRef.current = selectedNodeId;
+  }, [selectedNodeId]);
+
   /**
    * Initialize Cytoscape instance
    */
@@ -183,11 +218,12 @@ export function DAGEditor({
         {
           selector: "node",
           style: {
-            "background-color": "data(color)",
+            "background-color": "data(backgroundColor)",
             label: "data(label)",
             width: "data(width)",
             height: "data(height)",
             shape: "roundrectangle",
+            "corner-radius": 24,
             padding: 14,
             "text-wrap": "wrap",
             "text-max-width": "data(labelMaxWidth)",
@@ -195,18 +231,23 @@ export function DAGEditor({
             "text-halign": "center",
             "font-size": NODE_FONT_SIZE,
             "line-height": 1.3,
-            color: "#fff",
-            "border-width": 2,
+            color: "#0f172a",
+            "border-width": 1.75,
             "border-color": "data(borderColor)",
-            "text-outline-width": 0.75,
-            "text-outline-color": "data(color)",
+            "text-outline-width": 0,
+            "shadow-color": "data(shadowColor)",
+            "shadow-blur": 18,
+            "shadow-opacity": 0.4,
+            "shadow-offset-y": 6,
           },
         },
         {
           selector: "node:selected",
           style: {
             "border-width": 3,
-            "border-color": "#FF6B6B",
+            "border-color": "#111827",
+            "shadow-blur": 24,
+            "shadow-opacity": 0.58,
           },
         },
         {
@@ -238,6 +279,7 @@ export function DAGEditor({
       minZoom: 0.45,
       maxZoom: 2.4,
       wheelSensitivity: 0.3,
+      autoungrabify: false,
     });
 
     cyRef.current = cy;
@@ -279,6 +321,59 @@ export function DAGEditor({
       onNodeSelectRef.current(node.id());
     });
 
+    // Handle keyboard deletion for selected node
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const isDelete = event.key === "Delete" || event.key === "Backspace";
+      if (!isDelete) return;
+
+      const target = event.target as HTMLElement | null;
+      const isTypingTarget =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        Boolean(target?.closest("[contenteditable='true']"));
+
+      if (isTypingTarget || !selectedNodeIdRef.current) return;
+
+      event.preventDefault();
+      onNodeDeleteRef.current(selectedNodeIdRef.current);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    // Enable drag-to-reorder in canvas
+    cy.on("dragfree", "node", (evt) => {
+      const node = evt.target;
+      if (!manualLayoutRef.current) {
+        const captured: Record<string, { x: number; y: number }> = {};
+        cy.nodes().forEach((n) => {
+          const p = n.position();
+          captured[n.id()] = { x: p.x, y: p.y };
+        });
+        manualPositionsRef.current = captured;
+      }
+
+      manualLayoutRef.current = true;
+      const position = node.position();
+      manualPositionsRef.current[node.id()] = { x: position.x, y: position.y };
+      onNodeMoveRef.current?.(node.id(), { x: position.x, y: position.y });
+
+      const orderedIds = cy
+        .nodes()
+        .toArray()
+        .sort((a, b) => {
+          const ay = a.position("y");
+          const by = b.position("y");
+          if (ay === by) {
+            return a.position("x") - b.position("x");
+          }
+          return ay - by;
+        })
+        .map((n) => n.id());
+
+      onNodeReorderRef.current?.(orderedIds);
+    });
+
     // Handle canvas click (deselect)
     cy.on("tap", (evt) => {
       if (evt.target === cy) {
@@ -314,6 +409,7 @@ export function DAGEditor({
       if (resizeFrameRef.current !== null) {
         window.cancelAnimationFrame(resizeFrameRef.current);
       }
+      window.removeEventListener("keydown", handleKeyDown);
       resizeObserver.disconnect();
       cy.destroy();
     };
@@ -326,21 +422,49 @@ export function DAGEditor({
     const cy = cyRef.current;
     if (!cy) return;
 
+    const validNodeIds = new Set(nodes.map((node) => node.nodeId));
+    for (const nodeId of Object.keys(manualPositionsRef.current)) {
+      if (!validNodeIds.has(nodeId)) {
+        delete manualPositionsRef.current[nodeId];
+      }
+    }
+
+    const currentPositions = manualPositionsRef.current;
+    const currentPositionEntries = Object.values(currentPositions);
+    const averageX =
+      currentPositionEntries.length > 0
+        ? currentPositionEntries.reduce((sum, p) => sum + p.x, 0) / currentPositionEntries.length
+        : 220;
+    const averageY =
+      currentPositionEntries.length > 0
+        ? currentPositionEntries.reduce((sum, p) => sum + p.y, 0) / currentPositionEntries.length
+        : 140;
+
     // Map nodes to Cytoscape format
     const cyNodes = nodes.map((node) => {
+      const baseColor = getNodeColor(node.status);
       const nodeSize = measureNode(node.title);
+      const fallbackPosition = {
+        x: averageX + ((nodes.findIndex((n) => n.nodeId === node.nodeId) % 4) - 1.5) * 92,
+        y: averageY + Math.floor(nodes.findIndex((n) => n.nodeId === node.nodeId) / 4) * 88,
+      };
 
       return {
         data: {
           id: node.nodeId,
           label: node.title,
-          color: getNodeColor(node.status),
-          borderColor: getNodeColor(node.status),
+          color: baseColor,
+          backgroundColor: hexToRgba(baseColor, 0.3),
+          borderColor: hexToRgba(baseColor, 0.85),
+          shadowColor: hexToRgba(baseColor, 0.42),
           width: nodeSize.width,
           height: nodeSize.height,
           labelMaxWidth: nodeSize.labelMaxWidth,
           ...node,
         },
+        position: manualLayoutRef.current
+          ? currentPositions[node.nodeId] ?? fallbackPosition
+          : undefined,
       };
     });
 
@@ -353,6 +477,18 @@ export function DAGEditor({
     }));
 
     cy.json({ elements: { nodes: cyNodes, edges: cyEdges } });
+
+    if (manualLayoutRef.current) {
+      const layout = cy.layout({
+        name: "preset",
+        fit: false,
+        animate: false,
+      });
+      layout.run();
+      fitGraph(cy);
+      return;
+    }
+
     const layout = cy.layout(DAGRE_LAYOUT_OPTIONS);
     layout.one("layoutstop", () => {
       fitGraph(cy);
@@ -485,7 +621,7 @@ export function DAGEditor({
         )}
         {mode === "advanced" && (
           <span className="dag-toolbar-hint-inline">
-            Click edges to delete
+            Drag nodes to reorder · Click edges to delete
           </span>
         )}
       </div>

@@ -71,6 +71,7 @@ export interface UseDAGEditorResult {
   selectNode: (nodeId: string | null) => void;
   addEdge: (source: string, target: string) => void;
   deleteEdge: (edgeId: string) => void;
+  reorderNodes: (orderedNodeIds: string[]) => void;
   setMode: (mode: DAGEditorMode) => void;
   exportDag: () => DAGGraph;
   reset: (newDag: DAGGraph) => void;
@@ -420,6 +421,59 @@ export function useDAGEditor(initialDag: DAGGraph): UseDAGEditorResult {
   );
 
   /**
+   * Reorder nodes by the provided node id sequence.
+   * Node order is used by the backend execution loop.
+   */
+  const reorderNodes = useCallback(
+    (orderedNodeIds: string[]) => {
+      setState((prev) => {
+        if (prev.nodes.length <= 1 || orderedNodeIds.length === 0) return prev;
+
+        const nodeMap = new Map(prev.nodes.map((node) => [node.nodeId, node]));
+        const seen = new Set<string>();
+        const reordered: TaskNode[] = [];
+
+        for (const nodeId of orderedNodeIds) {
+          if (seen.has(nodeId)) continue;
+          const matched = nodeMap.get(nodeId);
+          if (!matched) continue;
+          reordered.push(matched);
+          seen.add(nodeId);
+        }
+
+        for (const node of prev.nodes) {
+          if (!seen.has(node.nodeId)) {
+            reordered.push(node);
+          }
+        }
+
+        const unchanged = reordered.every(
+          (node, index) => node.nodeId === prev.nodes[index]?.nodeId
+        );
+        if (unchanged) return prev;
+
+        const newHistory = prev.history.slice(0, prev.historyIndex + 1);
+        newHistory.push({ nodes: reordered, edges: prev.edges });
+        if (newHistory.length > MAX_HISTORY_SIZE) {
+          newHistory.shift();
+        }
+
+        const newHistoryIndex = newHistory.length - 1;
+        const isDirty = checkDirty(reordered, prev.edges);
+
+        return {
+          ...prev,
+          nodes: reordered,
+          history: newHistory,
+          historyIndex: newHistoryIndex,
+          isDirty,
+        };
+      });
+    },
+    [checkDirty]
+  );
+
+  /**
    * Set editor mode
    */
   const setMode = useCallback((mode: DAGEditorMode) => {
@@ -469,6 +523,7 @@ export function useDAGEditor(initialDag: DAGGraph): UseDAGEditorResult {
     selectNode,
     addEdge,
     deleteEdge,
+    reorderNodes,
     setMode,
     exportDag,
     reset,
