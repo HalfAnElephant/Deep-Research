@@ -12,7 +12,8 @@ import { formatLocalTime } from "../utils/formatTime";
 import { ReportViewer } from "./ReportViewer";
 import { ProgressBar } from "./ProgressIndicator";
 import { DAGEditorModal } from "./DAGEditorModal";
-import { getDag } from "../api";
+import { getDag, listConflicts, listEvidence } from "../api";
+import type { ConflictRecord, Evidence } from "../types";
 import type { DAGGraph, TaskNode, DAGEdge, TaskNodeStatus } from "../hooks/useDAGEditor";
 
 export interface ChatTimelineProps {
@@ -64,6 +65,17 @@ export function ChatTimeline(props: ChatTimelineProps) {
   const [isDAGEditorOpen, setIsDAGEditorOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
+  const [branchInsight, setBranchInsight] = useState<{
+    loading: boolean;
+    evidenceCount: number;
+    conflictCount: number;
+    topSources: Array<{ source: string; count: number }>;
+  }>({
+    loading: false,
+    evidenceCount: 0,
+    conflictCount: 0,
+    topSources: [],
+  });
 
   // DAG state for PLAN_READY phase (fetched from API)
   const [planReadyDag, setPlanReadyDag] = useState<DAGGraph>({ nodes: [], edges: [] });
@@ -208,6 +220,88 @@ export function ChatTimeline(props: ChatTimelineProps) {
     }
   }, [branchGroups, selectedBranchId]);
 
+  useEffect(() => {
+    if (!currentTaskId || !selectedBranchId) {
+      setBranchInsight((prev) => ({
+        ...prev,
+        loading: false,
+        evidenceCount: 0,
+        conflictCount: 0,
+        topSources: [],
+      }));
+      return;
+    }
+
+    const selectedNodeIds = new Set(
+      latestDagNodes
+        .filter((node) => (node.branchId || "unassigned") === selectedBranchId)
+        .map((node) => node.nodeId),
+    );
+    if (selectedNodeIds.size === 0) {
+      setBranchInsight((prev) => ({
+        ...prev,
+        loading: false,
+        evidenceCount: 0,
+        conflictCount: 0,
+        topSources: [],
+      }));
+      return;
+    }
+
+    let cancelled = false;
+    setBranchInsight((prev) => ({ ...prev, loading: true }));
+
+    const load = async () => {
+      try {
+        const [allEvidences, allConflicts] = await Promise.all([
+          listEvidence(currentTaskId),
+          listConflicts(currentTaskId),
+        ]);
+        if (cancelled) return;
+
+        const evidences = allEvidences.filter((item: Evidence) => selectedNodeIds.has(item.nodeId));
+        const evidenceIdToNodeId = new Map(evidences.map((item) => [item.id, item.nodeId]));
+
+        const conflictCount = allConflicts.filter((conflict: ConflictRecord) =>
+          conflict.disputedValues?.some((value) => {
+            const nodeId = evidenceIdToNodeId.get(value.evidenceId);
+            return typeof nodeId === "string" && selectedNodeIds.has(nodeId);
+          }),
+        ).length;
+
+        const sourceCounter = new Map<string, number>();
+        for (const item of evidences) {
+          const source = item.sourceType || "unknown";
+          sourceCounter.set(source, (sourceCounter.get(source) ?? 0) + 1);
+        }
+        const topSources = Array.from(sourceCounter.entries())
+          .map(([source, count]) => ({ source, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 3);
+
+        setBranchInsight({
+          loading: false,
+          evidenceCount: evidences.length,
+          conflictCount,
+          topSources,
+        });
+      } catch {
+        if (cancelled) return;
+        setBranchInsight({
+          loading: false,
+          evidenceCount: 0,
+          conflictCount: 0,
+          topSources: [],
+        });
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTaskId, selectedBranchId, latestDagNodes]);
+
   // Helper to render progress bundle
   const renderProgressBundle = (bundle: ProgressBundle) => {
     const isExpanded = expanded[bundle.bundleKey] ?? !bundle.collapsed;
@@ -340,6 +434,16 @@ export function ChatTimeline(props: ChatTimelineProps) {
                           <span className="mono">{group.count} 节点 / 均分 {group.averageScore.toFixed(2)}</span>
                         </button>
                       ))}
+                    </div>
+                    <div className="live-progress-branch-insight">
+                      <span>证据 {branchInsight.loading ? "加载中..." : branchInsight.evidenceCount}</span>
+                      <span>冲突 {branchInsight.loading ? "加载中..." : branchInsight.conflictCount}</span>
+                      <span>
+                        来源
+                        {branchInsight.topSources.length > 0
+                          ? ` ${branchInsight.topSources.map((item) => `${item.source}(${item.count})`).join(" / ")}`
+                          : " -"}
+                      </span>
                     </div>
                   </section>
                 )}

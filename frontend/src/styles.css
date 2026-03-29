@@ -1182,6 +1182,18 @@ button.ghost:hover:not(:disabled) {
   gap: 6px;
 }
 
+.live-progress-branch-insight {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--line);
+  background: color-mix(in srgb, var(--bg-soft) 65%, var(--card));
+  font-size: 11px;
+  color: var(--ink-secondary);
+}
+
 .live-progress-branch-chip {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
