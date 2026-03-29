@@ -17,6 +17,7 @@ from app.services.longcat_client import longcat_client
 from app.services.planner import MasterPlanner
 from app.services.progress_hub import ProgressHub
 from app.services.retrieval import RetrievalService
+from app.services.search_strategy import BestFirstSearchStrategy, BranchScorer
 from app.services.state_machine import InvalidStateTransition, transition_or_raise
 from app.services.writer import WriterService
 from app.services.four_agents.checking.agent import CheckingAgent
@@ -68,6 +69,7 @@ class ExecutionEngine:
         research_agent: ResearchAgent | None = None,
         report_agent: ReportAgent | None = None,
         checking_agent: CheckingAgent | None = None,
+        search_strategy: BestFirstSearchStrategy | None = None,
         event_listener: Callable[[str, str, dict],
                                  Awaitable[None]] | None = None,
     ) -> None:
@@ -90,6 +92,8 @@ class ExecutionEngine:
         else:
             self.report_agent = report_agent
         self.checking_agent = checking_agent
+        self.search_strategy = search_strategy or BestFirstSearchStrategy()
+        self.branch_scorer = BranchScorer()
         self.event_listener = event_listener
         self._control: dict[str, TaskControlState] = {}
         self._runtime_progress: dict[str, RuntimeProgressState] = {}
@@ -262,13 +266,13 @@ class ExecutionEngine:
         except Exception:
             payload.setdefault("dagNodes", [])
             payload.setdefault("dagSummary", {
-                               "total": 0, "pending": 0, "running": 0, "completed": 0, "failed": 0})
+                               "total": 0, "pending": 0, "running": 0, "completed": 0, "failed": 0, "pruned": 0})
             return
 
         now_mono = asyncio.get_running_loop().time()
         dag_nodes: list[dict[str, Any]] = []
         summary = {"total": 0, "pending": 0,
-                   "running": 0, "completed": 0, "failed": 0}
+                   "running": 0, "completed": 0, "failed": 0, "pruned": 0}
 
         for node in dag.nodes:
             if node.taskId == task_id:
@@ -300,6 +304,9 @@ class ExecutionEngine:
                     "title": node.title,
                     "status": status_value,
                     "searchDepth": node.metadata.searchDepth,
+                    "branchId": node.metadata.branchId,
+                    "branchScore": node.metadata.branchScore,
+                    "branchDepth": node.metadata.branchDepth,
                     "dependencies": node.dependencies,
                     "elapsedMs": elapsed_ms,
                     "retryCount": retry_count,
@@ -477,8 +484,13 @@ class ExecutionEngine:
                     current.status, TaskStatus.EXECUTING))
 
             dag = self.repository.get_dag(task_id)
-            executable_nodes = [n for n in dag.nodes if n.taskId !=
-                                task_id and n.status != NodeStatus.PRUNED]
+            executable_nodes = [
+                n
+                for n in dag.nodes
+                if n.taskId != task_id and n.status != NodeStatus.PRUNED
+            ]
+            executable_nodes = self.search_strategy.order(executable_nodes)
+            node_by_id = {node.taskId: node for node in executable_nodes}
             self._ensure_dag_node_runtime(task_id)
             snapshot = self.repository.load_snapshot(task_id)
             if snapshot:
@@ -488,6 +500,8 @@ class ExecutionEngine:
             total = max(1, len(executable_nodes))
             for idx, node in enumerate(executable_nodes, start=1):
                 control = self._control.setdefault(task_id, TaskControlState())
+                if node.status == NodeStatus.PRUNED:
+                    continue
                 if node.taskId in control.completed_nodes:
                     continue
                 while control.paused and not control.aborted:
@@ -529,6 +543,33 @@ class ExecutionEngine:
                         {"taskId": task_id, "nodeId": node.taskId,
                             "evidence": ev.model_dump()},
                     )
+
+                branch_score = self.branch_scorer.score(
+                    node, evidence_count=len(evidences))
+                node.metadata.branchScore = branch_score
+                self.repository.update_node_branch_score(
+                    task_id, node.taskId, branch_score)
+
+                if branch_score < task.config.branchPruneThreshold and node.children:
+                    self.repository.prune_nodes(task_id, node.children)
+                    for child_id in node.children:
+                        child = node_by_id.get(child_id)
+                        if child is not None:
+                            child.status = NodeStatus.PRUNED
+                    await self._emit_event(
+                        task_id,
+                        "TASK_NOTE",
+                        {
+                            "taskId": task_id,
+                            "phase": "BRANCH_PRUNED",
+                            "nodeId": node.taskId,
+                            "nodeTitle": node.title,
+                            "branchScore": branch_score,
+                            "prunedNodeIds": node.children,
+                            "detail": f"分支评分 {branch_score:.2f} 低于阈值，已剪枝 {len(node.children)} 个子节点。",
+                        },
+                    )
+
                 self.repository.update_node_status(
                     task_id, node.taskId, NodeStatus.COMPLETED, node.metadata.infoGainScore)
                 self._record_node_completed(

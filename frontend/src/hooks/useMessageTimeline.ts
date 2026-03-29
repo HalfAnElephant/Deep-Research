@@ -18,6 +18,9 @@ export interface DagNodeLiveState {
   title: string;
   status: string;
   searchDepth: number;
+  branchId?: string;
+  branchScore?: number;
+  branchDepth?: number;
   dependencies: string[];
   elapsedMs: number;
   retryCount: number;
@@ -37,6 +40,9 @@ function toDagNodeLiveStates(value: unknown): DagNodeLiveState[] | undefined {
       title,
       status: typeof record.status === "string" ? record.status : "PENDING",
       searchDepth: typeof record.searchDepth === "number" ? record.searchDepth : 0,
+      branchId: typeof record.branchId === "string" ? record.branchId : undefined,
+      branchScore: typeof record.branchScore === "number" ? record.branchScore : undefined,
+      branchDepth: typeof record.branchDepth === "number" ? record.branchDepth : undefined,
       dependencies: Array.isArray(record.dependencies)
         ? record.dependencies.filter((dep): dep is string => typeof dep === "string")
         : [],

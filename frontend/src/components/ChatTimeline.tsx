@@ -174,6 +174,9 @@ export function ChatTimeline(props: ChatTimelineProps) {
         title: n.title,
         status: n.status,
         searchDepth: n.searchDepth,
+        branchId: undefined,
+        branchScore: undefined,
+        branchDepth: n.searchDepth,
         dependencies: [],
         elapsedMs: n.elapsedMs,
         retryCount: n.retryCount,
@@ -293,7 +296,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
               <div className="live-progress-dag-head">
                 <strong>任务 DAG 实时视图</strong>
                 <span className="mono live-progress-dag-summary">
-                  总计 {dagSummary.total} | 运行中 {dagSummary.running} | 已完成 {dagSummary.completed} | 失败 {dagSummary.failed}
+                  总计 {dagSummary.total} | 运行中 {dagSummary.running} | 已完成 {dagSummary.completed} | 失败 {dagSummary.failed} | 剪枝 {dagSummary.pruned}
                 </span>
               </div>
               <div className="live-progress-dag-grid">
@@ -311,6 +314,9 @@ export function ChatTimeline(props: ChatTimelineProps) {
                           <div className="dag-node-title">{node.title}</div>
                           <div className="dag-node-meta mono">
                             <span>{statusLabel(node.status)}</span>
+                            <span>分支 {node.branchId || "-"}</span>
+                            <span>分数 {typeof node.branchScore === "number" ? node.branchScore.toFixed(2) : "-"}</span>
+                            <span>分支深度 {typeof node.branchDepth === "number" ? node.branchDepth : "-"}</span>
                             <span>耗时 {formatElapsed(node.elapsedMs)}</span>
                             <span>重试 {node.retryCount}</span>
                           </div>
@@ -510,17 +516,20 @@ function statusLabel(status: string): string {
       return "失败";
     case "SUSPENDED":
       return "暂停";
+    case "PRUNED":
+      return "已剪枝";
     default:
       return "待处理";
   }
 }
 
 function summarizeDagNodes(nodes: Array<{ status: string }>) {
-  const summary = { total: nodes.length, running: 0, completed: 0, failed: 0 };
+  const summary = { total: nodes.length, running: 0, completed: 0, failed: 0, pruned: 0 };
   for (const node of nodes) {
     if (node.status === "RUNNING") summary.running += 1;
     if (node.status === "COMPLETED") summary.completed += 1;
     if (node.status === "FAILED") summary.failed += 1;
+    if (node.status === "PRUNED") summary.pruned += 1;
   }
   return summary;
 }

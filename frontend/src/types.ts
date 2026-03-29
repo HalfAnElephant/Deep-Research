@@ -23,6 +23,7 @@ export interface TaskConfig {
   maxNodes: number;
   searchSources: string[];
   priority: number;
+  branchPruneThreshold?: number;
   researchMode?: ResearchMode;
   numReflections?: number;
   numInitialIdeas?: number;
@@ -52,6 +53,9 @@ export interface TaskResponse {
         estimatedTokenCost: number;
         searchDepth: number;
         infoGainScore: number;
+        branchId?: string | null;
+        branchScore?: number;
+        branchDepth?: number;
         createdAt: string;
         updatedAt: string;
       };

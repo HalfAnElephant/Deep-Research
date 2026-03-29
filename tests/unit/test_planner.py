@@ -9,6 +9,8 @@ def test_planner_generates_bounded_dag() -> None:
     assert len(dag.nodes) <= 20
     assert dag.nodes[0].taskId == "root"
     assert all(node.metadata.searchDepth <= 3 for node in dag.nodes)
+    assert all(node.metadata.branchDepth >= 0 for node in dag.nodes)
+    assert all(0.0 <= node.metadata.branchScore <= 1.0 for node in dag.nodes)
 
 
 def test_planner_generates_acyclic_edges() -> None:

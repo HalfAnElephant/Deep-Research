@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS task_nodes (
   priority INTEGER NOT NULL,
   search_depth INTEGER NOT NULL,
   info_gain_score REAL NOT NULL,
+  branch_id TEXT,
+  branch_score REAL NOT NULL DEFAULT 0,
+  branch_depth INTEGER NOT NULL DEFAULT 0,
   position_x REAL,
   position_y REAL,
   dependencies_json TEXT NOT NULL,
@@ -130,8 +133,10 @@ def init_db() -> None:
         cursor = conn.execute("PRAGMA table_info(evidences)")
         columns = [row[1] for row in cursor.fetchall()]
         if "favorited" not in columns:
-            conn.execute("ALTER TABLE evidences ADD COLUMN favorited INTEGER NOT NULL DEFAULT 0")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_evidences_favorited ON evidences(favorited)")
+            conn.execute(
+                "ALTER TABLE evidences ADD COLUMN favorited INTEGER NOT NULL DEFAULT 0")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_evidences_favorited ON evidences(favorited)")
             conn.commit()
 
         # Handle migrations: add task node position columns if they don't exist
@@ -141,11 +146,20 @@ def init_db() -> None:
             conn.execute("ALTER TABLE task_nodes ADD COLUMN position_x REAL")
         if "position_y" not in task_node_columns:
             conn.execute("ALTER TABLE task_nodes ADD COLUMN position_y REAL")
+        if "branch_id" not in task_node_columns:
+            conn.execute("ALTER TABLE task_nodes ADD COLUMN branch_id TEXT")
+        if "branch_score" not in task_node_columns:
+            conn.execute(
+                "ALTER TABLE task_nodes ADD COLUMN branch_score REAL NOT NULL DEFAULT 0")
+        if "branch_depth" not in task_node_columns:
+            conn.execute(
+                "ALTER TABLE task_nodes ADD COLUMN branch_depth INTEGER NOT NULL DEFAULT 0")
 
         cursor = conn.execute("PRAGMA table_info(conversations)")
         conversation_columns = [row[1] for row in cursor.fetchall()]
         if "current_ideas_json" not in conversation_columns:
-            conn.execute("ALTER TABLE conversations ADD COLUMN current_ideas_json TEXT NOT NULL DEFAULT '[]'")
+            conn.execute(
+                "ALTER TABLE conversations ADD COLUMN current_ideas_json TEXT NOT NULL DEFAULT '[]'")
         conn.commit()
 
         conn.commit()

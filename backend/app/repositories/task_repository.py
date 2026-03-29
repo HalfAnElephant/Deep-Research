@@ -17,14 +17,16 @@ class TaskRepository:
                 INSERT INTO tasks(task_id, title, description, status, config_json, created_at, updated_at)
                 VALUES(?, ?, ?, ?, ?, ?, ?)
                 """,
-                (task_id, title, description, TaskStatus.READY.value, config.model_dump_json(), ts, ts),
+                (task_id, title, description, TaskStatus.READY.value,
+                 config.model_dump_json(), ts, ts),
             )
             conn.commit()
         return self.get_task(task_id)
 
     def get_task(self, task_id: str) -> TaskResponse:
         with get_connection() as conn:
-            row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
         if row is None:
             raise KeyError(task_id)
         return TaskResponse(
@@ -41,7 +43,8 @@ class TaskRepository:
 
     def list_tasks(self) -> list[TaskResponse]:
         with get_connection() as conn:
-            rows = conn.execute("SELECT task_id FROM tasks ORDER BY created_at DESC").fetchall()
+            rows = conn.execute(
+                "SELECT task_id FROM tasks ORDER BY created_at DESC").fetchall()
         return [self.get_task(row["task_id"]) for row in rows]
 
     def update_task(self, task_id: str, *, title: str | None, description: str | None, config: TaskConfig | None) -> TaskResponse:
@@ -56,14 +59,16 @@ class TaskRepository:
                 SET title = ?, description = ?, config_json = ?, updated_at = ?
                 WHERE task_id = ?
                 """,
-                (next_title, next_desc, next_config.model_dump_json(), now_iso(), task_id),
+                (next_title, next_desc,
+                 next_config.model_dump_json(), now_iso(), task_id),
             )
             conn.commit()
         return self.get_task(task_id)
 
     def delete_task(self, task_id: str) -> None:
         with get_connection() as conn:
-            conn.execute("DELETE FROM task_nodes WHERE task_id = ?", (task_id,))
+            conn.execute(
+                "DELETE FROM task_nodes WHERE task_id = ?", (task_id,))
             conn.execute("DELETE FROM snapshots WHERE task_id = ?", (task_id,))
             conn.execute("DELETE FROM tasks WHERE task_id = ?", (task_id,))
             conn.commit()
@@ -95,16 +100,17 @@ class TaskRepository:
     def save_dag(self, task_id: str, dag: DAGGraph) -> None:
         ts = now_iso()
         with get_connection() as conn:
-            conn.execute("DELETE FROM task_nodes WHERE task_id = ?", (task_id,))
+            conn.execute(
+                "DELETE FROM task_nodes WHERE task_id = ?", (task_id,))
             for node in dag.nodes:
                 conn.execute(
                     """
                     INSERT INTO task_nodes(
                       task_id, node_id, parent_task_id, title, description, status, priority,
-                      search_depth, info_gain_score, position_x, position_y,
+                                            search_depth, info_gain_score, branch_id, branch_score, branch_depth, position_x, position_y,
                       dependencies_json, children_json, output_json,
                       created_at, updated_at
-                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         task_id,
@@ -116,6 +122,9 @@ class TaskRepository:
                         node.priority,
                         node.metadata.searchDepth,
                         node.metadata.infoGainScore,
+                        node.metadata.branchId,
+                        node.metadata.branchScore,
+                        node.metadata.branchDepth,
                         node.metadata.positionX,
                         node.metadata.positionY,
                         json.dumps(node.dependencies),
@@ -153,6 +162,9 @@ class TaskRepository:
                     "estimatedTokenCost": 0,
                     "searchDepth": row["search_depth"],
                     "infoGainScore": row["info_gain_score"],
+                    "branchId": row["branch_id"],
+                    "branchScore": row["branch_score"] or 0.0,
+                    "branchDepth": row["branch_depth"] or 0,
                     "positionX": row["position_x"],
                     "positionY": row["position_y"],
                     "createdAt": row["created_at"],
@@ -162,7 +174,8 @@ class TaskRepository:
             )
             nodes.append(node)
             for dep in node.dependencies:
-                edges.append(DAGEdge.model_validate({"from": dep, "to": node.taskId, "type": "DEPENDS_ON"}))
+                edges.append(DAGEdge.model_validate(
+                    {"from": dep, "to": node.taskId, "type": "DEPENDS_ON"}))
         return DAGGraph(nodes=nodes, edges=edges)
 
     def update_node_status(self, task_id: str, node_id: str, status: NodeStatus, info_gain: float) -> None:
@@ -174,6 +187,34 @@ class TaskRepository:
                 WHERE task_id = ? AND node_id = ?
                 """,
                 (status.value, info_gain, now_iso(), task_id, node_id),
+            )
+            conn.commit()
+
+    def update_node_branch_score(self, task_id: str, node_id: str, branch_score: float) -> None:
+        normalized = max(0.0, min(1.0, float(branch_score)))
+        with get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE task_nodes
+                SET branch_score = ?, updated_at = ?
+                WHERE task_id = ? AND node_id = ?
+                """,
+                (normalized, now_iso(), task_id, node_id),
+            )
+            conn.commit()
+
+    def prune_nodes(self, task_id: str, node_ids: list[str]) -> None:
+        if not node_ids:
+            return
+        placeholders = ", ".join("?" for _ in node_ids)
+        with get_connection() as conn:
+            conn.execute(
+                f"""
+                UPDATE task_nodes
+                SET status = ?, updated_at = ?
+                WHERE task_id = ? AND node_id IN ({placeholders})
+                """,
+                (NodeStatus.PRUNED.value, now_iso(), task_id, *node_ids),
             )
             conn.commit()
 
@@ -193,7 +234,8 @@ class TaskRepository:
 
     def load_snapshot(self, task_id: str) -> dict[str, Any] | None:
         with get_connection() as conn:
-            row = conn.execute("SELECT snapshot_json FROM snapshots WHERE task_id = ?", (task_id,)).fetchone()
+            row = conn.execute(
+                "SELECT snapshot_json FROM snapshots WHERE task_id = ?", (task_id,)).fetchone()
         if row is None:
             return None
         return json.loads(row["snapshot_json"])

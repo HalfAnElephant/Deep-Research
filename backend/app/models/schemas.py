@@ -76,12 +76,14 @@ class TaskConfig(BaseModel):
     maxDepth: int = Field(default=3, ge=1, le=8)
     maxNodes: int = Field(default=50, ge=1, le=500)
     searchSources: list[str] = Field(
-        default_factory=lambda: ["Web Search", "arXiv", "Semantic Scholar", "OpenAlex"]
+        default_factory=lambda: ["Web Search",
+                                 "arXiv", "Semantic Scholar", "OpenAlex"]
     )
     priority: int = Field(default=3, ge=1, le=5)
     researchMode: ResearchMode = Field(default=ResearchMode.EVIDENCE_REPORT)
     numReflections: int = Field(default=2, ge=1, le=6)
     numInitialIdeas: int = Field(default=3, ge=1, le=8)
+    branchPruneThreshold: float = Field(default=0.25, ge=0.0, le=1.0)
     requiresNoveltyCheck: bool = False
     targetWordCount: int = Field(default=5000, ge=1000, le=50000)
     llmProvider: LLMProvider = Field(default=LLMProvider.OPENROUTER)
@@ -94,7 +96,8 @@ class TaskConfig(BaseModel):
         payload = dict(data)
         raw_mode = payload.get("researchMode", ResearchMode.EVIDENCE_REPORT)
         try:
-            mode = raw_mode if isinstance(raw_mode, ResearchMode) else ResearchMode(str(raw_mode))
+            mode = raw_mode if isinstance(
+                raw_mode, ResearchMode) else ResearchMode(str(raw_mode))
         except Exception:
             mode = ResearchMode.EVIDENCE_REPORT
             payload["researchMode"] = mode
@@ -123,6 +126,9 @@ class TaskMetadata(BaseModel):
     estimatedTokenCost: int = 0
     searchDepth: int = 0
     infoGainScore: float = 0.0
+    branchId: str | None = None
+    branchScore: float = Field(default=0.0, ge=0.0, le=1.0)
+    branchDepth: int = Field(default=0, ge=0)
     positionX: float | None = None
     positionY: float | None = None
     createdAt: str
@@ -151,6 +157,29 @@ class DAGEdge(BaseModel):
 class DAGGraph(BaseModel):
     nodes: list[TaskNode]
     edges: list[DAGEdge]
+
+
+class BranchScore(BaseModel):
+    infoGain: float = Field(default=0.0, ge=0.0, le=1.0)
+    evidenceStrength: float = Field(default=0.0, ge=0.0, le=1.0)
+    feasibility: float = Field(default=0.0, ge=0.0, le=1.0)
+    total: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class SearchBranch(BaseModel):
+    branchId: str
+    parentBranchId: str | None = None
+    rootNodeId: str
+    depth: int = Field(default=0, ge=0)
+    status: NodeStatus = Field(default=NodeStatus.PENDING)
+    score: BranchScore = Field(default_factory=BranchScore)
+    nodeIds: list[str] = Field(default_factory=list)
+
+
+class SearchTree(BaseModel):
+    taskId: str
+    rootBranchId: str
+    branches: list[SearchBranch] = Field(default_factory=list)
 
 
 class TaskResponse(BaseModel):
@@ -292,8 +321,10 @@ class ResearchIdea(BaseModel):
     abstract: str = Field(default="", max_length=3000)
     relatedWork: list[RelatedWorkItem] = Field(default_factory=list)
     differentiators: list[str] = Field(default_factory=list)
-    noveltyAssessment: NoveltyAssessment = Field(default_factory=NoveltyAssessment)
-    feasibilityAssessment: FeasibilityAssessment = Field(default_factory=FeasibilityAssessment)
+    noveltyAssessment: NoveltyAssessment = Field(
+        default_factory=NoveltyAssessment)
+    feasibilityAssessment: FeasibilityAssessment = Field(
+        default_factory=FeasibilityAssessment)
     experimentProposals: list[ExperimentProposal] = Field(default_factory=list)
     riskFactors: list[RiskAssessment] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
