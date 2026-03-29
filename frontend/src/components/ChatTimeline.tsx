@@ -63,6 +63,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
   // DAG Editor modal state
   const [isDAGEditorOpen, setIsDAGEditorOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
 
   // DAG state for PLAN_READY phase (fetched from API)
   const [planReadyDag, setPlanReadyDag] = useState<DAGGraph>({ nodes: [], edges: [] });
@@ -185,8 +186,27 @@ export function ChatTimeline(props: ChatTimelineProps) {
 
   const currentPhase = activeEntries[0]?.phase ?? "";
   const idleWarning = idleSeconds >= 20;
-  const dagColumns = groupDagNodesByDepth(latestDagNodes);
+  const branchGroups = groupDagNodesByBranch(latestDagNodes);
+  const displayedDagNodes = selectedBranchId
+    ? latestDagNodes.filter((node) => (node.branchId || "unassigned") === selectedBranchId)
+    : latestDagNodes;
+  const dagColumns = groupDagNodesByDepth(displayedDagNodes);
   const dagSummary = summarizeDagNodes(latestDagNodes);
+
+  useEffect(() => {
+    if (branchGroups.length === 0) {
+      setSelectedBranchId(null);
+      return;
+    }
+    if (!selectedBranchId) {
+      setSelectedBranchId(branchGroups[0].branchId);
+      return;
+    }
+    const exists = branchGroups.some((group) => group.branchId === selectedBranchId);
+    if (!exists) {
+      setSelectedBranchId(branchGroups[0].branchId);
+    }
+  }, [branchGroups, selectedBranchId]);
 
   // Helper to render progress bundle
   const renderProgressBundle = (bundle: ProgressBundle) => {
@@ -300,6 +320,29 @@ export function ChatTimeline(props: ChatTimelineProps) {
                 </span>
               </div>
               <div className="live-progress-dag-grid">
+                {branchGroups.length > 0 && (
+                  <section className="live-progress-branch-panel">
+                    <header className="live-progress-branch-head">
+                      <strong>分支视图</strong>
+                      <span className="mono">
+                        当前分支 {selectedBranchId || "-"} / 共 {branchGroups.length}
+                      </span>
+                    </header>
+                    <div className="live-progress-branch-list">
+                      {branchGroups.map((group) => (
+                        <button
+                          key={group.branchId}
+                          type="button"
+                          className={`live-progress-branch-chip ${group.branchId === selectedBranchId ? "active" : ""}`}
+                          onClick={() => setSelectedBranchId(group.branchId)}
+                        >
+                          <span>{group.branchLabel}</span>
+                          <span className="mono">{group.count} 节点 / 均分 {group.averageScore.toFixed(2)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
                 {dagColumns.map((column) => (
                   <section key={`dag-depth-${column.depth}`} className="live-progress-dag-column">
                     <header className="live-progress-dag-column-head">
@@ -532,6 +575,26 @@ function summarizeDagNodes(nodes: Array<{ status: string }>) {
     if (node.status === "PRUNED") summary.pruned += 1;
   }
   return summary;
+}
+
+function groupDagNodesByBranch<T extends { branchId?: string; branchScore?: number }>(nodes: T[]) {
+  const grouped = new Map<string, { branchId: string; count: number; scoreTotal: number }>();
+  for (const node of nodes) {
+    const branchId = node.branchId || "unassigned";
+    const score = typeof node.branchScore === "number" ? node.branchScore : 0;
+    const current = grouped.get(branchId) ?? { branchId, count: 0, scoreTotal: 0 };
+    current.count += 1;
+    current.scoreTotal += score;
+    grouped.set(branchId, current);
+  }
+  return Array.from(grouped.values())
+    .map((item) => ({
+      branchId: item.branchId,
+      branchLabel: item.branchId === "unassigned" ? "未分配分支" : item.branchId,
+      count: item.count,
+      averageScore: item.count > 0 ? item.scoreTotal / item.count : 0,
+    }))
+    .sort((a, b) => b.averageScore - a.averageScore);
 }
 
 function groupDagNodesByDepth<T extends { searchDepth: number }>(nodes: T[]): Array<{ depth: number; nodes: T[] }> {

@@ -1155,6 +1155,57 @@ button.ghost:hover:not(:disabled) {
   gap: 8px;
 }
 
+.live-progress-branch-panel {
+  grid-column: 1 / -1;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--card) 82%, var(--phase-executing-light));
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.live-progress-branch-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.live-progress-branch-head strong {
+  font-size: 12px;
+}
+
+.live-progress-branch-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.live-progress-branch-chip {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+  color: var(--ink-secondary);
+  padding: 6px 8px;
+  font-size: 11px;
+  display: grid;
+  gap: 2px;
+  cursor: pointer;
+  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.live-progress-branch-chip:hover {
+  transform: translateY(-1px);
+  border-color: var(--phase-executing-border);
+}
+
+.live-progress-branch-chip.active {
+  border-color: var(--phase-executing);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--phase-executing) 22%, transparent);
+  background: color-mix(in srgb, var(--phase-executing-light) 35%, var(--card));
+}
+
 .live-progress-dag-column {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
@@ -1200,6 +1251,12 @@ button.ghost:hover:not(:disabled) {
 .dag-node-failed {
   border-color: var(--danger);
   background: color-mix(in srgb, var(--danger-light) 40%, var(--card));
+}
+
+.dag-node-pruned {
+  border-color: color-mix(in srgb, var(--muted) 45%, var(--line));
+  background: color-mix(in srgb, var(--bg-soft) 70%, var(--card));
+  opacity: 0.82;
 }
 
 .dag-node-title {
