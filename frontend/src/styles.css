@@ -1318,6 +1318,12 @@ button.ghost:hover:not(:disabled) {
   background: var(--bg-soft);
 }
 
+.live-progress-event-related {
+  border-left-color: var(--primary);
+  background: color-mix(in srgb, var(--phase-executing-light) 28%, var(--card));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent);
+}
+
 .event-phase {
   font-size: 10px;
   text-transform: uppercase;

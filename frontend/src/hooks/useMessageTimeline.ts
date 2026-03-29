@@ -10,6 +10,7 @@ export interface ProgressEntry {
   state: string;
   progress: number | null;
   detail?: string;
+  nodeId?: string;
   dagNodes?: DagNodeLiveState[];
 }
 
@@ -82,12 +83,21 @@ function toProgressEntries(message: ConversationMessage): ProgressEntry[] {
     const value = item as Record<string, unknown>;
     const raw = value.raw;
     const rawRecord = raw && typeof raw === "object" ? raw as Record<string, unknown> : null;
+    const nodeIdCandidate =
+      (typeof value.nodeId === "string" && value.nodeId.trim()) ||
+      (typeof value.taskNodeId === "string" && value.taskNodeId.trim()) ||
+      (typeof rawRecord?.nodeId === "string" && rawRecord.nodeId.trim()) ||
+      (typeof rawRecord?.taskNodeId === "string" && rawRecord.taskNodeId.trim()) ||
+      (typeof rawRecord?.currentNodeId === "string" && rawRecord.currentNodeId.trim()) ||
+      undefined;
+
     parsed.push({
       summary: typeof value.summary === "string" ? value.summary : "进度更新",
       phase: typeof value.phase === "string" ? value.phase : "UNKNOWN",
       state: typeof value.state === "string" ? value.state : "UNKNOWN",
       progress: typeof value.progress === "number" ? value.progress : null,
       detail: typeof value.detail === "string" ? value.detail : undefined,
+      nodeId: nodeIdCandidate,
       dagNodes: toDagNodeLiveStates(value.dagNodes) ?? toDagNodeLiveStates(rawRecord?.dagNodes),
     });
   }

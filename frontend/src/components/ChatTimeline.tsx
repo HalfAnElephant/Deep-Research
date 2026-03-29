@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 
 import type { ConversationMessage, ConversationStatus } from "../types";
 import {
@@ -187,6 +187,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
     activeStatus === "PLAN_READY" || activeStatus === "COMPLETED" || activeStatus === "FAILED";
   const activeBundle = currentTaskId ? progressBundles.get(currentTaskId) ?? null : null;
   const activeEntries = activeBundle ? activeBundle.entries.slice(-6).reverse() : [];
+  const eventRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Get DAG nodes: prefer API-fetched DAG in PLAN_READY state, otherwise from progress bundle
   const progressDagNodes = activeBundle
@@ -224,6 +225,18 @@ export function ChatTimeline(props: ChatTimelineProps) {
     : latestDagNodes;
   const dagColumns = groupDagNodesByDepth(displayedDagNodes);
   const dagSummary = summarizeDagNodes(latestDagNodes);
+  const nodeTitleById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const node of latestDagNodes) {
+      map.set(node.nodeId, node.title);
+    }
+    return map;
+  }, [latestDagNodes]);
+
+  const relatedEventIndex = useMemo(() => {
+    if (!selectedNodeId) return -1;
+    return activeEntries.findIndex((entry) => isEntryRelatedToNode(entry, selectedNodeId, nodeTitleById));
+  }, [activeEntries, selectedNodeId, nodeTitleById]);
 
   useEffect(() => {
     if (branchGroups.length === 0) {
@@ -382,6 +395,13 @@ export function ChatTimeline(props: ChatTimelineProps) {
     };
   }, [currentTaskId, selectedNodeId]);
 
+  const scrollToRelatedEvent = () => {
+    if (relatedEventIndex < 0) return;
+    const key = buildEventKey(activeEntries[relatedEventIndex], relatedEventIndex);
+    const target = eventRefs.current[key];
+    target?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  };
+
   // Helper to render progress bundle
   const renderProgressBundle = (bundle: ProgressBundle) => {
     const isExpanded = expanded[bundle.bundleKey] ?? !bundle.collapsed;
@@ -473,16 +493,25 @@ export function ChatTimeline(props: ChatTimelineProps) {
           </div>
           {activeEntries.length > 0 && (
             <div className="live-progress-events">
-              {activeEntries.map((entry) => (
-                    <div
-                      className="live-progress-event"
-                      key={`${entry.phase}-${entry.state}-${entry.summary}-${entry.progress ?? "na"}-${entry.detail ?? ""}`}
-                    >
-                  <span className="event-phase">{entry.phase}</span>
-                  <span className="event-summary">{entry.detail || entry.summary}</span>
-                  <span className="event-progress mono">{entry.progress !== null ? `${entry.progress}%` : "--"}</span>
-                </div>
-              ))}
+              {activeEntries.map((entry, eventIndex) => {
+                const eventKey = buildEventKey(entry, eventIndex);
+                const related = Boolean(
+                  selectedNodeId && isEntryRelatedToNode(entry, selectedNodeId, nodeTitleById),
+                );
+                return (
+                  <div
+                    className={`live-progress-event ${related ? "live-progress-event-related" : ""}`}
+                    key={eventKey}
+                    ref={(el) => {
+                      eventRefs.current[eventKey] = el;
+                    }}
+                  >
+                    <span className="event-phase">{entry.phase}</span>
+                    <span className="event-summary">{entry.detail || entry.summary}</span>
+                    <span className="event-progress mono">{entry.progress !== null ? `${entry.progress}%` : "--"}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
           {latestDagNodes.length > 0 && (
@@ -559,6 +588,14 @@ export function ChatTimeline(props: ChatTimelineProps) {
                     <strong>节点证据预览</strong>
                     <span className="mono">节点 {selectedNodeId || "-"}</span>
                   </header>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={scrollToRelatedEvent}
+                    disabled={relatedEventIndex < 0}
+                  >
+                    {relatedEventIndex < 0 ? "暂无关联事件" : "定位到最近进度事件"}
+                  </button>
                   {nodeEvidence.loading ? (
                     <div className="live-progress-node-empty">正在加载证据...</div>
                   ) : nodeEvidence.items.length === 0 ? (
@@ -770,6 +807,23 @@ export function ChatTimeline(props: ChatTimelineProps) {
       )}
     </section>
   );
+}
+
+function buildEventKey(entry: { phase: string; state: string; summary: string; progress: number | null; detail?: string }, index: number): string {
+  return `${index}-${entry.phase}-${entry.state}-${entry.summary}-${entry.progress ?? "na"}-${entry.detail ?? ""}`;
+}
+
+function isEntryRelatedToNode(
+  entry: { nodeId?: string; summary: string; detail?: string },
+  nodeId: string,
+  nodeTitleById: Map<string, string>,
+): boolean {
+  if (entry.nodeId && entry.nodeId === nodeId) return true;
+  const text = `${entry.summary} ${entry.detail || ""}`.toLowerCase();
+  if (text.includes(nodeId.toLowerCase())) return true;
+  const nodeTitle = nodeTitleById.get(nodeId);
+  if (nodeTitle && text.includes(nodeTitle.toLowerCase())) return true;
+  return false;
 }
 
 function formatElapsed(elapsedMs: number): string {
