@@ -101,9 +101,10 @@ class TaskRepository:
                     """
                     INSERT INTO task_nodes(
                       task_id, node_id, parent_task_id, title, description, status, priority,
-                      search_depth, info_gain_score, dependencies_json, children_json, output_json,
+                      search_depth, info_gain_score, position_x, position_y,
+                      dependencies_json, children_json, output_json,
                       created_at, updated_at
-                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         task_id,
@@ -115,6 +116,8 @@ class TaskRepository:
                         node.priority,
                         node.metadata.searchDepth,
                         node.metadata.infoGainScore,
+                        node.metadata.positionX,
+                        node.metadata.positionY,
                         json.dumps(node.dependencies),
                         json.dumps(node.children),
                         json.dumps(node.output),
@@ -150,6 +153,8 @@ class TaskRepository:
                     "estimatedTokenCost": 0,
                     "searchDepth": row["search_depth"],
                     "infoGainScore": row["info_gain_score"],
+                    "positionX": row["position_x"],
+                    "positionY": row["position_y"],
                     "createdAt": row["created_at"],
                     "updatedAt": row["updated_at"],
                 },

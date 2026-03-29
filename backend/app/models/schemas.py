@@ -80,6 +80,8 @@ class TaskMetadata(BaseModel):
     estimatedTokenCost: int = 0
     searchDepth: int = 0
     infoGainScore: float = 0.0
+    positionX: float | None = None
+    positionY: float | None = None
     createdAt: str
     updatedAt: str
 

@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS task_nodes (
   priority INTEGER NOT NULL,
   search_depth INTEGER NOT NULL,
   info_gain_score REAL NOT NULL,
+  position_x REAL,
+  position_y REAL,
   dependencies_json TEXT NOT NULL,
   children_json TEXT NOT NULL,
   output_json TEXT NOT NULL,
@@ -130,5 +132,14 @@ def init_db() -> None:
             conn.execute("ALTER TABLE evidences ADD COLUMN favorited INTEGER NOT NULL DEFAULT 0")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_evidences_favorited ON evidences(favorited)")
             conn.commit()
+
+        # Handle migrations: add task node position columns if they don't exist
+        cursor = conn.execute("PRAGMA table_info(task_nodes)")
+        task_node_columns = [row[1] for row in cursor.fetchall()]
+        if "position_x" not in task_node_columns:
+            conn.execute("ALTER TABLE task_nodes ADD COLUMN position_x REAL")
+        if "position_y" not in task_node_columns:
+            conn.execute("ALTER TABLE task_nodes ADD COLUMN position_y REAL")
+        conn.commit()
 
         conn.commit()
