@@ -103,6 +103,15 @@ function fitGraph(cy: Core) {
   cy.center(elements);
 }
 
+function getEdgeStyle(mode: DAGEditorMode) {
+  return {
+    width: mode === "advanced" ? 3 : 2,
+    "line-color": mode === "advanced" ? "#888" : "#666",
+    "target-arrow-color": mode === "advanced" ? "#888" : "#666",
+    opacity: mode === "advanced" ? 1 : 0.8,
+  };
+}
+
 /**
  * DAGEditor Component
  *
@@ -143,6 +152,7 @@ export function DAGEditor({
   const onNodeSelectRef = useRef(onNodeSelect);
   const onEdgeAddRef = useRef(onEdgeAdd);
   const onEdgeDeleteRef = useRef(onEdgeDelete);
+  const modeRef = useRef(mode);
   const resizeFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -156,6 +166,10 @@ export function DAGEditor({
   useEffect(() => {
     onEdgeDeleteRef.current = onEdgeDelete;
   }, [onEdgeDelete]);
+
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
 
   /**
    * Initialize Cytoscape instance
@@ -198,12 +212,9 @@ export function DAGEditor({
         {
           selector: "edge",
           style: {
-            width: mode === "advanced" ? 3 : 2,
-            "line-color": mode === "advanced" ? "#888" : "#666",
-            "target-arrow-color": mode === "advanced" ? "#888" : "#666",
+            ...getEdgeStyle(mode),
             "target-arrow-shape": "triangle",
             "curve-style": "bezier",
-            opacity: mode === "advanced" ? 1 : 0.8,
           },
         },
         {
@@ -233,7 +244,7 @@ export function DAGEditor({
 
     // Handle edge deletion in advanced mode
     cy.on("tap", "edge", (evt) => {
-      if (mode === "advanced") {
+      if (modeRef.current === "advanced") {
         const edge = evt.target;
         // Delete edge on click in advanced mode
         onEdgeDeleteRef.current?.(edge.id());
@@ -306,7 +317,7 @@ export function DAGEditor({
       resizeObserver.disconnect();
       cy.destroy();
     };
-  }, [mode]);
+  }, []);
 
   /**
    * Update elements when nodes/edges change
@@ -348,6 +359,21 @@ export function DAGEditor({
     });
     layout.run();
   }, [nodes, edges]);
+
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+
+    cy.style()
+      .selector("edge")
+      .style(getEdgeStyle(mode))
+      .update();
+
+    if (mode !== "advanced" && edgeCreationStepRef.current !== "idle") {
+      setEdgeCreationStep("idle");
+      setEdgeSource(null);
+    }
+  }, [mode]);
 
   /**
    * Handle selection state changes
