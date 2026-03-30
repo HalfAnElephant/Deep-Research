@@ -137,7 +137,7 @@ def test_report_agent_reports_suppressed_segments_via_callback(tmp_path, monkeyp
 
     monkeypatch.setattr(
         writer, "_generate_single_section_with_llm", _fake_generate_section)
-    monkeypatch.setattr(writer, "_resolve_provider", lambda: (
+    monkeypatch.setattr(writer, "_resolve_provider", lambda provider=None: (
         "https://example.org", "key", "model"))
 
     report_agent.generate_report(

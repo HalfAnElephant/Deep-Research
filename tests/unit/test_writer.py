@@ -209,7 +209,7 @@ def test_generate_draft_collects_suppressed_segments(tmp_path, monkeypatch) -> N
 
     monkeypatch.setattr(
         writer, "_generate_single_section_with_llm", _fake_generate_section)
-    monkeypatch.setattr(writer, "_resolve_provider", lambda: (
+    monkeypatch.setattr(writer, "_resolve_provider", lambda provider=None: (
         "https://example.org", "key", "model"))
 
     draft = writer.generate_draft(
@@ -264,7 +264,7 @@ def test_generate_draft_keeps_other_sections_when_one_section_fails(tmp_path, mo
 
     monkeypatch.setattr(
         writer, "_generate_single_section_with_llm", _fake_generate_section)
-    monkeypatch.setattr(writer, "_resolve_provider", lambda: (
+    monkeypatch.setattr(writer, "_resolve_provider", lambda provider=None: (
         "https://example.org", "key", "model"))
 
     draft = writer.generate_draft(
