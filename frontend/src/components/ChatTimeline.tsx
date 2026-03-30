@@ -12,7 +12,7 @@ import { formatLocalTime } from "../utils/formatTime";
 import { ReportViewer } from "./ReportViewer";
 import { ProgressBar } from "./ProgressIndicator";
 import { DAGEditorModal } from "./DAGEditorModal";
-import { getDag, listConflicts, listEvidence } from "../api";
+import { getDag, listBranchActions, listBranchRepairs, listConflicts, listEvidence, listExperiments } from "../api";
 import type { ConflictRecord, Evidence } from "../types";
 import type { DAGGraph, TaskNode, DAGEdge, TaskNodeStatus } from "../hooks/useDAGEditor";
 
@@ -70,11 +70,17 @@ export function ChatTimeline(props: ChatTimelineProps) {
     loading: boolean;
     evidenceCount: number;
     conflictCount: number;
+    actionCount: number;
+    repairCount: number;
+    experimentCount: number;
     topSources: Array<{ source: string; count: number }>;
   }>({
     loading: false,
     evidenceCount: 0,
     conflictCount: 0,
+    actionCount: 0,
+    repairCount: 0,
+    experimentCount: 0,
     topSources: [],
   });
   const [nodeEvidence, setNodeEvidence] = useState<{
@@ -273,6 +279,9 @@ export function ChatTimeline(props: ChatTimelineProps) {
         loading: false,
         evidenceCount: 0,
         conflictCount: 0,
+        actionCount: 0,
+        repairCount: 0,
+        experimentCount: 0,
         topSources: [],
       }));
       return;
@@ -289,6 +298,9 @@ export function ChatTimeline(props: ChatTimelineProps) {
         loading: false,
         evidenceCount: 0,
         conflictCount: 0,
+        actionCount: 0,
+        repairCount: 0,
+        experimentCount: 0,
         topSources: [],
       }));
       return;
@@ -299,9 +311,13 @@ export function ChatTimeline(props: ChatTimelineProps) {
 
     const load = async () => {
       try {
-        const [allEvidences, allConflicts] = await Promise.all([
+        const branchFilter = selectedBranchId === "unassigned" ? undefined : selectedBranchId;
+        const [allEvidences, allConflicts, branchActions, branchRepairs, experimentRuns] = await Promise.all([
           listEvidence(currentTaskId),
           listConflicts(currentTaskId),
+          listBranchActions(currentTaskId, branchFilter),
+          listBranchRepairs(currentTaskId, branchFilter),
+          listExperiments(currentTaskId),
         ]);
         if (cancelled) return;
 
@@ -329,6 +345,12 @@ export function ChatTimeline(props: ChatTimelineProps) {
           loading: false,
           evidenceCount: evidences.length,
           conflictCount,
+          actionCount: branchActions.length,
+          repairCount: branchRepairs.length,
+          experimentCount:
+            selectedBranchId === "unassigned"
+              ? 0
+              : experimentRuns.filter((run) => run.branchId === selectedBranchId).length,
           topSources,
         });
       } catch {
@@ -337,6 +359,9 @@ export function ChatTimeline(props: ChatTimelineProps) {
           loading: false,
           evidenceCount: 0,
           conflictCount: 0,
+          actionCount: 0,
+          repairCount: 0,
+          experimentCount: 0,
           topSources: [],
         });
       }
@@ -554,6 +579,9 @@ export function ChatTimeline(props: ChatTimelineProps) {
                     <div className="live-progress-branch-insight">
                       <span>证据 {branchInsight.loading ? "加载中..." : branchInsight.evidenceCount}</span>
                       <span>冲突 {branchInsight.loading ? "加载中..." : branchInsight.conflictCount}</span>
+                      <span>动作 {branchInsight.loading ? "加载中..." : branchInsight.actionCount}</span>
+                      <span>修复 {branchInsight.loading ? "加载中..." : branchInsight.repairCount}</span>
+                      <span>实验 {branchInsight.loading ? "加载中..." : branchInsight.experimentCount}</span>
                       <span>
                         来源
                         {branchInsight.topSources.length > 0
