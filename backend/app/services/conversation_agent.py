@@ -1107,6 +1107,17 @@ class ConversationAgent:
             llm_provider=config.llmProvider,
             enforce_thresholds=config.requiresNoveltyCheck,
         )
+        if config.requiresNoveltyCheck and evaluated:
+            threshold_novelty = self.novelty_gate_service.NOVELTY_THRESHOLD
+            threshold_feasibility = self.novelty_gate_service.FEASIBILITY_THRESHOLD
+            passing = [
+                idea
+                for idea in evaluated
+                if idea.noveltyAssessment.noveltyScore >= threshold_novelty
+                and idea.feasibilityAssessment.feasibilityScore >= threshold_feasibility
+            ]
+            if not passing:
+                return []
         return evaluated or ideas
 
     def _render_plan_from_idea(
@@ -1147,10 +1158,15 @@ class ConversationAgent:
     def _select_primary_idea(self, ideas: list[ResearchIdea]) -> ResearchIdea | None:
         if not ideas:
             return None
-        selected = [idea for idea in ideas if idea.status.value == "SELECTED"]
+        selected = [
+            idea for idea in ideas if idea.status.value == "SELECTED" and idea.status.value != "REJECTED"
+        ]
         if selected:
             return selected[0]
-        return max(ideas, key=lambda idea: idea.scoreCard.overallScore)
+        candidates = [idea for idea in ideas if idea.status.value != "REJECTED"]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda idea: idea.scoreCard.overallScore)
 
     def _selected_idea_for_conversation(self, conversation_id: str) -> ResearchIdea | None:
         try:

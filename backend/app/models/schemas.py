@@ -85,6 +85,9 @@ class TaskConfig(BaseModel):
     numInitialIdeas: int = Field(default=3, ge=1, le=8)
     branchPruneThreshold: float = Field(default=0.25, ge=0.0, le=1.0)
     requiresNoveltyCheck: bool = False
+    requiresExperimentLoop: bool = False
+    requiresPeerReview: bool = False
+    deliverableTypes: list[str] = Field(default_factory=list)
     targetWordCount: int = Field(default=5000, ge=1000, le=50000)
     llmProvider: LLMProvider = Field(default=LLMProvider.OPENROUTER)
 
@@ -106,6 +109,21 @@ class TaskConfig(BaseModel):
                 ResearchMode.EXPERIMENTAL_RESEARCH,
                 ResearchMode.PAPER_WRITEUP,
             }
+        if payload.get("requiresExperimentLoop") is None or "requiresExperimentLoop" not in payload:
+            payload["requiresExperimentLoop"] = mode in {
+                ResearchMode.EXPERIMENTAL_RESEARCH,
+                ResearchMode.PAPER_WRITEUP,
+            }
+        if payload.get("requiresPeerReview") is None or "requiresPeerReview" not in payload:
+            payload["requiresPeerReview"] = mode in {
+                ResearchMode.PAPER_WRITEUP}
+        if not payload.get("deliverableTypes"):
+            if mode == ResearchMode.PAPER_WRITEUP:
+                payload["deliverableTypes"] = ["report", "paper"]
+            elif mode == ResearchMode.EXPERIMENTAL_RESEARCH:
+                payload["deliverableTypes"] = ["report", "experiment_log"]
+            else:
+                payload["deliverableTypes"] = ["report"]
         return payload
 
 
@@ -191,6 +209,7 @@ class TaskResponse(BaseModel):
     updatedAt: str
     config: TaskConfig
     reportPath: str | None = None
+    researchScoreCard: ResearchScoreCard | None = None
     dag: DAGGraph | None = None
 
 
@@ -309,7 +328,9 @@ class ResearchScoreCard(BaseModel):
     noveltyScore: float = Field(default=0.0, ge=0.0, le=1.0)
     feasibilityScore: float = Field(default=0.0, ge=0.0, le=1.0)
     evidenceStrengthScore: float = Field(default=0.0, ge=0.0, le=1.0)
+    executionSuccessScore: float = Field(default=0.0, ge=0.0, le=1.0)
     writeupReadinessScore: float = Field(default=0.0, ge=0.0, le=1.0)
+    reviewScore: float = Field(default=0.0, ge=0.0, le=1.0)
     overallScore: float = Field(default=0.0, ge=0.0, le=1.0)
 
 

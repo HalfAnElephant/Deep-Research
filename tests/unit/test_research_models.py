@@ -12,12 +12,23 @@ from app.models.schemas import (
 def test_task_config_applies_research_mode_defaults() -> None:
     config = TaskConfig(researchMode=ResearchMode.EXPERIMENTAL_RESEARCH)
     assert config.requiresNoveltyCheck is True
+    assert config.requiresExperimentLoop is True
+    assert config.requiresPeerReview is False
+    assert "experiment_log" in config.deliverableTypes
 
     default_config = TaskConfig()
     assert default_config.researchMode == ResearchMode.EVIDENCE_REPORT
     assert default_config.requiresNoveltyCheck is False
+    assert default_config.requiresExperimentLoop is False
+    assert default_config.requiresPeerReview is False
+    assert default_config.deliverableTypes == ["report"]
     assert default_config.numReflections == 2
     assert default_config.numInitialIdeas == 3
+
+    paper_config = TaskConfig(researchMode=ResearchMode.PAPER_WRITEUP)
+    assert paper_config.requiresExperimentLoop is True
+    assert paper_config.requiresPeerReview is True
+    assert "paper" in paper_config.deliverableTypes
 
 
 def test_research_idea_related_models_validate() -> None:

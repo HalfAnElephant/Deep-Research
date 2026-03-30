@@ -9,6 +9,7 @@ import pytest
 from app.core.database import init_db
 from app.core.utils import new_id
 from app.models.schemas import ConversationStatus, MessageKind, MessageRole, TaskConfig, TaskStatus
+from app.models.schemas import FeasibilityAssessment, IdeaStatus, NoveltyAssessment, ResearchIdea, ResearchScoreCard
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.task_repository import TaskRepository
 from app.services.conversation_agent import ConversationAgent
@@ -120,6 +121,30 @@ def test_rewrite_plan_topic_without_front_matter() -> None:
     assert "title: 无头部主题" in rewritten
     assert "topic: 无头部主题" in rewritten
     assert "## 只有正文" in rewritten
+
+
+def test_select_primary_idea_returns_none_when_all_rejected() -> None:
+    agent = _build_agent()
+    rejected = [
+        ResearchIdea(
+            ideaId="idea-1",
+            title="候选 1",
+            status=IdeaStatus.REJECTED,
+            noveltyAssessment=NoveltyAssessment(noveltyScore=0.2, isNovel=False),
+            feasibilityAssessment=FeasibilityAssessment(feasibilityScore=0.2, isFeasible=False),
+            scoreCard=ResearchScoreCard(overallScore=0.2),
+        ),
+        ResearchIdea(
+            ideaId="idea-2",
+            title="候选 2",
+            status=IdeaStatus.REJECTED,
+            noveltyAssessment=NoveltyAssessment(noveltyScore=0.3, isNovel=False),
+            feasibilityAssessment=FeasibilityAssessment(feasibilityScore=0.3, isFeasible=False),
+            scoreCard=ResearchScoreCard(overallScore=0.3),
+        ),
+    ]
+    selected = agent._select_primary_idea(rejected)  # noqa: SLF001
+    assert selected is None
 
 
 @pytest.mark.asyncio

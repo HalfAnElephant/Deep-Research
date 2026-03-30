@@ -7,7 +7,7 @@ import logging
 from typing import Any, Awaitable, Callable
 
 from app.core.utils import now_iso
-from app.models.schemas import NodeStatus, TaskStatus
+from app.models.schemas import ResearchScoreCard, NodeStatus, TaskStatus
 from app.repositories.conflict_repository import ConflictRepository
 from app.repositories.evidence_repository import EvidenceRepository
 from app.repositories.task_repository import TaskRepository
@@ -757,6 +757,7 @@ class ExecutionEngine:
             logger.info(f"Task {task_id}: LLM 报告生成完成")
 
             # 审核阶段
+            review_passed = True
             if self.checking_agent:
                 await self._emit_event(
                     task_id,
@@ -788,6 +789,7 @@ class ExecutionEngine:
                 check_result = await self.checking_agent.run(context)
 
                 if check_result.success:
+                    review_passed = True
                     logger.info(f"Task {task_id}: 审核通过")
                     await self._emit_event(
                         task_id,
@@ -801,6 +803,7 @@ class ExecutionEngine:
                         },
                     )
                 else:
+                    review_passed = False
                     logger.warning(
                         f"Task {task_id}: 审核发现问题: {check_result.output.get('summary', {})}")
                     await self._emit_event(
@@ -815,6 +818,8 @@ class ExecutionEngine:
                             "issues": check_result.output.get('issues', []),
                         },
                     )
+            elif task.config.requiresPeerReview:
+                review_passed = False
 
             # 保存报告
             await self._emit_event(
@@ -837,13 +842,37 @@ class ExecutionEngine:
                     "state": "FINALIZING", "phase": "PERSISTING_REPORT"},
             )
             self.repository.set_report_path(task_id, md_path)
+            scorecard = _build_scorecard(
+                evidence_count=len(evidences),
+                conflict_count=len(conflicts),
+                review_passed=review_passed,
+                report_path=md_path,
+                completed_nodes=len(control.completed_nodes),
+                total_nodes=total,
+            )
+            self.repository.set_research_scorecard(task_id, scorecard)
+
+            completion_error = _validate_completion_requirements(
+                config=task.config,
+                scorecard=scorecard,
+                report_path=md_path,
+                review_passed=review_passed,
+            )
+            if completion_error:
+                raise RuntimeError(completion_error)
+
             self.repository.update_status(task_id, transition_or_raise(
                 TaskStatus.FINALIZING, TaskStatus.COMPLETED))
             await self._emit_event(
                 task_id,
                 "TASK_COMPLETED",
-                {"taskId": task_id, "progress": 100,
-                    "reportPath": md_path, "bibPath": bib_path},
+                {
+                    "taskId": task_id,
+                    "progress": 100,
+                    "reportPath": md_path,
+                    "bibPath": bib_path,
+                    "researchScoreCard": scorecard.model_dump(),
+                },
             )
         except InvalidStateTransition as exc:
             self.repository.update_status(
@@ -896,3 +925,143 @@ def _dedupe_nonempty_strings(values: list[str]) -> list[str]:
         seen.add(candidate)
         ordered.append(candidate)
     return ordered
+
+
+MIN_OVERALL_SCORE_FOR_COMPLETION = 0.45
+
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
+
+
+class _CompletionValidationError(RuntimeError):
+    pass
+
+
+def _ratio(numerator: int, denominator: int) -> float:
+    if denominator <= 0:
+        return 0.0
+    return _clamp01(numerator / denominator)
+
+
+def _avg(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    return _clamp01(sum(values) / len(values))
+
+
+def _writeup_score(report_path: str | None, evidence_count: int) -> float:
+    if not report_path:
+        return 0.0
+    if evidence_count <= 0:
+        return 0.3
+    if evidence_count < 3:
+        return 0.5
+    return 0.75
+
+
+def _evidence_strength_score(evidence_count: int, conflict_count: int) -> float:
+    base = min(1.0, evidence_count / 8.0)
+    conflict_penalty = min(0.3, max(0.0, conflict_count * 0.03))
+    return _clamp01(base - conflict_penalty)
+
+
+def _feasibility_score(completed_nodes: int, total_nodes: int) -> float:
+    completion_ratio = _ratio(completed_nodes, total_nodes)
+    if completion_ratio >= 0.95:
+        return 0.9
+    if completion_ratio >= 0.75:
+        return 0.75
+    if completion_ratio >= 0.5:
+        return 0.55
+    return 0.35
+
+
+def _execution_success_score(completed_nodes: int, total_nodes: int) -> float:
+    return _ratio(completed_nodes, total_nodes)
+
+
+def _review_score(review_passed: bool) -> float:
+    return 0.9 if review_passed else 0.4
+
+
+def _novelty_score_stub() -> float:
+    # Phase B 最小落地：novelty gate 结果暂未统一写回任务，先给保守中值。
+    return 0.6
+
+
+def _build_overall_score(scorecard: ResearchScoreCard) -> float:
+    return _avg(
+        [
+            scorecard.noveltyScore,
+            scorecard.feasibilityScore,
+            scorecard.evidenceStrengthScore,
+            scorecard.executionSuccessScore,
+            scorecard.writeupReadinessScore,
+            scorecard.reviewScore,
+        ]
+    )
+
+
+def _requires_deliverable(config_deliverables: list[str], deliverable: str) -> bool:
+    return deliverable in {item.strip().lower() for item in config_deliverables}
+
+
+def _validate_completion(
+    *,
+    deliverable_types: list[str],
+    requires_experiment_loop: bool,
+    requires_peer_review: bool,
+    scorecard: ResearchScoreCard,
+    report_path: str | None,
+    review_passed: bool,
+) -> str | None:
+    if _requires_deliverable(deliverable_types, "report") and not report_path:
+        return "任务未满足完成条件：缺少报告产物。"
+    if _requires_deliverable(deliverable_types, "paper") and not report_path:
+        return "任务未满足完成条件：缺少论文写作产物。"
+    if requires_experiment_loop and scorecard.executionSuccessScore < 0.5:
+        return "任务未满足完成条件：实验执行成功度不足。"
+    if requires_peer_review and not review_passed:
+        return "任务未满足完成条件：审稿未通过。"
+    if scorecard.overallScore < MIN_OVERALL_SCORE_FOR_COMPLETION:
+        return "任务未满足完成条件：综合评分低于阈值。"
+    return None
+
+
+def _build_scorecard(
+    *,
+    evidence_count: int,
+    conflict_count: int,
+    review_passed: bool,
+    report_path: str | None,
+    completed_nodes: int,
+    total_nodes: int,
+) -> ResearchScoreCard:
+    scorecard = ResearchScoreCard(
+        noveltyScore=_novelty_score_stub(),
+        feasibilityScore=_feasibility_score(completed_nodes, total_nodes),
+        evidenceStrengthScore=_evidence_strength_score(evidence_count, conflict_count),
+        executionSuccessScore=_execution_success_score(completed_nodes, total_nodes),
+        writeupReadinessScore=_writeup_score(report_path, evidence_count),
+        reviewScore=_review_score(review_passed),
+    )
+    scorecard.overallScore = _build_overall_score(scorecard)
+    return scorecard
+
+
+def _validate_completion_requirements(
+    *,
+    config: Any,
+    scorecard: ResearchScoreCard,
+    report_path: str | None,
+    review_passed: bool,
+) -> str | None:
+    return _validate_completion(
+        deliverable_types=list(getattr(config, "deliverableTypes", ["report"])),
+        requires_experiment_loop=bool(getattr(config, "requiresExperimentLoop", False)),
+        requires_peer_review=bool(getattr(config, "requiresPeerReview", False)),
+        scorecard=scorecard,
+        report_path=report_path,
+        review_passed=review_passed,
+    )

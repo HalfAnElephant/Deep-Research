@@ -5,7 +5,7 @@ from typing import Any
 
 from app.core.database import get_connection
 from app.core.utils import now_iso
-from app.models.schemas import DAGGraph, DAGEdge, NodeStatus, TaskConfig, TaskNode, TaskResponse, TaskStatus
+from app.models.schemas import DAGGraph, DAGEdge, NodeStatus, ResearchScoreCard, TaskConfig, TaskNode, TaskResponse, TaskStatus
 
 
 class TaskRepository:
@@ -38,6 +38,7 @@ class TaskRepository:
             updatedAt=row["updated_at"],
             config=TaskConfig.model_validate_json(row["config_json"]),
             reportPath=row["report_path"],
+            researchScoreCard=ResearchScoreCard.model_validate_json(row["research_scorecard_json"]) if row["research_scorecard_json"] else None,
             dag=self.get_dag(task_id, allow_empty=True),
         )
 
@@ -94,6 +95,18 @@ class TaskRepository:
                 WHERE task_id = ?
                 """,
                 (report_path, now_iso(), task_id),
+            )
+            conn.commit()
+
+    def set_research_scorecard(self, task_id: str, scorecard: ResearchScoreCard) -> None:
+        with get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE tasks
+                SET research_scorecard_json = ?, updated_at = ?
+                WHERE task_id = ?
+                """,
+                (scorecard.model_dump_json(), now_iso(), task_id),
             )
             conn.commit()
 

@@ -28,6 +28,19 @@ export interface TaskConfig {
   numReflections?: number;
   numInitialIdeas?: number;
   requiresNoveltyCheck?: boolean;
+  requiresExperimentLoop?: boolean;
+  requiresPeerReview?: boolean;
+  deliverableTypes?: string[];
+}
+
+export interface ResearchScoreCard {
+  noveltyScore: number;
+  feasibilityScore: number;
+  evidenceStrengthScore: number;
+  executionSuccessScore: number;
+  writeupReadinessScore: number;
+  reviewScore: number;
+  overallScore: number;
 }
 
 export interface TaskResponse {
@@ -39,6 +52,7 @@ export interface TaskResponse {
   updatedAt: string;
   config: TaskConfig;
   reportPath?: string | null;
+  researchScoreCard?: ResearchScoreCard | null;
   dag?: {
     nodes: Array<{
       taskId: string;

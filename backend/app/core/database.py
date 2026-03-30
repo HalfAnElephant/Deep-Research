@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   description TEXT NOT NULL,
   status TEXT NOT NULL,
   config_json TEXT NOT NULL,
+  research_scorecard_json TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   report_path TEXT,
@@ -160,6 +161,11 @@ def init_db() -> None:
         if "current_ideas_json" not in conversation_columns:
             conn.execute(
                 "ALTER TABLE conversations ADD COLUMN current_ideas_json TEXT NOT NULL DEFAULT '[]'")
+
+        cursor = conn.execute("PRAGMA table_info(tasks)")
+        task_columns = [row[1] for row in cursor.fetchall()]
+        if "research_scorecard_json" not in task_columns:
+          conn.execute("ALTER TABLE tasks ADD COLUMN research_scorecard_json TEXT")
         conn.commit()
 
         conn.commit()
