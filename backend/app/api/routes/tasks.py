@@ -13,6 +13,7 @@ from app.models.schemas import (
     CreateTaskRequest,
     DAGGraph,
     DeleteResponse,
+    SearchBranch,
     StateResponse,
     TaskResponse,
     TaskStatus,
@@ -115,6 +116,15 @@ def get_task_conflicts(task_id: str) -> list[ConflictRecord]:
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
     return conflict_repository.list_by_task(task_id)
+
+
+@router.get("/tasks/{task_id}/search-branches", response_model=list[SearchBranch])
+def get_task_search_branches(task_id: str) -> list[SearchBranch]:
+    try:
+        task_repository.get_task(task_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+    return task_repository.list_search_branches(task_id)
 
 
 @router.post("/tasks/{task_id}/start", response_model=StateResponse)

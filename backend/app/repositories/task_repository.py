@@ -5,7 +5,7 @@ from typing import Any
 
 from app.core.database import get_connection
 from app.core.utils import now_iso
-from app.models.schemas import DAGGraph, DAGEdge, NodeStatus, ResearchScoreCard, TaskConfig, TaskNode, TaskResponse, TaskStatus
+from app.models.schemas import BranchAction, BranchRepairAttempt, BranchScore, DAGGraph, DAGEdge, NodeStatus, ResearchScoreCard, SearchBranch, TaskConfig, TaskNode, TaskResponse, TaskStatus
 
 
 class TaskRepository:
@@ -38,7 +38,8 @@ class TaskRepository:
             updatedAt=row["updated_at"],
             config=TaskConfig.model_validate_json(row["config_json"]),
             reportPath=row["report_path"],
-            researchScoreCard=ResearchScoreCard.model_validate_json(row["research_scorecard_json"]) if row["research_scorecard_json"] else None,
+            researchScoreCard=ResearchScoreCard.model_validate_json(
+                row["research_scorecard_json"]) if row["research_scorecard_json"] else None,
             dag=self.get_dag(task_id, allow_empty=True),
         )
 
@@ -70,6 +71,12 @@ class TaskRepository:
         with get_connection() as conn:
             conn.execute(
                 "DELETE FROM task_nodes WHERE task_id = ?", (task_id,))
+            conn.execute(
+                "DELETE FROM search_branches WHERE task_id = ?", (task_id,))
+            conn.execute(
+                "DELETE FROM branch_actions WHERE task_id = ?", (task_id,))
+            conn.execute(
+                "DELETE FROM branch_repairs WHERE task_id = ?", (task_id,))
             conn.execute("DELETE FROM snapshots WHERE task_id = ?", (task_id,))
             conn.execute("DELETE FROM tasks WHERE task_id = ?", (task_id,))
             conn.commit()
@@ -252,3 +259,132 @@ class TaskRepository:
         if row is None:
             return None
         return json.loads(row["snapshot_json"])
+
+    def upsert_search_branch(self, task_id: str, branch: SearchBranch) -> None:
+        ts = now_iso()
+        with get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO search_branches(
+                    task_id, branch_id, parent_branch_id, root_node_id, branch_type, branch_goal,
+                    depth, status, score_info_gain, score_evidence_strength, score_feasibility, score_total,
+                    prune_reason, debug_depth, worker_id, node_ids_json, created_at, updated_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(task_id, branch_id) DO UPDATE SET
+                    parent_branch_id = excluded.parent_branch_id,
+                    root_node_id = excluded.root_node_id,
+                    branch_type = excluded.branch_type,
+                    branch_goal = excluded.branch_goal,
+                    depth = excluded.depth,
+                    status = excluded.status,
+                    score_info_gain = excluded.score_info_gain,
+                    score_evidence_strength = excluded.score_evidence_strength,
+                    score_feasibility = excluded.score_feasibility,
+                    score_total = excluded.score_total,
+                    prune_reason = excluded.prune_reason,
+                    debug_depth = excluded.debug_depth,
+                    worker_id = excluded.worker_id,
+                    node_ids_json = excluded.node_ids_json,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    task_id,
+                    branch.branchId,
+                    branch.parentBranchId,
+                    branch.rootNodeId,
+                    branch.branchType,
+                    branch.branchGoal,
+                    branch.depth,
+                    branch.status.value,
+                    branch.score.infoGain,
+                    branch.score.evidenceStrength,
+                    branch.score.feasibility,
+                    branch.score.total,
+                    branch.pruneReason,
+                    branch.debugDepth,
+                    branch.workerId,
+                    json.dumps(branch.nodeIds),
+                    ts,
+                    ts,
+                ),
+            )
+            conn.commit()
+
+    def list_search_branches(self, task_id: str) -> list[SearchBranch]:
+        with get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM search_branches WHERE task_id = ? ORDER BY depth ASC, created_at ASC",
+                (task_id,),
+            ).fetchall()
+        branches: list[SearchBranch] = []
+        for row in rows:
+            branches.append(
+                SearchBranch(
+                    branchId=row["branch_id"],
+                    parentBranchId=row["parent_branch_id"],
+                    rootNodeId=row["root_node_id"],
+                    branchType=row["branch_type"],
+                    branchGoal=row["branch_goal"],
+                    depth=row["depth"],
+                    status=NodeStatus(row["status"]),
+                    score=BranchScore(
+                        infoGain=float(row["score_info_gain"] or 0.0),
+                        evidenceStrength=float(row["score_evidence_strength"] or 0.0),
+                        feasibility=float(row["score_feasibility"] or 0.0),
+                        total=float(row["score_total"] or 0.0),
+                    ),
+                    pruneReason=row["prune_reason"],
+                    debugDepth=row["debug_depth"],
+                    workerId=row["worker_id"],
+                    nodeIds=json.loads(row["node_ids_json"]),
+                )
+            )
+        return branches
+
+    def append_branch_action(self, action: BranchAction) -> None:
+        with get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO branch_actions(
+                  action_id, task_id, branch_id, action_type,
+                  action_input_json, action_output_json,
+                  score_before, score_after, status, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    action.actionId,
+                    action.taskId,
+                    action.branchId,
+                    action.actionType,
+                    json.dumps(action.actionInput),
+                    json.dumps(action.actionOutput),
+                    action.scoreBefore,
+                    action.scoreAfter,
+                    action.status,
+                    action.createdAt,
+                ),
+            )
+            conn.commit()
+
+    def append_branch_repair(self, repair: BranchRepairAttempt) -> None:
+        with get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO branch_repairs(
+                  repair_id, task_id, branch_id, node_id,
+                  attempt, diagnosis, proposal, succeeded, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    repair.repairId,
+                    repair.taskId,
+                    repair.branchId,
+                    repair.nodeId,
+                    repair.attempt,
+                    repair.diagnosis,
+                    repair.proposal,
+                    1 if repair.succeeded else 0,
+                    repair.createdAt,
+                ),
+            )
+            conn.commit()

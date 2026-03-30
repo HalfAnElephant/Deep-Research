@@ -6,8 +6,8 @@ from dataclasses import dataclass, field
 import logging
 from typing import Any, Awaitable, Callable
 
-from app.core.utils import now_iso
-from app.models.schemas import ResearchScoreCard, NodeStatus, TaskStatus
+from app.core.utils import now_iso, new_id
+from app.models.schemas import BranchAction, BranchRepairAttempt, BranchScore, ResearchScoreCard, SearchBranch, NodeStatus, TaskStatus
 from app.repositories.conflict_repository import ConflictRepository
 from app.repositories.evidence_repository import EvidenceRepository
 from app.repositories.task_repository import TaskRepository
@@ -55,6 +55,7 @@ class DagNodeRuntimeState:
 class ExecutionEngine:
     HEARTBEAT_INTERVAL_SECONDS = 6
     STALL_WARNING_SECONDS = 25
+    MAX_NODE_REPAIR_ATTEMPTS = 2
 
     def __init__(
         self,
@@ -257,6 +258,42 @@ class ExecutionEngine:
             node_runtime.first_started_mono = now_mono
             node_runtime.attempts = max(1, node_runtime.attempts)
         node_runtime.completed_mono = now_mono
+
+    def _seed_search_branches(self, task_id: str, nodes: list[Any]) -> None:
+        for node in nodes:
+            branch_id = node.metadata.branchId or f"branch-{node.taskId}"
+            branch = SearchBranch(
+                branchId=branch_id,
+                parentBranchId=None,
+                rootNodeId=node.taskId,
+                branchType="research",
+                branchGoal=node.title,
+                depth=node.metadata.branchDepth or node.metadata.searchDepth,
+                status=node.status,
+                score=BranchScore(
+                    infoGain=max(0.0, min(1.0, node.metadata.infoGainScore)),
+                    evidenceStrength=0.0,
+                    feasibility=0.0,
+                    total=max(0.0, min(1.0, node.metadata.branchScore)),
+                ),
+                nodeIds=[node.taskId, *node.children],
+            )
+            self.repository.upsert_search_branch(task_id, branch)
+
+    def _diagnose_failure(self, error: Exception, attempt: int) -> tuple[str, str]:
+        message = str(error).strip() or "unknown error"
+        lowered = message.lower()
+        if "timeout" in lowered:
+            diagnosis = "检索超时，建议缩小查询范围并降低来源并发。"
+            proposal = "使用更短查询词并降低一次检索来源数量后重试。"
+        elif "connection" in lowered or "network" in lowered:
+            diagnosis = "网络或上游连接异常。"
+            proposal = "保持查询不变，延迟后重试。"
+        else:
+            diagnosis = "检索执行异常。"
+            proposal = "保留节点目标，收敛关键词后重试。"
+        diagnosis = f"第 {attempt} 次失败：{diagnosis}"
+        return diagnosis, proposal
 
     def _attach_dag_snapshot(self, task_id: str, payload: dict[str, Any]) -> None:
         self._ensure_dag_node_runtime(task_id)
@@ -498,6 +535,7 @@ class ExecutionEngine:
                 control.completed_nodes = snapshot.get(
                     "completed_nodes", control.completed_nodes)
             total = max(1, len(executable_nodes))
+            self._seed_search_branches(task_id, executable_nodes)
             for idx, node in enumerate(executable_nodes, start=1):
                 control = self._control.setdefault(task_id, TaskControlState())
                 if node.status == NodeStatus.PRUNED:
@@ -529,12 +567,123 @@ class ExecutionEngine:
                         "phase": "SEARCHING",
                     },
                 )
-                evidences = await self.research_agent.collect_evidence(
-                    task_id=task_id,
-                    node_id=node.taskId,
-                    query=query,
-                    sources=task.config.searchSources,
-                )
+
+                evidences = []
+                repair_succeeded = False
+                for attempt in range(1, self.MAX_NODE_REPAIR_ATTEMPTS + 1):
+                    try:
+                        evidences = await self.research_agent.collect_evidence(
+                            task_id=task_id,
+                            node_id=node.taskId,
+                            query=query,
+                            sources=task.config.searchSources,
+                        )
+                        if attempt > 1:
+                            repair_succeeded = True
+                        break
+                    except Exception as node_exc:  # noqa: BLE001
+                        diagnosis, proposal = self._diagnose_failure(
+                            node_exc, attempt)
+                        branch_id = node.metadata.branchId or f"branch-{node.taskId}"
+                        self.repository.append_branch_repair(
+                            BranchRepairAttempt(
+                                repairId=new_id(),
+                                taskId=task_id,
+                                branchId=branch_id,
+                                nodeId=node.taskId,
+                                attempt=attempt,
+                                diagnosis=diagnosis,
+                                proposal=proposal,
+                                succeeded=False,
+                                createdAt=now_iso(),
+                            )
+                        )
+                        self.repository.append_branch_action(
+                            BranchAction(
+                                actionId=new_id(),
+                                taskId=task_id,
+                                branchId=branch_id,
+                                actionType="REPAIR_ATTEMPT",
+                                actionInput={"query": query, "attempt": attempt},
+                                actionOutput={"diagnosis": diagnosis, "proposal": proposal, "error": str(node_exc)},
+                                scoreBefore=max(0.0, min(1.0, node.metadata.branchScore)),
+                                scoreAfter=max(0.0, min(1.0, node.metadata.branchScore)),
+                                status="FAILED",
+                                createdAt=now_iso(),
+                            )
+                        )
+
+                        await self._emit_event(
+                            task_id,
+                            "TASK_NOTE",
+                            {
+                                "taskId": task_id,
+                                "phase": "BRANCH_REPAIR_ATTEMPT",
+                                "nodeId": node.taskId,
+                                "nodeTitle": node.title,
+                                "attempt": attempt,
+                                "detail": diagnosis,
+                            },
+                        )
+
+                        if attempt < self.MAX_NODE_REPAIR_ATTEMPTS:
+                            await self._emit_event(
+                                task_id,
+                                "TASK_PROGRESS",
+                                {
+                                    "taskId": task_id,
+                                    "progress": searching_progress,
+                                    "currentNode": node.taskId,
+                                    "currentNodeTitle": node.title,
+                                    "state": "EXECUTING",
+                                    "phase": "REPAIRING_BRANCH",
+                                    "detail": proposal,
+                                },
+                            )
+                            continue
+
+                        self.repository.update_node_status(
+                            task_id, node.taskId, NodeStatus.FAILED, node.metadata.infoGainScore
+                        )
+                        node.status = NodeStatus.FAILED
+                        branch = SearchBranch(
+                            branchId=branch_id,
+                            parentBranchId=None,
+                            rootNodeId=node.taskId,
+                            branchType="research",
+                            branchGoal=node.title,
+                            depth=node.metadata.branchDepth or node.metadata.searchDepth,
+                            status=NodeStatus.FAILED,
+                            score=BranchScore(total=max(0.0, min(1.0, node.metadata.branchScore))),
+                            pruneReason="repair_exhausted",
+                            debugDepth=attempt,
+                            nodeIds=[node.taskId, *node.children],
+                        )
+                        self.repository.upsert_search_branch(task_id, branch)
+                        if node.children:
+                            self.repository.prune_nodes(task_id, node.children)
+                            for child_id in node.children:
+                                child = node_by_id.get(child_id)
+                                if child is not None:
+                                    child.status = NodeStatus.PRUNED
+                        await self._emit_event(
+                            task_id,
+                            "TASK_NOTE",
+                            {
+                                "taskId": task_id,
+                                "phase": "BRANCH_FAILED",
+                                "nodeId": node.taskId,
+                                "nodeTitle": node.title,
+                                "detail": "修复尝试耗尽，分支已标记失败并剪枝子节点。",
+                                "prunedNodeIds": node.children,
+                            },
+                        )
+                        evidences = []
+                        break
+
+                if node.status == NodeStatus.FAILED:
+                    continue
+
                 self.evidence_repository.save_many(evidences)
                 for ev in evidences:
                     await self._emit_event(
@@ -544,11 +693,34 @@ class ExecutionEngine:
                             "evidence": ev.model_dump()},
                     )
 
+                previous_branch_score = max(0.0, min(1.0, node.metadata.branchScore))
                 branch_score = self.branch_scorer.score(
                     node, evidence_count=len(evidences))
                 node.metadata.branchScore = branch_score
                 self.repository.update_node_branch_score(
                     task_id, node.taskId, branch_score)
+
+                branch_id = node.metadata.branchId or f"branch-{node.taskId}"
+                self.repository.upsert_search_branch(
+                    task_id,
+                    SearchBranch(
+                        branchId=branch_id,
+                        parentBranchId=None,
+                        rootNodeId=node.taskId,
+                        branchType="research",
+                        branchGoal=node.title,
+                        depth=node.metadata.branchDepth or node.metadata.searchDepth,
+                        status=NodeStatus.RUNNING,
+                        score=BranchScore(
+                            infoGain=max(0.0, min(1.0, node.metadata.infoGainScore)),
+                            evidenceStrength=min(1.0, len(evidences) / 8.0),
+                            feasibility=0.7 if repair_succeeded else 0.8,
+                            total=branch_score,
+                        ),
+                        debugDepth=1 if repair_succeeded else 0,
+                        nodeIds=[node.taskId, *node.children],
+                    ),
+                )
 
                 if branch_score < task.config.branchPruneThreshold and node.children:
                     self.repository.prune_nodes(task_id, node.children)
@@ -556,6 +728,21 @@ class ExecutionEngine:
                         child = node_by_id.get(child_id)
                         if child is not None:
                             child.status = NodeStatus.PRUNED
+                    self.repository.upsert_search_branch(
+                        task_id,
+                        SearchBranch(
+                            branchId=branch_id,
+                            parentBranchId=None,
+                            rootNodeId=node.taskId,
+                            branchType="research",
+                            branchGoal=node.title,
+                            depth=node.metadata.branchDepth or node.metadata.searchDepth,
+                            status=NodeStatus.PRUNED,
+                            score=BranchScore(total=branch_score),
+                            pruneReason="low_branch_score",
+                            nodeIds=[node.taskId, *node.children],
+                        ),
+                    )
                     await self._emit_event(
                         task_id,
                         "TASK_NOTE",
@@ -572,6 +759,40 @@ class ExecutionEngine:
 
                 self.repository.update_node_status(
                     task_id, node.taskId, NodeStatus.COMPLETED, node.metadata.infoGainScore)
+                self.repository.upsert_search_branch(
+                    task_id,
+                    SearchBranch(
+                        branchId=branch_id,
+                        parentBranchId=None,
+                        rootNodeId=node.taskId,
+                        branchType="research",
+                        branchGoal=node.title,
+                        depth=node.metadata.branchDepth or node.metadata.searchDepth,
+                        status=NodeStatus.COMPLETED,
+                        score=BranchScore(
+                            infoGain=max(0.0, min(1.0, node.metadata.infoGainScore)),
+                            evidenceStrength=min(1.0, len(evidences) / 8.0),
+                            feasibility=0.85,
+                            total=branch_score,
+                        ),
+                        debugDepth=1 if repair_succeeded else 0,
+                        nodeIds=[node.taskId, *node.children],
+                    ),
+                )
+                self.repository.append_branch_action(
+                    BranchAction(
+                        actionId=new_id(),
+                        taskId=task_id,
+                        branchId=branch_id,
+                        actionType="NODE_EXECUTED",
+                        actionInput={"nodeId": node.taskId, "query": query},
+                        actionOutput={"evidenceCount": len(evidences), "repairUsed": repair_succeeded},
+                        scoreBefore=previous_branch_score,
+                        scoreAfter=branch_score,
+                        status="COMPLETED",
+                        createdAt=now_iso(),
+                    )
+                )
                 self._record_node_completed(
                     task_id, node.taskId, asyncio.get_running_loop().time())
                 control.completed_nodes.append(node.taskId)
@@ -641,7 +862,7 @@ class ExecutionEngine:
             research_sections = [
                 (node.taskId, f"{node.title}\n\n{node.description}")
                 for node in dag.nodes
-                if node.taskId != task_id and node.status != NodeStatus.PRUNED
+                if node.taskId != task_id and node.status not in {NodeStatus.PRUNED, NodeStatus.FAILED}
             ]
             writing_plan = self.planner.build_writing_plan(
                 title=task.title,
@@ -1041,8 +1262,10 @@ def _build_scorecard(
     scorecard = ResearchScoreCard(
         noveltyScore=_novelty_score_stub(),
         feasibilityScore=_feasibility_score(completed_nodes, total_nodes),
-        evidenceStrengthScore=_evidence_strength_score(evidence_count, conflict_count),
-        executionSuccessScore=_execution_success_score(completed_nodes, total_nodes),
+        evidenceStrengthScore=_evidence_strength_score(
+            evidence_count, conflict_count),
+        executionSuccessScore=_execution_success_score(
+            completed_nodes, total_nodes),
         writeupReadinessScore=_writeup_score(report_path, evidence_count),
         reviewScore=_review_score(review_passed),
     )
@@ -1058,9 +1281,12 @@ def _validate_completion_requirements(
     review_passed: bool,
 ) -> str | None:
     return _validate_completion(
-        deliverable_types=list(getattr(config, "deliverableTypes", ["report"])),
-        requires_experiment_loop=bool(getattr(config, "requiresExperimentLoop", False)),
-        requires_peer_review=bool(getattr(config, "requiresPeerReview", False)),
+        deliverable_types=list(
+            getattr(config, "deliverableTypes", ["report"])),
+        requires_experiment_loop=bool(
+            getattr(config, "requiresExperimentLoop", False)),
+        requires_peer_review=bool(
+            getattr(config, "requiresPeerReview", False)),
         scorecard=scorecard,
         report_path=report_path,
         review_passed=review_passed,

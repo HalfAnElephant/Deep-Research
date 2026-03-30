@@ -188,10 +188,51 @@ class SearchBranch(BaseModel):
     branchId: str
     parentBranchId: str | None = None
     rootNodeId: str
+    branchType: str = "research"
+    branchGoal: str = ""
     depth: int = Field(default=0, ge=0)
     status: NodeStatus = Field(default=NodeStatus.PENDING)
     score: BranchScore = Field(default_factory=BranchScore)
+    pruneReason: str | None = None
+    debugDepth: int = Field(default=0, ge=0)
+    workerId: str | None = None
     nodeIds: list[str] = Field(default_factory=list)
+
+
+class BranchAction(BaseModel):
+    actionId: str
+    taskId: str
+    branchId: str
+    actionType: str
+    actionInput: dict[str, Any] = Field(default_factory=dict)
+    actionOutput: dict[str, Any] = Field(default_factory=dict)
+    scoreBefore: float = Field(default=0.0, ge=0.0, le=1.0)
+    scoreAfter: float = Field(default=0.0, ge=0.0, le=1.0)
+    status: str = "PENDING"
+    createdAt: str
+
+
+class BranchFailure(BaseModel):
+    failureId: str
+    taskId: str
+    branchId: str
+    nodeId: str
+    failureType: str
+    reason: str
+    detail: str = ""
+    createdAt: str
+
+
+class BranchRepairAttempt(BaseModel):
+    repairId: str
+    taskId: str
+    branchId: str
+    nodeId: str
+    attempt: int = Field(default=1, ge=1)
+    diagnosis: str = ""
+    proposal: str = ""
+    succeeded: bool = False
+    createdAt: str
 
 
 class SearchTree(BaseModel):

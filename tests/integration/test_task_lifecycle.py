@@ -34,6 +34,11 @@ def test_task_create_get_dag_and_start() -> None:
         assert evidence_resp.status_code == 200
         assert evidence_resp.json()["total"] >= 1
 
+        branch_resp = client.get(f"/api/v1/tasks/{task_id}/search-branches")
+        assert branch_resp.status_code == 200
+        assert isinstance(branch_resp.json(), list)
+        assert len(branch_resp.json()) >= 1
+
         deadline = time.time() + 4
         final_task = None
         while time.time() < deadline:

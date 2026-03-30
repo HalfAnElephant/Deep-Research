@@ -45,6 +45,53 @@ CREATE TABLE IF NOT EXISTS task_nodes (
   PRIMARY KEY (task_id, node_id)
 );
 
+CREATE TABLE IF NOT EXISTS search_branches (
+  task_id TEXT NOT NULL,
+  branch_id TEXT NOT NULL,
+  parent_branch_id TEXT,
+  root_node_id TEXT NOT NULL,
+  branch_type TEXT NOT NULL,
+  branch_goal TEXT NOT NULL,
+  depth INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL,
+  score_info_gain REAL NOT NULL DEFAULT 0,
+  score_evidence_strength REAL NOT NULL DEFAULT 0,
+  score_feasibility REAL NOT NULL DEFAULT 0,
+  score_total REAL NOT NULL DEFAULT 0,
+  prune_reason TEXT,
+  debug_depth INTEGER NOT NULL DEFAULT 0,
+  worker_id TEXT,
+  node_ids_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (task_id, branch_id)
+);
+
+CREATE TABLE IF NOT EXISTS branch_actions (
+  action_id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  branch_id TEXT NOT NULL,
+  action_type TEXT NOT NULL,
+  action_input_json TEXT NOT NULL,
+  action_output_json TEXT NOT NULL,
+  score_before REAL NOT NULL DEFAULT 0,
+  score_after REAL NOT NULL DEFAULT 0,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS branch_repairs (
+  repair_id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  branch_id TEXT NOT NULL,
+  node_id TEXT NOT NULL,
+  attempt INTEGER NOT NULL,
+  diagnosis TEXT NOT NULL,
+  proposal TEXT NOT NULL,
+  succeeded INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS snapshots (
   task_id TEXT PRIMARY KEY,
   snapshot_json TEXT NOT NULL,
@@ -67,6 +114,9 @@ CREATE TABLE IF NOT EXISTS evidences (
 
 CREATE INDEX IF NOT EXISTS idx_evidences_task_id ON evidences(task_id);
 CREATE INDEX IF NOT EXISTS idx_evidences_source_type ON evidences(source_type);
+CREATE INDEX IF NOT EXISTS idx_search_branches_task_id ON search_branches(task_id);
+CREATE INDEX IF NOT EXISTS idx_branch_actions_task_branch ON branch_actions(task_id, branch_id);
+CREATE INDEX IF NOT EXISTS idx_branch_repairs_task_branch ON branch_repairs(task_id, branch_id);
 
 CREATE TABLE IF NOT EXISTS conflicts (
   conflict_id TEXT PRIMARY KEY,
@@ -165,7 +215,8 @@ def init_db() -> None:
         cursor = conn.execute("PRAGMA table_info(tasks)")
         task_columns = [row[1] for row in cursor.fetchall()]
         if "research_scorecard_json" not in task_columns:
-          conn.execute("ALTER TABLE tasks ADD COLUMN research_scorecard_json TEXT")
+            conn.execute(
+                "ALTER TABLE tasks ADD COLUMN research_scorecard_json TEXT")
         conn.commit()
 
         conn.commit()
