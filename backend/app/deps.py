@@ -31,7 +31,8 @@ writer_service = WriterService()
 mcp_executor = MCPExecutor()
 idea_service = IdeaService(retrieval_service=retrieval_service)
 novelty_gate_service = NoveltyGateService()
-research_agent = ResearchAgent(retrieval_service=retrieval_service, mcp_executor=mcp_executor)
+research_agent = ResearchAgent(
+    retrieval_service=retrieval_service, mcp_executor=mcp_executor)
 
 # 创建四 Agent 架构实例
 checking_agent = CheckingAgent()

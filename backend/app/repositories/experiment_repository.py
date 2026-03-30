@@ -27,7 +27,8 @@ class ExperimentRepository:
                     run.stdout,
                     run.stderr,
                     run.exitCode,
-                    json.dumps([metric.model_dump() for metric in run.metrics]),
+                    json.dumps([metric.model_dump()
+                               for metric in run.metrics]),
                     run.startedAt,
                     run.completedAt,
                     run.startedAt,
@@ -84,7 +85,8 @@ class ExperimentRepository:
         output: list[ExperimentRun] = []
         for row in runs:
             metrics_payload = json.loads(row["metrics_json"])
-            metrics = [ExperimentMetric.model_validate(item) for item in metrics_payload]
+            metrics = [ExperimentMetric.model_validate(
+                item) for item in metrics_payload]
             run = ExperimentRun(
                 runId=row["run_id"],
                 taskId=row["task_id"],

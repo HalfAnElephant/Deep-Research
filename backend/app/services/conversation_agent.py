@@ -130,7 +130,8 @@ class ConversationAgent:
         topic: str,
         base_config: TaskConfig,
     ) -> tuple[ParsedPlan, str]:
-        parsed = self._parse_plan(markdown, topic=topic, base_config=base_config)
+        parsed = self._parse_plan(
+            markdown, topic=topic, base_config=base_config)
         task_description = self._extract_plan_body(markdown)[:5000]
         if len(task_description.strip()) < 3:
             task_description = f"围绕主题\"{topic}\"执行系统化研究。"
@@ -228,7 +229,8 @@ class ConversationAgent:
             message_id=new_id(),
             role=MessageRole.ASSISTANT,
             kind=MessageKind.ASSISTANT_TEXT,
-            content=self._build_ack_message(topic=topic, config=selected_config),
+            content=self._build_ack_message(
+                topic=topic, config=selected_config),
             metadata={"stage": "ACKNOWLEDGED"},
         )
         ideas, markdown = await asyncio.to_thread(
@@ -1076,7 +1078,8 @@ class ConversationAgent:
             if normalized:
                 return normalized
         if selected_idea is not None:
-            rendered = self._render_plan_from_idea(topic=topic, config=config, idea=selected_idea)
+            rendered = self._render_plan_from_idea(
+                topic=topic, config=config, idea=selected_idea)
             if rendered.strip():
                 return rendered
         return self._fallback_revision(current_plan=current_plan, instruction=instruction, topic=topic, config=config)
@@ -1097,7 +1100,8 @@ class ConversationAgent:
         return ideas, markdown
 
     def _generate_initial_ideas(self, *, topic: str, config: TaskConfig) -> list[ResearchIdea]:
-        ideas, evidences = self.idea_service.generate_ideas(topic=topic, config=config)
+        ideas, evidences = self.idea_service.generate_ideas(
+            topic=topic, config=config)
         if not ideas:
             ideas = []
         evaluated = self.novelty_gate_service.evaluate_ideas(
@@ -1163,7 +1167,8 @@ class ConversationAgent:
         ]
         if selected:
             return selected[0]
-        candidates = [idea for idea in ideas if idea.status.value != "REJECTED"]
+        candidates = [
+            idea for idea in ideas if idea.status.value != "REJECTED"]
         if not candidates:
             return None
         return max(candidates, key=lambda idea: idea.scoreCard.overallScore)
@@ -1217,7 +1222,8 @@ class ConversationAgent:
 
     @staticmethod
     def _resolve_provider(provider: LLMProvider | str | None = None) -> tuple[str, str, str]:
-        selected = (provider.value if isinstance(provider, LLMProvider) else provider) or settings.default_llm_provider
+        selected = (provider.value if isinstance(provider, LLMProvider)
+                    else provider) or settings.default_llm_provider
         provider_name = selected.lower().strip()
         if provider_name == "openrouter":
             return settings.openrouter_base_url, settings.openrouter_api_key, settings.openrouter_model
@@ -1234,7 +1240,8 @@ class ConversationAgent:
             LLMProvider.DEEPSEEK: "DeepSeek",
             LLMProvider.OPENAI: "OpenAI",
         }
-        provider_name = provider_labels.get(config.llmProvider, config.llmProvider.value)
+        provider_name = provider_labels.get(
+            config.llmProvider, config.llmProvider.value)
         return (
             f"已收到您的研究主题「{topic[:60]}」。"
             f"我将使用 {provider_name} 为您构思研究方案，"

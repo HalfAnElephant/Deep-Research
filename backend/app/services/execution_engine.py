@@ -618,10 +618,14 @@ class ExecutionEngine:
                                 taskId=task_id,
                                 branchId=branch_id,
                                 actionType="REPAIR_ATTEMPT",
-                                actionInput={"query": query, "attempt": attempt},
-                                actionOutput={"diagnosis": diagnosis, "proposal": proposal, "error": str(node_exc)},
-                                scoreBefore=max(0.0, min(1.0, node.metadata.branchScore)),
-                                scoreAfter=max(0.0, min(1.0, node.metadata.branchScore)),
+                                actionInput={"query": query,
+                                             "attempt": attempt},
+                                actionOutput={
+                                    "diagnosis": diagnosis, "proposal": proposal, "error": str(node_exc)},
+                                scoreBefore=max(
+                                    0.0, min(1.0, node.metadata.branchScore)),
+                                scoreAfter=max(
+                                    0.0, min(1.0, node.metadata.branchScore)),
                                 status="FAILED",
                                 createdAt=now_iso(),
                             )
@@ -668,7 +672,8 @@ class ExecutionEngine:
                             branchGoal=node.title,
                             depth=node.metadata.branchDepth or node.metadata.searchDepth,
                             status=NodeStatus.FAILED,
-                            score=BranchScore(total=max(0.0, min(1.0, node.metadata.branchScore))),
+                            score=BranchScore(
+                                total=max(0.0, min(1.0, node.metadata.branchScore))),
                             pruneReason="repair_exhausted",
                             debugDepth=attempt,
                             nodeIds=[node.taskId, *node.children],
@@ -707,7 +712,8 @@ class ExecutionEngine:
                             "evidence": ev.model_dump()},
                     )
 
-                previous_branch_score = max(0.0, min(1.0, node.metadata.branchScore))
+                previous_branch_score = max(
+                    0.0, min(1.0, node.metadata.branchScore))
                 branch_score = self.branch_scorer.score(
                     node, evidence_count=len(evidences))
                 node.metadata.branchScore = branch_score
@@ -726,7 +732,8 @@ class ExecutionEngine:
                         depth=node.metadata.branchDepth or node.metadata.searchDepth,
                         status=NodeStatus.RUNNING,
                         score=BranchScore(
-                            infoGain=max(0.0, min(1.0, node.metadata.infoGainScore)),
+                            infoGain=max(
+                                0.0, min(1.0, node.metadata.infoGainScore)),
                             evidenceStrength=min(1.0, len(evidences) / 8.0),
                             feasibility=0.7 if repair_succeeded else 0.8,
                             total=branch_score,
@@ -784,7 +791,8 @@ class ExecutionEngine:
                         depth=node.metadata.branchDepth or node.metadata.searchDepth,
                         status=NodeStatus.COMPLETED,
                         score=BranchScore(
-                            infoGain=max(0.0, min(1.0, node.metadata.infoGainScore)),
+                            infoGain=max(
+                                0.0, min(1.0, node.metadata.infoGainScore)),
                             evidenceStrength=min(1.0, len(evidences) / 8.0),
                             feasibility=0.85,
                             total=branch_score,
@@ -800,7 +808,8 @@ class ExecutionEngine:
                         branchId=branch_id,
                         actionType="NODE_EXECUTED",
                         actionInput={"nodeId": node.taskId, "query": query},
-                        actionOutput={"evidenceCount": len(evidences), "repairUsed": repair_succeeded},
+                        actionOutput={"evidenceCount": len(
+                            evidences), "repairUsed": repair_succeeded},
                         scoreBefore=previous_branch_score,
                         scoreAfter=branch_score,
                         status="COMPLETED",
@@ -822,8 +831,10 @@ class ExecutionEngine:
                             stderr="",
                             exitCode=0,
                             metrics=[
-                                ExperimentMetric(name="evidence_count", value=float(len(evidences))),
-                                ExperimentMetric(name="branch_score", value=float(branch_score)),
+                                ExperimentMetric(
+                                    name="evidence_count", value=float(len(evidences))),
+                                ExperimentMetric(
+                                    name="branch_score", value=float(branch_score)),
                             ],
                             startedAt=started_at,
                             completedAt=now_iso(),

@@ -130,16 +130,20 @@ def test_select_primary_idea_returns_none_when_all_rejected() -> None:
             ideaId="idea-1",
             title="候选 1",
             status=IdeaStatus.REJECTED,
-            noveltyAssessment=NoveltyAssessment(noveltyScore=0.2, isNovel=False),
-            feasibilityAssessment=FeasibilityAssessment(feasibilityScore=0.2, isFeasible=False),
+            noveltyAssessment=NoveltyAssessment(
+                noveltyScore=0.2, isNovel=False),
+            feasibilityAssessment=FeasibilityAssessment(
+                feasibilityScore=0.2, isFeasible=False),
             scoreCard=ResearchScoreCard(overallScore=0.2),
         ),
         ResearchIdea(
             ideaId="idea-2",
             title="候选 2",
             status=IdeaStatus.REJECTED,
-            noveltyAssessment=NoveltyAssessment(noveltyScore=0.3, isNovel=False),
-            feasibilityAssessment=FeasibilityAssessment(feasibilityScore=0.3, isFeasible=False),
+            noveltyAssessment=NoveltyAssessment(
+                noveltyScore=0.3, isNovel=False),
+            feasibilityAssessment=FeasibilityAssessment(
+                feasibilityScore=0.3, isFeasible=False),
             scoreCard=ResearchScoreCard(overallScore=0.3),
         ),
     ]
