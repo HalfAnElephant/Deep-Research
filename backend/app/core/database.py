@@ -92,6 +92,34 @@ CREATE TABLE IF NOT EXISTS branch_repairs (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS experiment_runs (
+  run_id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  branch_id TEXT NOT NULL,
+  node_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  objective TEXT NOT NULL,
+  stdout TEXT NOT NULL,
+  stderr TEXT NOT NULL,
+  exit_code INTEGER,
+  metrics_json TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS experiment_artifacts (
+  artifact_id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  task_id TEXT NOT NULL,
+  branch_id TEXT NOT NULL,
+  node_id TEXT NOT NULL,
+  artifact_type TEXT NOT NULL,
+  path TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS snapshots (
   task_id TEXT PRIMARY KEY,
   snapshot_json TEXT NOT NULL,
@@ -117,6 +145,8 @@ CREATE INDEX IF NOT EXISTS idx_evidences_source_type ON evidences(source_type);
 CREATE INDEX IF NOT EXISTS idx_search_branches_task_id ON search_branches(task_id);
 CREATE INDEX IF NOT EXISTS idx_branch_actions_task_branch ON branch_actions(task_id, branch_id);
 CREATE INDEX IF NOT EXISTS idx_branch_repairs_task_branch ON branch_repairs(task_id, branch_id);
+CREATE INDEX IF NOT EXISTS idx_experiment_runs_task_id ON experiment_runs(task_id);
+CREATE INDEX IF NOT EXISTS idx_experiment_artifacts_task_id ON experiment_artifacts(task_id);
 
 CREATE TABLE IF NOT EXISTS conflicts (
   conflict_id TEXT PRIMARY KEY,

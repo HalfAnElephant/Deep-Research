@@ -66,6 +66,13 @@ class ResearchMode(StrEnum):
     PAPER_WRITEUP = "paper_writeup"
 
 
+class ExperimentRunStatus(StrEnum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
 class IdeaStatus(StrEnum):
     CANDIDATE = "CANDIDATE"
     SELECTED = "SELECTED"
@@ -357,6 +364,40 @@ class ExperimentProposal(BaseModel):
     method: str = Field(default="", max_length=2000)
     metrics: list[str] = Field(default_factory=list)
     expectedOutcome: str = Field(default="", max_length=1000)
+
+
+class ExperimentMetric(BaseModel):
+    name: str
+    value: float
+    unit: str = ""
+
+
+class ExperimentArtifact(BaseModel):
+    artifactId: str
+    runId: str
+    taskId: str
+    branchId: str
+    nodeId: str
+    artifactType: str
+    path: str = ""
+    summary: str = ""
+    createdAt: str
+
+
+class ExperimentRun(BaseModel):
+    runId: str
+    taskId: str
+    branchId: str
+    nodeId: str
+    status: ExperimentRunStatus
+    objective: str = ""
+    stdout: str = ""
+    stderr: str = ""
+    exitCode: int | None = None
+    metrics: list[ExperimentMetric] = Field(default_factory=list)
+    artifacts: list[ExperimentArtifact] = Field(default_factory=list)
+    startedAt: str
+    completedAt: str | None = None
 
 
 class RiskAssessment(BaseModel):

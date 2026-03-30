@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.conflict_repository import ConflictRepository
 from app.repositories.evidence_repository import EvidenceRepository
+from app.repositories.experiment_repository import ExperimentRepository
 from app.repositories.task_repository import TaskRepository
 from app.services.agents import ReportAgent, ResearchAgent
 from app.services.analyst import AnalystService
@@ -19,6 +20,7 @@ from app.services.writer import WriterService
 
 task_repository = TaskRepository()
 evidence_repository = EvidenceRepository()
+experiment_repository = ExperimentRepository()
 conflict_repository = ConflictRepository()
 conversation_repository = ConversationRepository()
 planner = MasterPlanner()
@@ -46,6 +48,7 @@ execution_engine = ExecutionEngine(
     evidence_repository,
     retrieval_service,
     conflict_repository,
+    experiment_repository,
     analyst_service,
     writer_service,
     research_agent,

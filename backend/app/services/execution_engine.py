@@ -7,9 +7,21 @@ import logging
 from typing import Any, Awaitable, Callable
 
 from app.core.utils import now_iso, new_id
-from app.models.schemas import BranchAction, BranchRepairAttempt, BranchScore, ResearchScoreCard, SearchBranch, NodeStatus, TaskStatus
+from app.models.schemas import (
+    BranchAction,
+    BranchRepairAttempt,
+    BranchScore,
+    ExperimentMetric,
+    ExperimentRun,
+    ExperimentRunStatus,
+    NodeStatus,
+    ResearchScoreCard,
+    SearchBranch,
+    TaskStatus,
+)
 from app.repositories.conflict_repository import ConflictRepository
 from app.repositories.evidence_repository import EvidenceRepository
+from app.repositories.experiment_repository import ExperimentRepository
 from app.repositories.task_repository import TaskRepository
 from app.services.agents import ReportAgent, ResearchAgent
 from app.services.analyst import AnalystService
@@ -65,6 +77,7 @@ class ExecutionEngine:
         evidence_repository: EvidenceRepository,
         retrieval_service: RetrievalService,
         conflict_repository: ConflictRepository,
+        experiment_repository: ExperimentRepository,
         analyst_service: AnalystService,
         writer_service: WriterService,
         research_agent: ResearchAgent | None = None,
@@ -80,6 +93,7 @@ class ExecutionEngine:
         self.evidence_repository = evidence_repository
         self.retrieval_service = retrieval_service
         self.conflict_repository = conflict_repository
+        self.experiment_repository = experiment_repository
         self.analyst_service = analyst_service
         self.writer_service = writer_service
         self.research_agent = research_agent or ResearchAgent(
@@ -793,6 +807,28 @@ class ExecutionEngine:
                         createdAt=now_iso(),
                     )
                 )
+
+                if task.config.requiresExperimentLoop:
+                    started_at = now_iso()
+                    self.experiment_repository.create_run(
+                        ExperimentRun(
+                            runId=new_id(),
+                            taskId=task_id,
+                            branchId=branch_id,
+                            nodeId=node.taskId,
+                            status=ExperimentRunStatus.COMPLETED,
+                            objective=f"Validate hypothesis for node: {node.title}",
+                            stdout=f"Collected {len(evidences)} evidences for branch scoring.",
+                            stderr="",
+                            exitCode=0,
+                            metrics=[
+                                ExperimentMetric(name="evidence_count", value=float(len(evidences))),
+                                ExperimentMetric(name="branch_score", value=float(branch_score)),
+                            ],
+                            startedAt=started_at,
+                            completedAt=now_iso(),
+                        )
+                    )
                 self._record_node_completed(
                     task_id, node.taskId, asyncio.get_running_loop().time())
                 control.completed_nodes.append(node.taskId)

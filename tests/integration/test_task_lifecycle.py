@@ -39,6 +39,10 @@ def test_task_create_get_dag_and_start() -> None:
         assert isinstance(branch_resp.json(), list)
         assert len(branch_resp.json()) >= 1
 
+        experiments_resp = client.get(f"/api/v1/tasks/{task_id}/experiments")
+        assert experiments_resp.status_code == 200
+        assert isinstance(experiments_resp.json(), list)
+
         deadline = time.time() + 4
         final_task = None
         while time.time() < deadline:
@@ -106,3 +110,33 @@ def test_snapshot_and_recover_flow() -> None:
 
         recover = client.post(f"/api/v1/tasks/{task_id}/recover")
         assert recover.status_code == 200
+
+
+def test_experiment_mode_generates_runs() -> None:
+    with TestClient(app) as client:
+        payload = {
+            "title": "Experimental retrieval strategy",
+            "description": "Compare retrieval behavior across branches",
+            "config": {
+                "maxDepth": 2,
+                "maxNodes": 8,
+                "searchSources": ["arXiv"],
+                "priority": 4,
+                "researchMode": "experimental_research",
+            },
+        }
+        task_id = client.post("/api/v1/tasks", json=payload).json()["taskId"]
+        start_resp = client.post(f"/api/v1/tasks/{task_id}/start")
+        assert start_resp.status_code == 200
+
+        deadline = time.time() + 4
+        while time.time() < deadline:
+            experiments_resp = client.get(f"/api/v1/tasks/{task_id}/experiments")
+            assert experiments_resp.status_code == 200
+            runs = experiments_resp.json()
+            if runs:
+                assert runs[0]["status"] in {"COMPLETED", "FAILED", "RUNNING", "PENDING"}
+                return
+            time.sleep(0.2)
+
+        assert False, "expected at least one experiment run for experimental_research mode"

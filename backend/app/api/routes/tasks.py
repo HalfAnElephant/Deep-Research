@@ -7,12 +7,13 @@ from fastapi.responses import FileResponse
 
 from app.api.schemas.dag import DAGUpdateRequest, DAGValidationResponse
 from app.core.utils import new_id
-from app.deps import conflict_repository, execution_engine, progress_hub, task_repository
+from app.deps import conflict_repository, execution_engine, experiment_repository, progress_hub, task_repository
 from app.models.schemas import (
     ConflictRecord,
     CreateTaskRequest,
     DAGGraph,
     DeleteResponse,
+    ExperimentRun,
     SearchBranch,
     StateResponse,
     TaskResponse,
@@ -125,6 +126,15 @@ def get_task_search_branches(task_id: str) -> list[SearchBranch]:
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
     return task_repository.list_search_branches(task_id)
+
+
+@router.get("/tasks/{task_id}/experiments", response_model=list[ExperimentRun])
+def get_task_experiments(task_id: str) -> list[ExperimentRun]:
+    try:
+        task_repository.get_task(task_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+    return experiment_repository.list_runs(task_id)
 
 
 @router.post("/tasks/{task_id}/start", response_model=StateResponse)
