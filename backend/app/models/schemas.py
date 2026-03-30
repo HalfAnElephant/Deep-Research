@@ -512,6 +512,39 @@ class LLMSettingsResponse(BaseModel):
     options: list[LLMOption]
 
 
+class ProviderConfigResponse(BaseModel):
+    """Detailed provider configuration for UI display."""
+    provider: LLMProvider
+    label: str
+    apiKey: str  # Masked for display
+    baseUrl: str
+    model: str
+    configured: bool
+    isDefault: bool
+
+
+class ProviderConfigUpdate(BaseModel):
+    """Request body for updating provider configuration."""
+    apiKey: str | None = None
+    baseUrl: str | None = None
+    model: str | None = None
+    isDefault: bool | None = None
+
+
+class TaskMappingResponse(BaseModel):
+    """Task type to provider mapping."""
+    draft: LLMProvider
+    chat: LLMProvider
+    article: LLMProvider
+
+
+class TaskMappingUpdate(BaseModel):
+    """Request body for updating task mapping."""
+    draft: LLMProvider | None = None
+    chat: LLMProvider | None = None
+    article: LLMProvider | None = None
+
+
 class ConversationBulkDeleteResponse(BaseModel):
     deleted: bool
     deletedCount: int

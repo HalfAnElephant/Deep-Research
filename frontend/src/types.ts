@@ -332,3 +332,33 @@ export interface LLMSettingsResponse {
   defaultProvider: LLMProvider;
   options: LLMOption[];
 }
+
+// Extended provider config for settings UI
+export interface ProviderConfigResponse {
+  provider: LLMProvider;
+  label: string;
+  apiKey: string; // Masked
+  baseUrl: string;
+  model: string;
+  configured: boolean;
+  isDefault: boolean;
+}
+
+export interface ProviderConfigUpdate {
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  isDefault?: boolean;
+}
+
+export interface TaskMappingResponse {
+  draft: LLMProvider;
+  chat: LLMProvider;
+  article: LLMProvider;
+}
+
+export interface TaskMappingUpdate {
+  draft?: LLMProvider;
+  chat?: LLMProvider;
+  article?: LLMProvider;
+}

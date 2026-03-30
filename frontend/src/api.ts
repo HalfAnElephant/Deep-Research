@@ -9,6 +9,10 @@ import type {
   Evidence,
   ExperimentRun,
   LLMSettingsResponse,
+  ProviderConfigResponse,
+  ProviderConfigUpdate,
+  TaskMappingResponse,
+  TaskMappingUpdate,
   RevisePlanResponse,
   SearchBranch,
   RunConversationResponse,
@@ -421,4 +425,42 @@ export async function getLibrarySummary(): Promise<LibrarySummary> {
 
 export async function getLLMSettings(): Promise<LLMSettingsResponse> {
   return json<LLMSettingsResponse>(`${API_BASE}/api/v1/settings/llm`);
+}
+
+// Extended LLM Settings APIs
+export async function getProviderConfigs(): Promise<ProviderConfigResponse[]> {
+  return json<ProviderConfigResponse[]>(`${API_BASE}/api/v1/settings/llm/providers`);
+}
+
+export async function getProviderConfig(provider: LLMProvider): Promise<ProviderConfigResponse> {
+  return json<ProviderConfigResponse>(`${API_BASE}/api/v1/settings/llm/providers/${provider}`);
+}
+
+export async function updateProviderConfig(
+  provider: LLMProvider,
+  update: ProviderConfigUpdate
+): Promise<ProviderConfigResponse> {
+  return json<ProviderConfigResponse>(`${API_BASE}/api/v1/settings/llm/providers/${provider}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(update),
+  });
+}
+
+export async function resetProviderConfig(provider: LLMProvider): Promise<void> {
+  await json(`${API_BASE}/api/v1/settings/llm/providers/${provider}`, {
+    method: "DELETE",
+  });
+}
+
+export async function getTaskMapping(): Promise<TaskMappingResponse> {
+  return json<TaskMappingResponse>(`${API_BASE}/api/v1/settings/llm/task-mapping`);
+}
+
+export async function updateTaskMapping(update: TaskMappingUpdate): Promise<TaskMappingResponse> {
+  return json<TaskMappingResponse>(`${API_BASE}/api/v1/settings/llm/task-mapping`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(update),
+  });
 }
