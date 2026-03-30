@@ -13,7 +13,7 @@ import { ReportViewer } from "./ReportViewer";
 import { ProgressBar } from "./ProgressIndicator";
 import { DAGEditorModal } from "./DAGEditorModal";
 import { getDag, listBranchActions, listBranchRepairs, listConflicts, listEvidence, listExperiments } from "../api";
-import type { ConflictRecord, Evidence } from "../types";
+import type { BranchAction, BranchRepairAttempt, ConflictRecord, Evidence, ExperimentRun } from "../types";
 import type { DAGGraph, TaskNode, DAGEdge, TaskNodeStatus } from "../hooks/useDAGEditor";
 
 export interface ChatTimelineProps {
@@ -105,6 +105,26 @@ export function ChatTimeline(props: ChatTimelineProps) {
     items: [],
   });
   const [expandedConflictIds, setExpandedConflictIds] = useState<Record<string, boolean>>({});
+  const [branchTrace, setBranchTrace] = useState<{
+    loading: boolean;
+    actions: BranchAction[];
+    repairs: BranchRepairAttempt[];
+    experiments: ExperimentRun[];
+  }>({
+    loading: false,
+    actions: [],
+    repairs: [],
+    experiments: [],
+  });
+  const [traceExpanded, setTraceExpanded] = useState<{
+    actions: boolean;
+    repairs: boolean;
+    experiments: boolean;
+  }>({
+    actions: false,
+    repairs: false,
+    experiments: false,
+  });
 
   // DAG state for PLAN_READY phase (fetched from API)
   const [planReadyDag, setPlanReadyDag] = useState<DAGGraph>({ nodes: [], edges: [] });
@@ -284,6 +304,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
         experimentCount: 0,
         topSources: [],
       }));
+      setBranchTrace({ loading: false, actions: [], repairs: [], experiments: [] });
       return;
     }
 
@@ -303,20 +324,22 @@ export function ChatTimeline(props: ChatTimelineProps) {
         experimentCount: 0,
         topSources: [],
       }));
+      setBranchTrace({ loading: false, actions: [], repairs: [], experiments: [] });
       return;
     }
 
     let cancelled = false;
     setBranchInsight((prev) => ({ ...prev, loading: true }));
+    setBranchTrace((prev) => ({ ...prev, loading: true }));
 
     const load = async () => {
       try {
-        const branchFilter = selectedBranchId === "unassigned" ? undefined : selectedBranchId;
+        const branchFilter = selectedBranchId === "unassigned" ? null : selectedBranchId;
         const [allEvidences, allConflicts, branchActions, branchRepairs, experimentRuns] = await Promise.all([
           listEvidence(currentTaskId),
           listConflicts(currentTaskId),
-          listBranchActions(currentTaskId, branchFilter),
-          listBranchRepairs(currentTaskId, branchFilter),
+          branchFilter ? listBranchActions(currentTaskId, branchFilter) : Promise.resolve([]),
+          branchFilter ? listBranchRepairs(currentTaskId, branchFilter) : Promise.resolve([]),
           listExperiments(currentTaskId),
         ]);
         if (cancelled) return;
@@ -353,6 +376,21 @@ export function ChatTimeline(props: ChatTimelineProps) {
               : experimentRuns.filter((run) => run.branchId === selectedBranchId).length,
           topSources,
         });
+        const recentActions = [...branchActions].slice(-5).reverse();
+        const recentRepairs = [...branchRepairs].slice(-5).reverse();
+        const recentExperiments =
+          selectedBranchId === "unassigned"
+            ? []
+            : experimentRuns
+                .filter((run) => run.branchId === selectedBranchId)
+                .slice(-5)
+                .reverse();
+        setBranchTrace({
+          loading: false,
+          actions: recentActions,
+          repairs: recentRepairs,
+          experiments: recentExperiments,
+        });
       } catch {
         if (cancelled) return;
         setBranchInsight({
@@ -364,6 +402,7 @@ export function ChatTimeline(props: ChatTimelineProps) {
           experimentCount: 0,
           topSources: [],
         });
+        setBranchTrace({ loading: false, actions: [], repairs: [], experiments: [] });
       }
     };
 
@@ -588,6 +627,79 @@ export function ChatTimeline(props: ChatTimelineProps) {
                           ? ` ${branchInsight.topSources.map((item) => `${item.source}(${item.count})`).join(" / ")}`
                           : " -"}
                       </span>
+                    </div>
+                    <div className="live-progress-branch-trace">
+                      <button
+                        type="button"
+                        className="ghost live-progress-branch-trace-toggle"
+                        onClick={() => setTraceExpanded((prev) => ({ ...prev, actions: !prev.actions }))}
+                      >
+                        {traceExpanded.actions ? "收起动作明细" : "展开动作明细"}
+                      </button>
+                      {traceExpanded.actions && (
+                        <div className="live-progress-branch-trace-list">
+                          {branchTrace.loading ? (
+                            <div className="live-progress-branch-trace-empty">加载中...</div>
+                          ) : branchTrace.actions.length === 0 ? (
+                            <div className="live-progress-branch-trace-empty">暂无分支动作记录。</div>
+                          ) : (
+                            branchTrace.actions.map((action) => (
+                              <div key={action.actionId} className="live-progress-branch-trace-item">
+                                <span>{action.actionType}</span>
+                                <span className="mono">{action.status} · {action.scoreBefore.toFixed(2)} {"->"} {action.scoreAfter.toFixed(2)}</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        className="ghost live-progress-branch-trace-toggle"
+                        onClick={() => setTraceExpanded((prev) => ({ ...prev, repairs: !prev.repairs }))}
+                      >
+                        {traceExpanded.repairs ? "收起修复明细" : "展开修复明细"}
+                      </button>
+                      {traceExpanded.repairs && (
+                        <div className="live-progress-branch-trace-list">
+                          {branchTrace.loading ? (
+                            <div className="live-progress-branch-trace-empty">加载中...</div>
+                          ) : branchTrace.repairs.length === 0 ? (
+                            <div className="live-progress-branch-trace-empty">暂无修复尝试记录。</div>
+                          ) : (
+                            branchTrace.repairs.map((repair) => (
+                              <div key={repair.repairId} className="live-progress-branch-trace-item">
+                                <span>Attempt {repair.attempt}: {repair.diagnosis || "-"}</span>
+                                <span className="mono">{repair.succeeded ? "SUCCESS" : "FAILED"}</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        className="ghost live-progress-branch-trace-toggle"
+                        onClick={() => setTraceExpanded((prev) => ({ ...prev, experiments: !prev.experiments }))}
+                      >
+                        {traceExpanded.experiments ? "收起实验明细" : "展开实验明细"}
+                      </button>
+                      {traceExpanded.experiments && (
+                        <div className="live-progress-branch-trace-list">
+                          {branchTrace.loading ? (
+                            <div className="live-progress-branch-trace-empty">加载中...</div>
+                          ) : branchTrace.experiments.length === 0 ? (
+                            <div className="live-progress-branch-trace-empty">暂无实验运行记录。</div>
+                          ) : (
+                            branchTrace.experiments.map((run) => (
+                              <div key={run.runId} className="live-progress-branch-trace-item">
+                                <span>{run.objective || run.runId}</span>
+                                <span className="mono">{run.status} · exit {run.exitCode ?? "-"}</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
                     </div>
                   </section>
                 )}

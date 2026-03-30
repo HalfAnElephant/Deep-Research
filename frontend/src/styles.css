@@ -1222,6 +1222,40 @@ button.ghost:hover:not(:disabled) {
   background: color-mix(in srgb, var(--phase-executing-light) 35%, var(--card));
 }
 
+.live-progress-branch-trace {
+  display: grid;
+  gap: 6px;
+}
+
+.live-progress-branch-trace-toggle {
+  justify-self: start;
+  padding: 2px 0;
+  font-size: 11px;
+}
+
+.live-progress-branch-trace-list {
+  display: grid;
+  gap: 6px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  padding: 6px;
+  background: color-mix(in srgb, var(--bg-soft) 72%, var(--card));
+}
+
+.live-progress-branch-trace-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--ink-secondary);
+}
+
+.live-progress-branch-trace-empty {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .live-progress-dag-column {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
