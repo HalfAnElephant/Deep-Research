@@ -30,7 +30,8 @@ def test_task_create_get_dag_and_start() -> None:
 
         # Give async engine time to generate evidences in background.
         time.sleep(1.0)
-        evidence_resp = client.get("/api/v1/evidence", params={"taskId": task_id})
+        evidence_resp = client.get(
+            "/api/v1/evidence", params={"taskId": task_id})
         assert evidence_resp.status_code == 200
         assert evidence_resp.json()["total"] >= 1
 
@@ -38,6 +39,20 @@ def test_task_create_get_dag_and_start() -> None:
         assert branch_resp.status_code == 200
         assert isinstance(branch_resp.json(), list)
         assert len(branch_resp.json()) >= 1
+
+        branch_id = branch_resp.json()[0]["branchId"]
+
+        branch_actions_resp = client.get(
+            f"/api/v1/tasks/{task_id}/branch-actions", params={"branchId": branch_id}
+        )
+        assert branch_actions_resp.status_code == 200
+        assert isinstance(branch_actions_resp.json(), list)
+
+        branch_repairs_resp = client.get(
+            f"/api/v1/tasks/{task_id}/branch-repairs", params={"branchId": branch_id}
+        )
+        assert branch_repairs_resp.status_code == 200
+        assert isinstance(branch_repairs_resp.json(), list)
 
         experiments_resp = client.get(f"/api/v1/tasks/{task_id}/experiments")
         assert experiments_resp.status_code == 200
@@ -73,7 +88,8 @@ def test_task_create_get_dag_and_start() -> None:
 
         mcp_read = client.post(
             "/api/v1/mcp/execute",
-            json={"toolName": "python-executor", "method": "tools/call", "params": {"code": "1+1"}, "mode": "read"},
+            json={"toolName": "python-executor", "method": "tools/call",
+                  "params": {"code": "1+1"}, "mode": "read"},
         )
         assert mcp_read.status_code == 200
         assert mcp_read.json()["status"] == "SUCCESS"
@@ -131,11 +147,13 @@ def test_experiment_mode_generates_runs() -> None:
 
         deadline = time.time() + 4
         while time.time() < deadline:
-            experiments_resp = client.get(f"/api/v1/tasks/{task_id}/experiments")
+            experiments_resp = client.get(
+                f"/api/v1/tasks/{task_id}/experiments")
             assert experiments_resp.status_code == 200
             runs = experiments_resp.json()
             if runs:
-                assert runs[0]["status"] in {"COMPLETED", "FAILED", "RUNNING", "PENDING"}
+                assert runs[0]["status"] in {
+                    "COMPLETED", "FAILED", "RUNNING", "PENDING"}
                 return
             time.sleep(0.2)
 

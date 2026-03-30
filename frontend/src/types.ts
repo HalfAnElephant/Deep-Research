@@ -114,6 +114,87 @@ export interface ConflictRecord {
   disputedValues: Array<{ evidenceId: string; value: number; unit: string; source: string }>;
 }
 
+export interface BranchScore {
+  infoGain: number;
+  evidenceStrength: number;
+  feasibility: number;
+  total: number;
+}
+
+export interface SearchBranch {
+  branchId: string;
+  parentBranchId?: string | null;
+  rootNodeId: string;
+  branchType: string;
+  branchGoal: string;
+  depth: number;
+  status: string;
+  score: BranchScore;
+  pruneReason?: string | null;
+  debugDepth: number;
+  workerId?: string | null;
+  nodeIds: string[];
+}
+
+export interface BranchAction {
+  actionId: string;
+  taskId: string;
+  branchId: string;
+  actionType: string;
+  actionInput: Record<string, unknown>;
+  actionOutput: Record<string, unknown>;
+  scoreBefore: number;
+  scoreAfter: number;
+  status: string;
+  createdAt: string;
+}
+
+export interface BranchRepairAttempt {
+  repairId: string;
+  taskId: string;
+  branchId: string;
+  nodeId: string;
+  attempt: number;
+  diagnosis: string;
+  proposal: string;
+  succeeded: boolean;
+  createdAt: string;
+}
+
+export interface ExperimentMetric {
+  name: string;
+  value: number;
+  unit: string;
+}
+
+export interface ExperimentArtifact {
+  artifactId: string;
+  runId: string;
+  taskId: string;
+  branchId: string;
+  nodeId: string;
+  artifactType: string;
+  path: string;
+  summary: string;
+  createdAt: string;
+}
+
+export interface ExperimentRun {
+  runId: string;
+  taskId: string;
+  branchId: string;
+  nodeId: string;
+  status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
+  objective: string;
+  stdout: string;
+  stderr: string;
+  exitCode?: number | null;
+  metrics: ExperimentMetric[];
+  artifacts: ExperimentArtifact[];
+  startedAt: string;
+  completedAt?: string | null;
+}
+
 export interface ProgressEvent {
   event: string;
   timestamp: string;
@@ -212,14 +293,6 @@ export interface ResearchHypothesis {
   sources: string[];
   confidence: number;
   createdAt: string;
-}
-
-export interface ResearchScoreCard {
-  noveltyScore: number;
-  feasibilityScore: number;
-  evidenceStrengthScore: number;
-  writeupReadinessScore: number;
-  overallScore: number;
 }
 
 export interface ResearchIdea {

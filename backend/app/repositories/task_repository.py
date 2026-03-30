@@ -329,7 +329,8 @@ class TaskRepository:
                     status=NodeStatus(row["status"]),
                     score=BranchScore(
                         infoGain=float(row["score_info_gain"] or 0.0),
-                        evidenceStrength=float(row["score_evidence_strength"] or 0.0),
+                        evidenceStrength=float(
+                            row["score_evidence_strength"] or 0.0),
                         feasibility=float(row["score_feasibility"] or 0.0),
                         total=float(row["score_total"] or 0.0),
                     ),
@@ -366,6 +367,42 @@ class TaskRepository:
             )
             conn.commit()
 
+    def list_branch_actions(self, task_id: str, branch_id: str | None = None) -> list[BranchAction]:
+        with get_connection() as conn:
+            if branch_id:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM branch_actions
+                    WHERE task_id = ? AND branch_id = ?
+                    ORDER BY created_at ASC
+                    """,
+                    (task_id, branch_id),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM branch_actions
+                    WHERE task_id = ?
+                    ORDER BY created_at ASC
+                    """,
+                    (task_id,),
+                ).fetchall()
+        return [
+            BranchAction(
+                actionId=row["action_id"],
+                taskId=row["task_id"],
+                branchId=row["branch_id"],
+                actionType=row["action_type"],
+                actionInput=json.loads(row["action_input_json"]),
+                actionOutput=json.loads(row["action_output_json"]),
+                scoreBefore=float(row["score_before"] or 0.0),
+                scoreAfter=float(row["score_after"] or 0.0),
+                status=row["status"],
+                createdAt=row["created_at"],
+            )
+            for row in rows
+        ]
+
     def append_branch_repair(self, repair: BranchRepairAttempt) -> None:
         with get_connection() as conn:
             conn.execute(
@@ -388,3 +425,38 @@ class TaskRepository:
                 ),
             )
             conn.commit()
+
+    def list_branch_repairs(self, task_id: str, branch_id: str | None = None) -> list[BranchRepairAttempt]:
+        with get_connection() as conn:
+            if branch_id:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM branch_repairs
+                    WHERE task_id = ? AND branch_id = ?
+                    ORDER BY created_at ASC
+                    """,
+                    (task_id, branch_id),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM branch_repairs
+                    WHERE task_id = ?
+                    ORDER BY created_at ASC
+                    """,
+                    (task_id,),
+                ).fetchall()
+        return [
+            BranchRepairAttempt(
+                repairId=row["repair_id"],
+                taskId=row["task_id"],
+                branchId=row["branch_id"],
+                nodeId=row["node_id"],
+                attempt=int(row["attempt"]),
+                diagnosis=row["diagnosis"],
+                proposal=row["proposal"],
+                succeeded=bool(row["succeeded"]),
+                createdAt=row["created_at"],
+            )
+            for row in rows
+        ]

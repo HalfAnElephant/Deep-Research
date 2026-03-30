@@ -20,7 +20,8 @@ def test_search_branch_persistence_roundtrip() -> None:
         rootNodeId="node-1",
         depth=0,
         status=NodeStatus.RUNNING,
-        score=BranchScore(infoGain=0.5, evidenceStrength=0.4, feasibility=0.7, total=0.56),
+        score=BranchScore(infoGain=0.5, evidenceStrength=0.4,
+                          feasibility=0.7, total=0.56),
         nodeIds=["node-1", "node-2"],
     )
     repo.upsert_search_branch(task_id, branch)
@@ -57,3 +58,13 @@ def test_search_branch_persistence_roundtrip() -> None:
     assert loaded[0].branchId == "branch-root"
     assert loaded[0].score.total == 0.56
     assert loaded[0].status == NodeStatus.RUNNING
+
+    actions = repo.list_branch_actions(task_id)
+    assert len(actions) == 1
+    assert actions[0].actionType == "NODE_EXECUTED"
+    assert actions[0].actionOutput["evidenceCount"] == 3
+
+    repairs = repo.list_branch_repairs(task_id)
+    assert len(repairs) == 1
+    assert repairs[0].attempt == 1
+    assert repairs[0].succeeded is True

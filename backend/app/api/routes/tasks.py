@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 
 from app.api.schemas.dag import DAGUpdateRequest, DAGValidationResponse
 from app.core.utils import new_id
 from app.deps import conflict_repository, execution_engine, experiment_repository, progress_hub, task_repository
 from app.models.schemas import (
+    BranchAction,
+    BranchRepairAttempt,
     ConflictRecord,
     CreateTaskRequest,
     DAGGraph,
@@ -41,7 +43,8 @@ def get_task(task_id: str) -> TaskResponse:
     try:
         return task_repository.get_task(task_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+        raise HTTPException(
+            status_code=404, detail=f"Task not found: {task_id}") from exc
 
 
 @router.put("/tasks/{task_id}", response_model=TaskResponse)
@@ -54,7 +57,8 @@ def update_task(task_id: str, payload: UpdateTaskRequest) -> TaskResponse:
             config=payload.config,
         )
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+        raise HTTPException(
+            status_code=404, detail=f"Task not found: {task_id}") from exc
 
 
 @router.delete("/tasks/{task_id}", response_model=DeleteResponse)
@@ -62,7 +66,8 @@ def delete_task(task_id: str) -> DeleteResponse:
     try:
         task_repository.get_task(task_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+        raise HTTPException(
+            status_code=404, detail=f"Task not found: {task_id}") from exc
     task_repository.delete_task(task_id)
     return DeleteResponse(taskId=task_id, deleted=True)
 
@@ -72,7 +77,8 @@ def get_task_dag(task_id: str) -> dict:
     try:
         return task_repository.get_dag(task_id, allow_empty=True).model_dump(by_alias=True)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+        raise HTTPException(
+            status_code=404, detail=f"Task not found: {task_id}") from exc
 
 
 @router.put("/tasks/{task_id}/dag", response_model=DAGValidationResponse)
@@ -81,7 +87,8 @@ def update_task_dag(task_id: str, request: DAGUpdateRequest) -> DAGValidationRes
     try:
         task = task_repository.get_task(task_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+        raise HTTPException(
+            status_code=404, detail=f"Task not found: {task_id}") from exc
 
     # Validate task status - DAG can only be updated during PLANNING or READY phase
     if task.status not in {TaskStatus.PLANNING, TaskStatus.READY}:
@@ -115,7 +122,8 @@ def get_task_conflicts(task_id: str) -> list[ConflictRecord]:
     try:
         task_repository.get_task(task_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+        raise HTTPException(
+            status_code=404, detail=f"Task not found: {task_id}") from exc
     return conflict_repository.list_by_task(task_id)
 
 
@@ -124,8 +132,29 @@ def get_task_search_branches(task_id: str) -> list[SearchBranch]:
     try:
         task_repository.get_task(task_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+        raise HTTPException(
+            status_code=404, detail=f"Task not found: {task_id}") from exc
     return task_repository.list_search_branches(task_id)
+
+
+@router.get("/tasks/{task_id}/branch-actions", response_model=list[BranchAction])
+def get_task_branch_actions(task_id: str, branch_id: str | None = Query(default=None, alias="branchId")) -> list[BranchAction]:
+    try:
+        task_repository.get_task(task_id)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404, detail=f"Task not found: {task_id}") from exc
+    return task_repository.list_branch_actions(task_id, branch_id)
+
+
+@router.get("/tasks/{task_id}/branch-repairs", response_model=list[BranchRepairAttempt])
+def get_task_branch_repairs(task_id: str, branch_id: str | None = Query(default=None, alias="branchId")) -> list[BranchRepairAttempt]:
+    try:
+        task_repository.get_task(task_id)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404, detail=f"Task not found: {task_id}") from exc
+    return task_repository.list_branch_repairs(task_id, branch_id)
 
 
 @router.get("/tasks/{task_id}/experiments", response_model=list[ExperimentRun])
@@ -133,7 +162,8 @@ def get_task_experiments(task_id: str) -> list[ExperimentRun]:
     try:
         task_repository.get_task(task_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+        raise HTTPException(
+            status_code=404, detail=f"Task not found: {task_id}") from exc
     return experiment_repository.list_runs(task_id)
 
 
@@ -142,9 +172,11 @@ async def start_task(task_id: str) -> StateResponse:
     try:
         task = task_repository.get_task(task_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+        raise HTTPException(
+            status_code=404, detail=f"Task not found: {task_id}") from exc
     if task.status in {TaskStatus.COMPLETED, TaskStatus.ABORTED}:
-        raise HTTPException(status_code=400, detail=f"Task is in terminal state: {task.status.value}")
+        raise HTTPException(
+            status_code=400, detail=f"Task is in terminal state: {task.status.value}")
     await execution_engine.start(task_id)
     return StateResponse(taskId=task_id, status=TaskStatus.EXECUTING, message="Task execution started")
 
@@ -154,7 +186,8 @@ def pause_task(task_id: str) -> StateResponse:
     try:
         task_repository.get_task(task_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+        raise HTTPException(
+            status_code=404, detail=f"Task not found: {task_id}") from exc
     execution_engine.pause(task_id)
     return StateResponse(taskId=task_id, status=TaskStatus.SUSPENDED, message="Task paused")
 
@@ -164,9 +197,11 @@ async def resume_task(task_id: str) -> StateResponse:
     try:
         task = task_repository.get_task(task_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+        raise HTTPException(
+            status_code=404, detail=f"Task not found: {task_id}") from exc
     if task.status not in {TaskStatus.SUSPENDED, TaskStatus.REVIEWING, TaskStatus.READY}:
-        raise HTTPException(status_code=400, detail=f"Task status does not support resume: {task.status.value}")
+        raise HTTPException(
+            status_code=400, detail=f"Task status does not support resume: {task.status.value}")
     await execution_engine.resume(task_id)
     return StateResponse(taskId=task_id, status=TaskStatus.EXECUTING, message="Task resumed")
 
@@ -176,7 +211,8 @@ def abort_task(task_id: str) -> StateResponse:
     try:
         task_repository.get_task(task_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+        raise HTTPException(
+            status_code=404, detail=f"Task not found: {task_id}") from exc
     execution_engine.abort(task_id)
     return StateResponse(taskId=task_id, status=TaskStatus.ABORTED, message="Task aborted")
 
@@ -186,7 +222,8 @@ async def recover_task(task_id: str) -> StateResponse:
     try:
         task_repository.get_task(task_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+        raise HTTPException(
+            status_code=404, detail=f"Task not found: {task_id}") from exc
     await execution_engine.recover(task_id)
     return StateResponse(taskId=task_id, status=TaskStatus.EXECUTING, message="Task recovered from snapshot")
 
@@ -206,12 +243,14 @@ def get_report(task_id: str) -> dict[str, str]:
     try:
         task = task_repository.get_task(task_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+        raise HTTPException(
+            status_code=404, detail=f"Task not found: {task_id}") from exc
     if not task.reportPath:
         raise HTTPException(status_code=404, detail="Report not generated yet")
     path = Path(task.reportPath)
     if not path.exists():
-        raise HTTPException(status_code=404, detail="Report file does not exist")
+        raise HTTPException(
+            status_code=404, detail="Report file does not exist")
     return {"taskId": task_id, "content": path.read_text(encoding="utf-8")}
 
 
@@ -220,12 +259,14 @@ def download_report(task_id: str) -> FileResponse:
     try:
         task = task_repository.get_task(task_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+        raise HTTPException(
+            status_code=404, detail=f"Task not found: {task_id}") from exc
     if not task.reportPath:
         raise HTTPException(status_code=404, detail="Report not generated yet")
     path = Path(task.reportPath)
     if not path.exists():
-        raise HTTPException(status_code=404, detail="Report file does not exist")
+        raise HTTPException(
+            status_code=404, detail="Report file does not exist")
     return FileResponse(path, media_type="text/markdown", filename=f"{task_id}.md")
 
 
@@ -234,7 +275,8 @@ def get_snapshot(task_id: str) -> dict:
     try:
         task_repository.get_task(task_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}") from exc
+        raise HTTPException(
+            status_code=404, detail=f"Task not found: {task_id}") from exc
     snapshot = task_repository.load_snapshot(task_id)
     if snapshot is None:
         raise HTTPException(status_code=404, detail="Snapshot not found")

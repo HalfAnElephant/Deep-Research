@@ -1,12 +1,16 @@
 import type {
+  BranchAction,
+  BranchRepairAttempt,
   ConflictRecord,
   ConversationBulkDeleteResponse,
   ConversationDeleteResponse,
   ConversationDetail,
   ConversationSummary,
   Evidence,
+  ExperimentRun,
   LLMSettingsResponse,
   RevisePlanResponse,
+  SearchBranch,
   RunConversationResponse,
   TaskResponse
 } from "./types";
@@ -152,6 +156,32 @@ export async function listEvidence(taskId: string, options?: RequestOptions): Pr
 
 export async function listConflicts(taskId: string, options?: RequestOptions): Promise<ConflictRecord[]> {
   return json<ConflictRecord[]>(`${API_BASE}/api/v1/tasks/${taskId}/conflicts`, undefined, options);
+}
+
+export async function listSearchBranches(taskId: string, options?: RequestOptions): Promise<SearchBranch[]> {
+  return json<SearchBranch[]>(`${API_BASE}/api/v1/tasks/${taskId}/search-branches`, undefined, options);
+}
+
+export async function listBranchActions(
+  taskId: string,
+  branchId?: string,
+  options?: RequestOptions
+): Promise<BranchAction[]> {
+  const suffix = branchId ? `?branchId=${encodeURIComponent(branchId)}` : "";
+  return json<BranchAction[]>(`${API_BASE}/api/v1/tasks/${taskId}/branch-actions${suffix}`, undefined, options);
+}
+
+export async function listBranchRepairs(
+  taskId: string,
+  branchId?: string,
+  options?: RequestOptions
+): Promise<BranchRepairAttempt[]> {
+  const suffix = branchId ? `?branchId=${encodeURIComponent(branchId)}` : "";
+  return json<BranchRepairAttempt[]>(`${API_BASE}/api/v1/tasks/${taskId}/branch-repairs${suffix}`, undefined, options);
+}
+
+export async function listExperiments(taskId: string, options?: RequestOptions): Promise<ExperimentRun[]> {
+  return json<ExperimentRun[]>(`${API_BASE}/api/v1/tasks/${taskId}/experiments`, undefined, options);
 }
 
 export async function voteConflict(payload: {
