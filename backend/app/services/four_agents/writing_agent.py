@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.core.config import settings
 from app.models.schemas import AgentType, Evidence
 from app.services.four_agents.base import AgentContext, AgentResult, BaseAgent
 from app.services.writer import WriterService
@@ -20,11 +21,11 @@ class WritingAgent(BaseAgent):
 
     def __init__(
         self,
-        output_dir: str = "backend/.data/reports",
+        output_dir: str | None = None,
         on_progress=None
     ) -> None:
         super().__init__(on_progress)
-        self.writer = WriterService(output_dir)
+        self.writer = WriterService(output_dir or settings.reports_dir)
 
     async def run(self, context: AgentContext) -> AgentResult:
         """执行写作阶段任务。

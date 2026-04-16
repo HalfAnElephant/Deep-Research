@@ -8,14 +8,14 @@ from typing import Literal
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
 
+from app.core.config import settings
+
 
 ReportType = Literal["report", "article", "references"]
 
 
 class FileService:
     """Service for handling file operations."""
-
-    REPORTS_DIR = Path("backend/.data/reports")
 
     @classmethod
     def get_report_path(cls, task_id: str, report_type: ReportType = "report") -> Path:
@@ -28,11 +28,12 @@ class FileService:
         Returns:
             Path to the report file
         """
+        reports_dir = Path(settings.reports_dir)
         if report_type == "article":
-            return cls.REPORTS_DIR / f"{task_id}_article.md"
+            return reports_dir / f"{task_id}_article.md"
         elif report_type == "references":
-            return cls.REPORTS_DIR / f"{task_id}_references.md"
-        return cls.REPORTS_DIR / f"{task_id}.md"
+            return reports_dir / f"{task_id}_references.md"
+        return reports_dir / f"{task_id}.md"
 
     @classmethod
     def validate_file_exists(cls, path: Path, detail: str = "File not found") -> None:
