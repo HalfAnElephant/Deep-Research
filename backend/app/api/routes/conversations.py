@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, PlainTextResponse
 
+from app.core.config import settings
 from app.deps import conversation_agent, conversation_repository, evidence_repository, task_repository
 from app.models.schemas import (
     ConversationBulkDeleteResponse,
@@ -138,10 +139,11 @@ def export_article(conversation_id: str) -> FileResponse:
         raise HTTPException(status_code=404, detail="Conversation has no task yet")
 
     task_id = summary.taskId
-    article_path = Path(f"backend/.data/reports/{task_id}_article.md")
+    reports_dir = Path(settings.reports_dir)
+    article_path = reports_dir / f"{task_id}_article.md"
     if not article_path.exists():
         # 回退到旧的报告文件
-        legacy_path = Path(f"backend/.data/reports/{task_id}.md")
+        legacy_path = reports_dir / f"{task_id}.md"
         if not legacy_path.exists():
             raise HTTPException(status_code=404, detail="Article file not generated yet")
         article_path = legacy_path
@@ -164,7 +166,7 @@ def export_references(conversation_id: str) -> FileResponse:
         raise HTTPException(status_code=404, detail="Conversation has no task yet")
 
     task_id = summary.taskId
-    references_path = Path(f"backend/.data/reports/{task_id}_references.md")
+    references_path = Path(settings.reports_dir) / f"{task_id}_references.md"
     if not references_path.exists():
         raise HTTPException(status_code=404, detail="References file not generated yet")
 

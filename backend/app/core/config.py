@@ -1,10 +1,15 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.paths import default_data_dir, default_frontend_dist_dir, default_reports_dir
+
 
 class Settings(BaseSettings):
     app_name: str = "Research Flow"
     api_prefix: str = "/api/v1"
-    db_path: str = "backend/.data/research_flow.db"
+    data_dir: str = str(default_data_dir())
+    db_path: str = str(default_data_dir() / "research_flow.db")
+    reports_dir: str = str(default_reports_dir())
+    frontend_dist_dir: str = str(default_frontend_dist_dir())
     log_level: str = "INFO"
     use_mock_sources: bool = False
     default_llm_provider: str = "openrouter"
@@ -46,7 +51,7 @@ class Settings(BaseSettings):
     llm_timeout_medium: int = 60     # 计划生成
     llm_timeout_long: int = 120      # 文章生成
 
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="DR_")
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="DR_", extra="ignore")
 
 
 settings = Settings()

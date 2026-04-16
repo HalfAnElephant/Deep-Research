@@ -926,7 +926,7 @@ class ConversationAgent:
         if task.reportPath:
             report_path = Path(task.reportPath)
         else:
-            report_path = Path("backend/.data/reports") / f"{task_id}.md"
+            report_path = Path(settings.reports_dir) / f"{task_id}.md"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(content, encoding="utf-8")
         self.task_repository.set_report_path(task_id, str(report_path))

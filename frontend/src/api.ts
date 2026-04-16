@@ -15,7 +15,21 @@ import type {
   TaskResponse
 } from "./types";
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:8000";
+function resolveApiBase(): string {
+  const configured = import.meta.env.VITE_API_BASE?.trim();
+  if (configured) {
+    return configured.replace(/\/$/, "");
+  }
+  if (import.meta.env.DEV) {
+    return "http://127.0.0.1:8000";
+  }
+  if (typeof window !== "undefined" && window.location.origin) {
+    return window.location.origin.replace(/\/$/, "");
+  }
+  return "http://127.0.0.1:8000";
+}
+
+const API_BASE = resolveApiBase();
 const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS ?? "30000");
 const PLAN_API_TIMEOUT_MS = Number(import.meta.env.VITE_PLAN_API_TIMEOUT_MS ?? "120000");
 

@@ -79,8 +79,9 @@ class WriterService:
         re.compile(r"^\s*研究问题[:：].*```(?:yaml|yml)?\s*$", re.IGNORECASE),
     )
 
-    def __init__(self, output_dir: str = "backend/.data/reports") -> None:
-        self.output_dir = Path(output_dir)
+    def __init__(self, output_dir: str | None = None) -> None:
+        resolved_output_dir = output_dir or settings.reports_dir
+        self.output_dir = Path(resolved_output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def write_report(
